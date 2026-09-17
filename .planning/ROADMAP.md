@@ -58,7 +58,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Settings module, app factory and the six tests that make 75% honest (+ coverage red/green)
+- [x] 01-02-PLAN.md — Settings module, app factory and the six tests that make 75% honest (+ coverage red/green)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 1/8 | In Progress|  |
+| 1. Foundation & Quality Gates | 2/8 | In Progress|  |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |

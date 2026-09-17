@@ -21,7 +21,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [ ] **FND-08**: pre-commit hooks run black, isort, flake8 and mypy [NL]
 - [ ] **FND-09**: A `Makefile` exposes one-word commands: `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` [NL]
 - [ ] **FND-10**: GitHub Actions CI runs lint, typecheck, architecture check and tests with the coverage gate against a Postgres service, on every push [NL]
-- [ ] **FND-11**: Settings are loaded from environment via pydantic-settings; no secret has a hard-coded production default; `.env.example` documents every variable [R]
+- [x] **FND-11**: Settings are loaded from environment via pydantic-settings; no secret has a hard-coded production default; `.env.example` documents every variable [R]
 
 ### Architecture (ARC)
 
@@ -163,7 +163,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | FND-08 | Phase 1 | Pending |
 | FND-09 | Phase 1 | Pending |
 | FND-10 | Phase 1 | Pending |
-| FND-11 | Phase 1 | Pending |
+| FND-11 | Phase 1 | Complete |
 | ARC-01 | Phase 1 | Complete |
 | ARC-02 | Phase 2 | Pending |
 | ARC-03 | Phase 1 | Pending |
