@@ -1,0 +1,26 @@
+# Version control and local tooling state
+.git
+.gitignore
+.venv
+
+# Secrets must never enter a build context or an image layer
+.env
+
+# Python bytecode and caches
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.import_linter_cache
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov
+
+# Build artifacts
+src/*.egg-info
+
+# Repository documentation and automation not needed inside the image
+.planning
+.github

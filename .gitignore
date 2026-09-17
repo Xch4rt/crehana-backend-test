@@ -1,0 +1,23 @@
+# Environment
+.venv/
+.env
+
+# Python bytecode and caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.import_linter_cache/
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Build artifacts
+src/*.egg-info/
+build/
+dist/
+
+# macOS
+.DS_Store
