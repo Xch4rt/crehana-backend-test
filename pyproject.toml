@@ -13,3 +13,36 @@ requires-python = ">=3.13"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["taskmanager"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# The pydantic plugin is mandatory: without it a correct pydantic-settings
+# module produces spurious `call-arg` errors under strict mode.
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+mypy_path = "src"
+packages = ["taskmanager"]
+
+[tool.coverage.run]
+source = ["taskmanager"]
+branch = true
+
+# No `omit` entries and no `fail_under` here: the threshold lives in the
+# pytest.ini addopts so every invocation is gated identically.
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "\\.\\.\\.",
+]

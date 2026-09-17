@@ -1,0 +1,9 @@
+[flake8]
+# Only the extend- forms are used here: a bare `ignore =` replaces pycodestyle's
+# DEFAULT_IGNORE and a bare `exclude =` replaces flake8's built-in exclude list,
+# both silently.
+max-line-length = 88
+extend-ignore = E203,E701
+extend-exclude = .venv,build,dist,migrations
+extend-immutable-calls = fastapi.Depends,fastapi.Query,fastapi.Path,fastapi.Body,fastapi.Header
+max-complexity = 10
