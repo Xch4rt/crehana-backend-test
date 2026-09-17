@@ -27,7 +27,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 - [x] **ARC-01**: Code is organized in layers `domain`, `application`, `infrastructure`, `presentation` under `src/taskmanager/` [PDF 2.a]
 - [ ] **ARC-02**: Domain entities and value objects are stdlib dataclasses/Enums; the domain package imports no third-party library [NL, user decision]
-- [ ] **ARC-03**: import-linter contracts enforce the layer order and forbid fastapi/starlette/sqlalchemy in `domain` and `application`; the check runs inside the pytest suite and in CI [NL]
+- [x] **ARC-03**: import-linter contracts enforce the layer order and forbid fastapi/starlette/sqlalchemy in `domain` and `application`; the check runs inside the pytest suite and in CI [NL]
 - [ ] **ARC-04**: Every use case is a single-purpose class in `application/` depending only on `typing.Protocol` ports (repositories, UnitOfWork, PasswordHasher, TokenService, EmailNotifier, Clock) [PDF 2.a]
 - [ ] **ARC-05**: Pydantic v2 models type every boundary: HTTP request/response schemas, application command/result DTOs, settings [PDF 2.b]
 - [ ] **ARC-06**: A `DomainError` hierarchy (not found, conflict, business-rule violation, authentication, authorization) carries a stable `code` and details; no `HTTPException` is raised outside `presentation` [PDF 2.c]
@@ -166,7 +166,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | FND-11 | Phase 1 | Complete |
 | ARC-01 | Phase 1 | Complete |
 | ARC-02 | Phase 2 | Pending |
-| ARC-03 | Phase 1 | Pending |
+| ARC-03 | Phase 1 | Complete |
 | ARC-04 | Phase 2 | Pending |
 | ARC-05 | Phase 4 | Pending |
 | ARC-06 | Phase 2 | Pending |

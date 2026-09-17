@@ -62,7 +62,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — import-linter contracts as a real pytest test (+ architecture red/green)
+- [x] 01-03-PLAN.md — import-linter contracts as a real pytest test (+ architecture red/green)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 2/8 | In Progress|  |
+| 1. Foundation & Quality Gates | 3/8 | In Progress|  |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
