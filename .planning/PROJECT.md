@@ -68,7 +68,7 @@ minutes by an evaluator: `docker compose up`, run the tests, read the docs.
 - [ ] Architecture boundaries enforced by an automated test (domain must not import
       infrastructure/frameworks), not just by folder names
 - [ ] Static typing check (mypy) in CI
-- [ ] Consistent error contract (RFC 7807 Problem Details) from a single exception-handling
+- [ ] Consistent error contract (RFC 9457 Problem Details, which obsoletes RFC 7807) from a single exception-handling
       point
 - [ ] Public GitHub repository with atomic, phase-scoped commit history and green CI badge
 
@@ -99,8 +99,8 @@ minutes by an evaluator: `docker compose up`, run the tests, read the docs.
   percentage is computed over the whole list or the filtered subset; allowed task status
   values and transitions; priority values; who may be assigned to a task; what triggers the
   fake invitation email.
-- Local environment: macOS, Docker 29, Python 3.14 on host (project targets Python 3.12 in
-  Docker for wheel stability). No uv/poetry installed on host.
+- Local environment: macOS, Docker 29, Python 3.14 on host (project targets Python 3.13 in
+  Docker: 3.12 is security-only and all dependencies ship cp313 wheels — verified in research). No uv/poetry installed on host.
 - `AI_WORKFLOW.md` must reflect what genuinely happened during development — no fabricated
   narrative.
 
@@ -125,9 +125,13 @@ minutes by an evaluator: `docker compose up`, run the tests, read the docs.
 | Include all three bonus use cases | Maximizes score; JWT enables ownership rules that make business validations meaningful | — Pending |
 | Hexagonal-style layers (domain / application / infrastructure / presentation) | Brief asks for Domain, Application/UseCases, Infrastructure; ports as Protocols keep domain framework-free | — Pending |
 | Enforce layer boundaries with an automated test | Proves architecture is a rule, not a folder convention | — Pending |
-| RFC 7807 error responses via one exception handler | Custom domain exceptions stay HTTP-agnostic; consistent API contract | — Pending |
+| RFC 9457 (obsoletes 7807) error responses via one exception handler | Custom domain exceptions stay HTTP-agnostic; consistent API contract | — Pending |
 | AI workflow documented as Markdown + Mermaid only | Renders natively on GitHub; user decided HTML is unnecessary | — Pending |
 | GSD workflow with `.planning/` committed | Planning/verification artifacts are themselves evidence of AI direction | — Pending |
+| Domain entities as stdlib dataclasses; Pydantic at schema/DTO/settings boundaries | Makes "domain imports nothing" provable; pydantic.ValidationError cannot carry the DomainError contract. User-confirmed | — Pending |
+| Python 3.13, psycopg 3, PyJWT + pwdlib[argon2], Alembic | Research-verified current stack; passlib/python-jose are unmaintained or vulnerable | — Pending |
+| 404 for invisible resources, 403 for visible-but-forbidden | No existence oracle, while keeping a testable permission matrix | — Pending |
+| Completion % computed over the whole list via one SQL aggregate | A filter-scoped percentage is degenerate (`?status=completed` is always 100) | — Pending |
 | Everything in English | User decision; standard for code and open repos | — Pending |
 | Own git repo inside `crehana/test` | Directory was nested in an unrelated parent repo; challenge needs its own history | ✓ Good |
 
@@ -149,4 +153,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-17 after initialization*
+*Last updated: 2026-09-17 after research and requirements definition*
