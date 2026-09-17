@@ -1,0 +1,58 @@
+# Architecture contracts, enforced by import-linter.
+#
+# These are not documentation: tests/architecture/test_layer_boundaries.py runs
+# every contract below as part of the normal pytest suite, and `make arch`, the
+# pre-commit hook and CI run the `lint-imports` console script over the same file.
+# A violation is a failing build, not a review comment.
+#
+# `include_external_packages = True` is required for the two `forbidden` contracts:
+# without it import-linter never builds nodes for third-party distributions and the
+# contracts silently have nothing to check.
+
+[importlinter]
+root_package = taskmanager
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Layered architecture (high to low)
+type = layers
+layers =
+    taskmanager.main
+    taskmanager.presentation
+    taskmanager.infrastructure
+    taskmanager.application
+    taskmanager.domain
+
+# The domain is stdlib-only: entities are dataclasses, ports are typing.Protocol.
+# pydantic is forbidden here on purpose - a pydantic ValidationError cannot carry
+# the domain error contract, so validation belongs at the boundaries, not inside.
+[importlinter:contract:domain-framework-free]
+name = Domain is framework-free
+type = forbidden
+source_modules =
+    taskmanager.domain
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    alembic
+    pydantic
+    pydantic_settings
+    jwt
+    pwdlib
+    httpx
+
+# The application layer orchestrates use cases through ports. It may use pydantic
+# (DTOs are pydantic models), but it must never see the web framework or the ORM.
+[importlinter:contract:application-framework-free]
+name = Application knows no web framework or ORM
+type = forbidden
+source_modules =
+    taskmanager.application
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    alembic
+    jwt
+    pwdlib
