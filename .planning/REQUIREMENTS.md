@@ -153,13 +153,102 @@ Which phases cover which requirements. Filled in during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | — |
+| FND-01 | Phase 1 | Pending |
+| FND-02 | Phase 1 | Pending |
+| FND-03 | Phase 1 | Pending |
+| FND-04 | Phase 1 | Pending |
+| FND-05 | Phase 1 | Pending |
+| FND-06 | Phase 1 | Pending |
+| FND-07 | Phase 1 | Pending |
+| FND-08 | Phase 1 | Pending |
+| FND-09 | Phase 1 | Pending |
+| FND-10 | Phase 1 | Pending |
+| FND-11 | Phase 1 | Pending |
+| ARC-01 | Phase 1 | Pending |
+| ARC-02 | Phase 2 | Pending |
+| ARC-03 | Phase 1 | Pending |
+| ARC-04 | Phase 2 | Pending |
+| ARC-05 | Phase 4 | Pending |
+| ARC-06 | Phase 2 | Pending |
+| ARC-07 | Phase 2 | Pending |
+| ARC-08 | Phase 3 | Pending |
+| DB-01 | Phase 3 | Pending |
+| DB-02 | Phase 3 | Pending |
+| DB-03 | Phase 3 | Pending |
+| DB-04 | Phase 3 | Pending |
+| DB-05 | Phase 3 | Pending |
+| LIST-01 | Phase 4 | Pending |
+| LIST-02 | Phase 4 | Pending |
+| LIST-03 | Phase 4 | Pending |
+| LIST-04 | Phase 4 | Pending |
+| LIST-05 | Phase 4 | Pending |
+| LIST-06 | Phase 4 | Pending |
+| TASK-01 | Phase 4 | Pending |
+| TASK-02 | Phase 4 | Pending |
+| TASK-03 | Phase 4 | Pending |
+| TASK-04 | Phase 4 | Pending |
+| TASK-05 | Phase 4 | Pending |
+| TASK-06 | Phase 4 | Pending |
+| TASK-07 | Phase 4 | Pending |
+| TASK-08 | Phase 4 | Pending |
+| AUTH-01 | Phase 5 | Pending |
+| AUTH-02 | Phase 5 | Pending |
+| AUTH-03 | Phase 5 | Pending |
+| AUTH-04 | Phase 5 | Pending |
+| AUTH-05 | Phase 5 | Pending |
+| AUTH-06 | Phase 5 | Pending |
+| ASGN-01 | Phase 5 | Pending |
+| ASGN-02 | Phase 5 | Pending |
+| ASGN-03 | Phase 5 | Pending |
+| NOTF-01 | Phase 5 | Pending |
+| NOTF-02 | Phase 5 | Pending |
+| NOTF-03 | Phase 5 | Pending |
+| TEST-01 | Phase 6 | Pending |
+| TEST-02 | Phase 6 | Pending |
+| TEST-03 | Phase 6 | Pending |
+| TEST-04 | Phase 6 | Pending |
+| TEST-05 | Phase 6 | Pending |
+| DOCK-01 | Phase 1 | Pending |
+| DOCK-02 | Phase 3 | Pending |
+| DOCK-03 | Phase 3 | Pending |
+| DOCK-04 | Phase 1 | Pending |
+| DOCK-05 | Phase 7 | Pending |
+| DOC-01 | Phase 7 | Pending |
+| DOC-02 | Phase 7 | Pending |
+| DOC-03 | Phase 7 | Pending |
+| DOC-04 | Phase 7 | Pending |
+| AIW-01 | Phase 7 | Pending |
+| AIW-02 | Phase 7 | Pending |
+| AIW-03 | Phase 1 | Pending |
+| AIW-04 | Phase 1 | Pending |
+| AIW-05 | Phase 7 | Pending |
+
+**Per-phase totals:** Phase 1 = 17, Phase 2 = 4, Phase 3 = 8, Phase 4 = 15, Phase 5 = 12,
+Phase 6 = 5, Phase 7 = 8.
+
+**Notes on cross-phase requirements:**
+- **AIW-03** (incident log) is owned by Phase 1 because the log must open before any code is
+  written; every later phase appends a dated entry to it. **AIW-01/02** finalize the document
+  in Phase 7.
+- **AIW-04** (`CLAUDE.md` + committed `.planning/`) is owned by Phase 1; the "consistent with
+  what shipped" check is re-verified during the Phase 7 delivery rehearsal.
+- **TEST-01..05** are owned by Phase 6 because they assert *totality* ("every use case",
+  "every endpoint", the achieved coverage number). Tests are still written alongside the code
+  in Phases 2-5; Phase 6 is where completeness and assertion quality are audited.
+- **FND-06** is the coverage *configuration* (Phase 1); **TEST-03** is the coverage *number*
+  being met (Phase 6).
+- **DOCK-01/04** (image + dockerized test command) land in Phase 1; **DOCK-02/03** (full
+  startup contract with migrations and `/health` DB readiness) need Alembic and an engine, so
+  they land in Phase 3.
+- **ARC-04** (ports as Protocols, use-case class shape) is owned by Phase 2 where the ports are
+  defined; Phases 4-5 add use cases conforming to it, enforced automatically by ARC-03.
 
 **Coverage:**
 - v1 requirements: 69 total
-- Mapped to phases: 0
-- Unmapped: 69 ⚠️
+- Mapped to phases: 69
+- Unmapped: 0 ✓
+- Duplicates: 0 ✓
 
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-17 after initial definition*
+*Last updated: 2026-09-17 after roadmap creation (7 phases, 69/69 mapped)*
