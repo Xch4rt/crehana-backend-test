@@ -1192,26 +1192,30 @@ Everything else in this document is either `[VERIFIED: local execution]` or `[CI
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`.importlinter` file vs `[tool.importlinter]` in `pyproject.toml`**
    - What we know: both are fully supported and behave identically. `.planning/research/STACK.md` and CONTEXT's canonical-refs list say `.importlinter`; `.planning/research/ARCHITECTURE.md:736` says `pyproject.toml`. This is conflict #10, not enumerated in SUMMARY.md's table of nine.
    - What's unclear: nothing technical — it is a taste/discoverability call.
    - Recommendation: **`.importlinter`**, because the phase's whole thesis is that an evaluator can find the enforced boundary in five seconds, and a dedicated root-level file named after the tool does that better than the fifth section of `pyproject.toml`. Record the choice (and that the alternative is equivalent) in `DECISION_LOG.md`. The verified test code uses `api.read_configuration()` with no filename, which finds either.
+   - **RESOLVED:** adopt the root-level `.importlinter` INI file. Implemented by plan `01-03` (which creates `.importlinter` and the architecture test); recorded as an ADR by plan `01-06`.
 
 2. **Does `up` / `down` need to do anything in Phase 1?**
    - What we know: D-12 requires the targets to exist; CONTEXT explicitly permits "thin placeholders"; compose is Phase 3.
    - What's unclear: whether a placeholder that only prints a message reads as unfinished to an evaluator who runs it.
    - Recommendation: placeholders that print an accurate one-line explanation and exit 0. An evaluator running `make up` in Phase 1 is not a scenario that happens — only the final delivery is graded, and by then Phase 3 has replaced them.
+   - **RESOLVED:** `up` and `down` ship as single `@echo` placeholders that exit 0 and name Phase 3 honestly. Implemented by plan `01-04` Task 2; recorded as an ADR by plan `01-06`.
 
 3. **Should Phase 1 create the public GitHub repository, or only the workflow file?**
    - What we know: FND-10's success criterion is "a push to GitHub triggers CI … green", which requires a remote. CONTEXT marks repo creation as outward-facing and requiring explicit user confirmation (`autonomous: false`). AIW-05 (public repo, green badge) is owned by Phase 7.
    - What's unclear: whether the user wants the repo created now or at delivery.
    - Recommendation: the plan includes one `autonomous: false` checkpoint task — "create the GitHub repository and push" — placed last in the phase, with everything before it fully autonomous. If the user declines, the phase still completes with `ci.yml` committed and `make lint typecheck arch test` green locally, and the "green CI" criterion carries to Phase 7. The plan should state that fallback explicitly so it is not a surprise.
+   - **RESOLVED:** repository creation is the last task of the phase, a blocking human checkpoint, with the documented fallback of committing `ci.yml` and carrying the green-CI evidence to Phase 7. Implemented by plan `01-08` Task 2.
 
 4. **Which `.env.example` variables exist in Phase 1?**
    - What we know: FND-11 says "`.env.example` documents every variable". The settings module above declares five, but `DATABASE_URL` is not consumed by anything until Phase 3.
    - Recommendation: document all five now (`APP_NAME`, `ENVIRONMENT`, `DATABASE_URL`, `JWT_SECRET`, `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES`) with non-secret placeholder values. Declaring `DATABASE_URL` in Phase 1 is what lets the CI job export it and lets Phase 3 add a repository without touching settings. Phase 3/5 extend the file; Phase 7 verifies it against the README.
+   - **RESOLVED:** `.env.example` documents every field the `Settings` model declares — the full list named above — with non-secret placeholders. Implemented by plan `01-02`.
 
 ---
 
