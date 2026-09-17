@@ -1,0 +1,22 @@
+# Runtime dependencies - exact pins only (single source of truth for versions).
+# Some packages below are not imported until later phases; they are pinned now
+# so the Docker layer and the CI cache key never change shape.
+
+# Web framework and typed boundaries
+fastapi==0.141.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+uvicorn[standard]==0.53.0
+
+# Database access and migrations
+SQLAlchemy[asyncio]==2.0.54
+psycopg[binary]==3.3.5
+alembic==1.20.0
+
+# Authentication and hashing
+PyJWT==2.14.0
+pwdlib[argon2]==0.3.1
+
+# Form parsing and email validation used by the API boundary
+python-multipart==0.0.32
+email-validator==2.3.0

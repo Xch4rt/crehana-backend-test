@@ -1,0 +1,26 @@
+-r requirements.txt
+
+# Development and quality-gate tooling - exact pins only.
+# coverage and grimp are intentionally absent: they arrive transitively via
+# pytest-cov and import-linter respectively.
+
+# Test runner and coverage
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+httpx==0.28.1
+
+# Formatting and linting
+black==26.5.1
+isort==9.0.1
+flake8==7.3.0
+flake8-bugbear==26.9.9
+flake8-comprehensions==3.17.0
+pep8-naming==0.15.1
+
+# Static typing and architecture contracts
+mypy==2.3.1
+import-linter==2.15
+
+# Local quality gate
+pre-commit==4.6.2

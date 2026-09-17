@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskmanager"
+version = "0.1.0"
+description = "Task Manager API - Crehana Backend Technical Challenge"
+requires-python = ">=3.13"
+# NOTE: no [project.dependencies] on purpose. requirements.txt and
+# requirements-dev.txt are the single source of truth for versions; a second
+# list here would silently drift out of sync with the pinned files.
+
+[tool.setuptools.packages.find]
+where = ["src"]
