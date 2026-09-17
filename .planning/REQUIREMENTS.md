@@ -11,13 +11,13 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Foundation & Tooling (FND)
 
-- [ ] **FND-01**: Project uses Python 3.13 and FastAPI with a `src/taskmanager/` package layout [PDF Requisitos]
-- [ ] **FND-02**: Dependencies are exact-pinned in `requirements.txt` / `requirements-dev.txt`, installable with plain pip [R]
-- [ ] **FND-03**: A `.flake8` file configures flake8 (black-compatible: max-line-length 88, `extend-ignore = E203,E701`) and `flake8` passes with zero errors [PDF 4.a, 4.c]
-- [ ] **FND-04**: black and isort (`profile = black`) are configured and `black --check` / `isort --check` pass [PDF 4.b, 2.f]
-- [ ] **FND-05**: A `pytest.ini` file holds all pytest configuration (asyncio mode, markers, coverage options, `filterwarnings = error`) [PDF 3.c]
-- [ ] **FND-06**: Coverage is measured over the real source package (`source` set, tests excluded) and the run fails under 75% [PDF 3.b]
-- [ ] **FND-07**: mypy runs in strict mode over `src/` and passes [NL]
+- [x] **FND-01**: Project uses Python 3.13 and FastAPI with a `src/taskmanager/` package layout [PDF Requisitos]
+- [x] **FND-02**: Dependencies are exact-pinned in `requirements.txt` / `requirements-dev.txt`, installable with plain pip [R]
+- [x] **FND-03**: A `.flake8` file configures flake8 (black-compatible: max-line-length 88, `extend-ignore = E203,E701`) and `flake8` passes with zero errors [PDF 4.a, 4.c]
+- [x] **FND-04**: black and isort (`profile = black`) are configured and `black --check` / `isort --check` pass [PDF 4.b, 2.f]
+- [x] **FND-05**: A `pytest.ini` file holds all pytest configuration (asyncio mode, markers, coverage options, `filterwarnings = error`) [PDF 3.c]
+- [x] **FND-06**: Coverage is measured over the real source package (`source` set, tests excluded) and the run fails under 75% [PDF 3.b]
+- [x] **FND-07**: mypy runs in strict mode over `src/` and passes [NL]
 - [ ] **FND-08**: pre-commit hooks run black, isort, flake8 and mypy [NL]
 - [ ] **FND-09**: A `Makefile` exposes one-word commands: `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` [NL]
 - [ ] **FND-10**: GitHub Actions CI runs lint, typecheck, architecture check and tests with the coverage gate against a Postgres service, on every push [NL]
@@ -25,7 +25,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Architecture (ARC)
 
-- [ ] **ARC-01**: Code is organized in layers `domain`, `application`, `infrastructure`, `presentation` under `src/taskmanager/` [PDF 2.a]
+- [x] **ARC-01**: Code is organized in layers `domain`, `application`, `infrastructure`, `presentation` under `src/taskmanager/` [PDF 2.a]
 - [ ] **ARC-02**: Domain entities and value objects are stdlib dataclasses/Enums; the domain package imports no third-party library [NL, user decision]
 - [ ] **ARC-03**: import-linter contracts enforce the layer order and forbid fastapi/starlette/sqlalchemy in `domain` and `application`; the check runs inside the pytest suite and in CI [NL]
 - [ ] **ARC-04**: Every use case is a single-purpose class in `application/` depending only on `typing.Protocol` ports (repositories, UnitOfWork, PasswordHasher, TokenService, EmailNotifier, Clock) [PDF 2.a]
@@ -153,18 +153,18 @@ Which phases cover which requirements. Filled in during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
-| FND-03 | Phase 1 | Pending |
-| FND-04 | Phase 1 | Pending |
-| FND-05 | Phase 1 | Pending |
-| FND-06 | Phase 1 | Pending |
-| FND-07 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Complete |
+| FND-02 | Phase 1 | Complete |
+| FND-03 | Phase 1 | Complete |
+| FND-04 | Phase 1 | Complete |
+| FND-05 | Phase 1 | Complete |
+| FND-06 | Phase 1 | Complete |
+| FND-07 | Phase 1 | Complete |
 | FND-08 | Phase 1 | Pending |
 | FND-09 | Phase 1 | Pending |
 | FND-10 | Phase 1 | Pending |
 | FND-11 | Phase 1 | Pending |
-| ARC-01 | Phase 1 | Pending |
+| ARC-01 | Phase 1 | Complete |
 | ARC-02 | Phase 2 | Pending |
 | ARC-03 | Phase 1 | Pending |
 | ARC-04 | Phase 2 | Pending |

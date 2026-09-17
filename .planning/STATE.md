@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: ROADMAP.md and STATE.md written; REQUIREMENTS.md traceability filled in
-last_updated: "2026-09-17T21:42:31.512Z"
-last_activity: 2026-09-17 -- Phase 1 planning complete
+last_updated: "2026-09-17T22:29:35.762Z"
+last_activity: 2026-09-17
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 8
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -22,16 +22,16 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 1 — Foundation & Quality Gates
+**Current focus:** Phase 01 — foundation-quality-gates
 
 ## Current Position
 
-Phase: 1 of 7 (Foundation & Quality Gates)
-Plan: 0 of TBD in current phase
+Phase: 01 (foundation-quality-gates) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-09-17 -- Phase 1 planning complete
+Last activity: 2026-09-17
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 13%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 13min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,12 @@ Recent decisions affecting current work:
 - [Roadmap]: 404 for invisible resources, 403 for visible-but-forbidden
 - [Roadmap]: Completion % over the whole list via one SQL aggregate; pytest-asyncio loop scope
   `function` by default; `postgres:18-alpine`
+
+- [Phase 01-01]: requires-python >=3.13 with mypy/black analysis target py313 — host venv runs CPython 3.14.3
+- [Phase 01-01]: requirements*.txt is the single version source; pyproject.toml has no [project.dependencies]
+- [Phase 01-01]: Coverage measured as --cov=taskmanager (package name) with the 75% gate in pytest.ini addopts
+- [Phase 01-01]: Host venv at `.venv/` (CPython 3.14.3); invoke tools as `.venv/bin/<tool>`; a bare
+  `pytest` fails the 75% gate until plan 01-02 adds real modules and tests
 
 ### Pending Todos
 
@@ -95,6 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-17
+Last session: 2026-09-17T22:28:19.165Z
 Stopped at: ROADMAP.md and STATE.md written; REQUIREMENTS.md traceability filled in
 Resume file: None

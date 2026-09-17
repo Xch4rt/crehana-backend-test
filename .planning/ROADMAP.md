@@ -54,7 +54,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Packaging skeleton, pinned dependencies and every gate configuration file
+- [x] 01-01-PLAN.md — Packaging skeleton, pinned dependencies and every gate configuration file
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 0/8 | Planned | - |
+| 1. Foundation & Quality Gates | 1/8 | In Progress|  |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
