@@ -1,0 +1,243 @@
+Architecture-contract demonstration - Phase 1, plan 01-03
+Date: 2026-09-17
+Host: macOS arm64, CPython 3.14.3 in .venv, import-linter 2.15, pytest 9.1.1
+
+Commands, in the order they were run:
+  printf 'from fastapi import FastAPI\n\n__all__ = ["FastAPI"]\n' \
+      > src/taskmanager/domain/_violation.py
+  .venv/bin/pytest tests/architecture -q --no-cov ;  echo $?
+  .venv/bin/lint-imports                          ;  echo $?
+  .venv/bin/python -m importlinter.cli lint-imports ; echo $?
+  .venv/bin/python -m importlinter lint-imports     ; echo $?
+  rm src/taskmanager/domain/_violation.py
+  .venv/bin/pytest tests/architecture -q --no-cov ;  echo $?
+  .venv/bin/lint-imports                          ;  echo $?
+
+What this proves: the layer boundaries in .importlinter are enforced, not decorative -
+a single forbidden import placed inside taskmanager.domain turns the pytest suite red
+and only the removal of that import turns it green again.
+
+The violation module was deleted immediately after the red runs and exists neither on
+disk nor in git history as a tracked file; the green runs below are the shipped tree.
+
+The only edit applied to the captures below is the elision of import-linter's nine-line
+ASCII logo, marked [logo elided] each time. Everything else is verbatim, exit codes
+included.
+
+================================================================================
+RUN 1 - RED: pytest with a forbidden import in the domain, exit code 1
+================================================================================
+
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+__________________________ test_import_contracts_hold __________________________
+
+    def test_import_contracts_hold() -> None:
+        """Every contract in `.importlinter` is kept by the current import graph."""
+>       assert use_cases.lint_imports(no_logo=True) is True
+E       assert False is True
+E        +  where False = <function lint_imports at 0x10ba7a140>(no_logo=True)
+E        +    where <function lint_imports at 0x10ba7a140> = use_cases.lint_imports
+
+tests/architecture/test_layer_boundaries.py:44: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+---------
+Contracts
+---------
+
+Analyzed 13 files, 6 dependencies.
+----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free BROKEN
+Application knows no web framework or ORM KEPT
+
+Contracts: 2 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Domain is framework-free
+------------------------
+
+taskmanager.domain is not allowed to import fastapi:
+
+-   taskmanager.domain._violation -> fastapi (l.1)
+
+
+=========================== short test summary info ============================
+FAILED tests/architecture/test_layer_boundaries.py::test_import_contracts_hold
+1 failed, 1 passed in 0.21s
+EXIT=1
+
+================================================================================
+RUN 2 - RED: the lint-imports console script, same violation, exit code 1
+================================================================================
+
+[logo elided]
+
+---------
+Contracts
+---------
+
+Analyzed 13 files, 6 dependencies.
+----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free BROKEN
+Application knows no web framework or ORM KEPT
+
+Contracts: 2 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Domain is framework-free
+------------------------
+
+taskmanager.domain is not allowed to import fastapi:
+
+-   taskmanager.domain._violation -> fastapi (l.1)
+
+
+EXIT=1
+
+================================================================================
+RUN 3 - THE CONTRAST: python -m importlinter.cli, same violation, exit code 0
+================================================================================
+
+This is why tests/architecture/test_layer_boundaries.py calls the Python API instead
+of shelling out. The module-execution form below reports NOTHING and succeeds while
+the forbidden import is still sitting in the domain. An architecture test built on it
+passes forever - the worst possible outcome for a quality gate, because it looks green.
+
+The cause: importlinter's cli module has no `if __name__ == "__main__":` guard and the
+package ships no __main__.py, so `python -m` imports the module (registering the click
+commands) and exits without invoking any of them.
+
+$ .venv/bin/python -m importlinter.cli lint-imports
+EXIT=0
+
+(no output whatsoever - the blank line above is the entire result)
+
+The related form fails loudly instead, which is at least honest, though for the wrong
+reason - it never checks anything either:
+
+$ .venv/bin/python -m importlinter lint-imports
+/Users/xch4rt/work/myself/crehana/test/.venv/bin/python: No module named importlinter.__main__; 'importlinter' is a package and cannot be directly executed
+EXIT=1
+
+Exit-code summary with the identical violation in place:
+  .venv/bin/lint-imports                             -> 1   (correct)
+  use_cases.lint_imports(no_logo=True)               -> False (correct, used by the test)
+  .venv/bin/python -m importlinter.cli lint-imports  -> 0   (silent no-op - FORBIDDEN)
+  .venv/bin/python -m importlinter lint-imports      -> 1   (loud, but for the wrong reason)
+
+================================================================================
+RUN 4 - GREEN: violation removed, pytest passes, exit code 0
+================================================================================
+
+..                                                                       [100%]
+2 passed in 0.15s
+EXIT=0
+
+================================================================================
+RUN 5 - GREEN: lint-imports, violation removed, exit code 0
+================================================================================
+
+[logo elided]
+
+---------
+Contracts
+---------
+
+Analyzed 12 files, 5 dependencies.
+----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+EXIT=0
+
+Note the file count: 13 files / 6 dependencies with the violation present, 12 / 5
+without it. The graph really is rebuilt from the source tree on every run.
+
+================================================================================
+APPENDIX - the second failure mode: a config that configures nothing
+================================================================================
+
+Everything above proves the contracts catch a bad import. It does not prove they are
+loaded at all, and that is a separate, quieter way for this gate to die: import-linter's
+success condition is "no broken contracts", and zero contracts satisfies it vacuously.
+That is what test_every_contract_is_configured exists for, so it was worth observing too.
+
+First, a correction to this project's own research. RESEARCH Pitfall 2 claims the trap is
+writing the section header as [importlinter:contracts:layers] (plural) instead of
+[importlinter:contract:layers]. Applied to all three headers, that typo changes nothing:
+
+$ .venv/bin/lint-imports        # with [importlinter:contracts:...] x3
+  Layered architecture (high to low) KEPT
+  Domain is framework-free KEPT
+  Application knows no web framework or ORM KEPT
+  Contracts: 3 kept, 0 broken.
+EXIT=0
+$ .venv/bin/pytest tests/architecture -q --no-cov
+2 passed
+EXIT=0
+
+The reason is in importlinter/adapters/user_options.py: the INI reader keeps every
+section whose name starts with "importlinter:" and uses section_name.split(":")[-1] as
+the contract id. The middle word is never inspected, so "contract", "contracts" and
+anything else all work. The stated pitfall does not reproduce on import-linter 2.15.
+
+The real trap is one level up - getting the PREFIX wrong. The tool is spelled
+"import-linter" everywhere (PyPI, docs, the console script), while the section prefix is
+"importlinter" with no hyphen, which makes this a genuinely easy mistake:
+
+$ .venv/bin/lint-imports        # with [import-linter:contract:...] x3
+[logo elided]
+
+---------
+Contracts
+---------
+
+Analyzed 12 files, 5 dependencies.
+----------------------------------
+
+
+Contracts: 0 kept, 0 broken.
+EXIT=0
+
+Zero contracts, exit 0, green build, no enforcement whatsoever. The guard test is what
+refuses to go along with it:
+
+$ .venv/bin/pytest tests/architecture -q --no-cov
+>       assert {
+            contract["name"] for contract in config["contracts_options"]
+        } == EXPECTED_CONTRACT_NAMES
+E       AssertionError: assert set() == {'Application...high to low)'}
+E
+E         Extra items in the right set:
+E         'Application knows no web framework or ORM'
+E         'Domain is framework-free'
+E         'Layered architecture (high to low)'
+
+tests/architecture/test_layer_boundaries.py:37: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_layer_boundaries.py::test_every_contract_is_configured
+1 failed, 1 passed in 0.05s
+EXIT=1
+
+.importlinter was restored with `git checkout -- .importlinter` after this appendix and
+is byte-identical to the committed version; `git diff HEAD -- .importlinter` is empty.
+
+Both failure modes of this gate have now been observed firing, and both are covered by a
+test: a forbidden import (test_import_contracts_hold) and an unloaded config
+(test_every_contract_is_configured).
