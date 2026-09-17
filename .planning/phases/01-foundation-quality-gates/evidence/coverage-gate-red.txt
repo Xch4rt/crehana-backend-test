@@ -1,0 +1,113 @@
+Coverage gate demonstration - Phase 1, plan 01-02
+Date: 2026-09-17
+Command (both runs): .venv/bin/pytest
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1 + pytest-cov 7.1.0
+Threshold: --cov-fail-under=75, declared in pytest.ini addopts
+
+Why this file exists: a coverage gate that has never been seen failing is
+indistinguishable from a no-op. The run below adds one 16-statement module,
+src/taskmanager/infrastructure/_coverage_probe.py, that NO test imports, and
+the gate drops the total to 40.91% and exits non-zero. That an un-imported
+module lands in the denominator at all is the direct payoff of configuring
+coverage as source = ["taskmanager"] (the installed package name) rather than
+as a filesystem path: a path-based source only measures files that were
+actually imported, so dead modules would silently never be counted.
+
+The probe was deleted immediately after the red run and does not exist in the
+repository; the green run below is the same command on the shipped tree.
+
+================================================================================
+RUN 1 - RED: probe present, gate fires, exit code 1
+================================================================================
+
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 6 items
+
+tests/unit/test_app_factory.py .                                         [ 16%]
+tests/unit/test_settings.py .....
+ERROR: Coverage failure: total of 41 is less than fail-under=75
+                                                                         [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/__init__.py                 0      0      0      0   100%
+src/taskmanager/domain/__init__.py                      0      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/_coverage_probe.py      16     16     10      0     0%   8-27
+src/taskmanager/infrastructure/config/__init__.py       0      0      0      0   100%
+src/taskmanager/infrastructure/config/settings.py      13      0      0      0   100%
+src/taskmanager/main.py                                 5      0      0      0   100%
+src/taskmanager/presentation/__init__.py                0      0      0      0   100%
+-----------------------------------------------------------------------------------------------
+TOTAL                                                  34     16     10      0    41%
+Coverage XML written to file coverage.xml
+FAIL Required test coverage of 75% not reached. Total coverage: 40.91%
+============================== 6 passed in 0.38s ===============================
+
+Exit code: 1
+
+Note that all 6 tests PASSED in the red run. The suite was green; only the
+coverage gate failed. That is the point: the gate is an independent check, not
+a restatement of the test results.
+
+================================================================================
+RUN 2 - GREEN: probe deleted, same command, exit code 0
+================================================================================
+
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 6 items
+
+tests/unit/test_app_factory.py .                                         [ 16%]
+tests/unit/test_settings.py .....                                        [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/__init__.py                 0      0      0      0   100%
+src/taskmanager/domain/__init__.py                      0      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py       0      0      0      0   100%
+src/taskmanager/infrastructure/config/settings.py      13      0      0      0   100%
+src/taskmanager/main.py                                 5      0      0      0   100%
+src/taskmanager/presentation/__init__.py                0      0      0      0   100%
+-----------------------------------------------------------------------------------------------
+TOTAL                                                  18      0      0      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================== 6 passed in 0.22s ===============================
+
+Exit code: 0
+
+================================================================================
+How the 100% was reached
+================================================================================
+
+Honestly, and this is checkable:
+  - no "# pragma: no cover" anywhere in src/ or tests/
+  - no "omit" entries in [tool.coverage.run] in pyproject.toml
+  - --cov-fail-under=75 was never lowered
+  - the eight files in the table are exactly the output of
+    `find src -name '*.py'`; the six zero-statement layer __init__.py files
+    neither inflate nor deflate the total
+  - the two real modules (settings.py, main.py) total 18 statements, all
+    exercised by six tests that each assert on a value rather than merely on
+    the absence of an exception
