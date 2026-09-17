@@ -65,6 +65,8 @@ def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     second = get_settings()
     try:
         assert first is second
+        # The cached instance carries the current environment, not a stale one.
+        assert first == Settings(_env_file=None)
         assert first.database_url == ENV["DATABASE_URL"]
     finally:
         get_settings.cache_clear()
