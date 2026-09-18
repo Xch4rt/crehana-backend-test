@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-09-18T23:27:14.627Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-09-18T23:52:05.626Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 21
-  percent: 81
+  completed_plans: 22
+  percent: 85
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 7 of 11
+Plan: 8 of 11
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [████████░░] 81%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [████████░░] 81%
 | Phase 03 P04 | 16min | 2 tasks | 4 files |
 | Phase 03 P05 | 11min | 3 tasks | 5 files |
 | Phase 03 P06 | 15min | 3 tasks | 7 files |
+| Phase 03 P07 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,14 @@ Recent decisions affecting current work:
 - [Phase 03-06]: The SC-4 gate adds no pre-commit hook and no CI step - it rides inside pytest, which the hook set, the Docker test stage and CI already run, so ADR-015's two-places rule does not apply (same argument as 02-06)
 - [Phase 03-06]: Requirement ticks DB-01/DB-03/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the sixth consecutive plan in this phase to make the same call
 
+- [Phase 03-07]: completion_statement() is a MODULE-LEVEL function rather than four lines inside completion_stats() - it is the only way a test can compile the aggregate and assert FILTER (WHERE, one FROM tasks and two count(*) with no server and no event listener, which turns ADR-009 from an intention into a gate
+- [Phase 03-07]: The three CHECK constraints are deliberately NOT translated and the absence is a test: a ck_tasks_* refusal means a row bypassed Task.__post_init__, which is a process defect that must become Phase 2's fixed 500, never a 422 naming a field the request never contained
+- [Phase 03-07]: TASK-06's status and priority filters are appended to the statement under `if ... is not None` and never applied to the result; the conjunction test asks for pending+high (no rows) as well as pending+low (one row), so an OR or last-argument-wins implementation fails while both single-filter tests still pass
+- [Phase 03-07]: Listing orders by created_at THEN id and two seeded tasks share an instant - a timestamp alone is not a total order, and the bug it produces in Phase 4 is flakiness rather than wrongness
+- [Phase 03-07]: SQLAlchemy orders a flush by relationship() declarations, not by raw ForeignKey columns - users and task_lists added in one flush emitted the lists first and PostgreSQL refused them; two flushes in reference order, and 03-08 will meet the same thing
+- [Phase 03-07]: `type(x) is Task` replaces the sibling suite's `not isinstance(x, TaskRow)` - mypy warn_unreachable proves Task and TaskRow can have no common subclass, so the isinstance form is dead code and fails make typecheck
+- [Phase 03-07]: Requirement ticks DB-01/DB-03/DB-04/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the seventh consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -215,6 +224,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T23:27:14.487Z
-Stopped at: Completed 03-06-PLAN.md
+Last session: 2026-09-18T23:52:05.626Z
+Stopped at: Completed 03-07-PLAN.md
 Resume file: None
