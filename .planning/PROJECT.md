@@ -17,7 +17,16 @@ minutes by an evaluator: `docker compose up`, run the tests, read the docs.
 
 ### Validated
 
-(None yet — ship to validate)
+Validated in Phase 1: Foundation & Quality Gates (2026-09-18) — every gate green locally
+and on two real CI runs (`Xch4rt/crehana-backend-test`).
+- [x] `pytest.ini` file configuring pytest
+- [x] `.flake8` file with configuration
+- [x] black configured
+- [x] Linters (flake8) and formatting (black, isort)
+- [x] Test coverage >= 75% of the project — enforced by `--cov-fail-under=75` in `pytest.ini`,
+      proven to fail on an untested module (`evidence/coverage-gate-red.txt`)
+- [x] Dockerfile (multistage) — three-stage, non-root runtime, `test` stage runs the suite on
+      Python 3.13; `docker-compose.yml` remains Active (Phase 3)
 
 ### Active
 
@@ -46,16 +55,11 @@ minutes by an evaluator: `docker compose up`, run the tests, read the docs.
 - [ ] Error handling with custom exceptions
 - [ ] Business validations
 - [ ] Unit and integration testing with pytest
-- [ ] Linters (flake8) and formatting (black, isort)
-- [ ] Dockerfile (multistage) and docker-compose
+- [ ] docker-compose (Dockerfile validated in Phase 1)
 - [ ] Complete README + DECISION_LOG.md explaining technical decisions
 
 **Mandatory — tooling files (PDF 3-6)**
-- [ ] Test coverage >= 75% of the project
-- [ ] `pytest.ini` file configuring pytest
-- [ ] `.flake8` file with configuration
-- [ ] black configured
-- [ ] `Dockerfile` + `docker-compose.yml`
+- [ ] `docker-compose.yml` (`Dockerfile` validated in Phase 1)
 - [ ] README.md with: project description, local environment setup, running in Docker,
       running the tests
 
@@ -153,4 +157,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-17 after research and requirements definition*
+*Last updated: 2026-09-18 after Phase 1 (Foundation & Quality Gates) completion*
