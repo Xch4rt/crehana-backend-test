@@ -118,7 +118,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 02-06-PLAN.md — The AST proof that the domain is stdlib-only, its red/green evidence, and ADR-020/021/022
+- [x] 02-06-PLAN.md — The AST proof that the domain is stdlib-only, its red/green evidence, and ADR-020/021/022
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
-| 2. Domain & Error Contract | 5/7 | In Progress | - |
+| 2. Domain & Error Contract | 6/7 | In Progress | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |

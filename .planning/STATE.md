@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-09-18T07:29:02.487Z"
-last_activity: 2026-09-18 -- Phase 02 plan 05 complete (application ports, DTO conventions, the ChangeTaskStatus reference use case)
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-09-18T07:48:34.490Z"
+last_activity: 2026-09-18 -- Phase 02 plan 06 complete (the AST stdlib-only proof of the domain, plus ADR-020, ADR-021 and ADR-022)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 14
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 02 (domain-error-contract) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 02 plan 05 complete (application ports, DTO conventions, the ChangeTaskStatus reference use case)
+Last activity: 2026-09-18 -- Phase 02 plan 06 complete (the AST stdlib-only proof of the domain, plus ADR-020, ADR-021 and ADR-022)
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 87%
 | Phase 02 P03 | 12min | 3 tasks | 11 files |
 | Phase 02 P04 | 18min | 3 tasks | 12 files |
 | Phase 02 P05 | 22min | 3 tasks | 17 files |
+| Phase 02 P06 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,11 @@ Recent decisions affecting current work:
 - [Phase 02-05]: mypy checks a MUTABLE protocol member invariantly, so FakeUnitOfWork.tasks must be annotated TaskRepository exactly; the fake exposes the same object twice (tasks + task_repository) and Phase 3's SqlAlchemyUnitOfWork will need the same annotation
 - [Phase 02-05]: The invisible-task test catches the base DomainError and then asserts the leaf is TaskNotFoundError and not AuthorizationError - catching the leaf directly would pass against an implementation that never considered the 403 question (ADR-008)
 - [Phase 02-05]: ChangeTaskStatus has no same-state branch and no AuthorizationError branch, both deliberate: idempotence is a change_status invariant (D-02) and ASGN-02 leaves no visible-but-forbidden case for this verb
+- [Phase 02-06]: ARC-06 is ticked here: 02-06 is its LAST claimant across the 02-0* plans (02-02, 02-03, 02-06); 02-07 claims only ARC-04 and ARC-02, so ARC-02 stays untouched
+- [Phase 02-06]: Roadmap SC-1 is now mechanically true - tests/architecture/test_domain_is_stdlib_only.py walks the domain with ast and checks every import root against sys.stdlib_module_names, which the enumerated import-linter contract cannot do
+- [Phase 02-06]: The gap is demonstrated, not asserted: a planted 'import greenlet' turns the new test red while lint-imports exits 0 reporting 'Domain is framework-free' KEPT - the graph even grew from 48 to 50 files, so grimp saw the import and the contract had nothing to say about it
+- [Phase 02-06]: The new check adds no gate to .pre-commit-config.yaml or ci.yml on purpose - it rides inside pytest, which both already invoke, so ADR-015's two-places rule never applies
+- [Phase 02-06]: ADR-020 refines ADR-004 rather than overturning it: DTOs are frozen slotted dataclasses, and pydantic is deliberately NOT added to application-framework-free's forbidden_modules
 
 ### Pending Todos
 
@@ -157,6 +163,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T07:29:02.479Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-09-18T07:45:55.865Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
