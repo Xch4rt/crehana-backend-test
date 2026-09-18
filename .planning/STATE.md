@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-09-18T23:02:15.170Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-09-18T23:27:14.627Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 20
-  percent: 77
+  completed_plans: 21
+  percent: 81
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 6 of 11
+Plan: 7 of 11
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [████████░░] 77%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [████████░░] 77%
 | Phase 03 P03 | 6min | 2 tasks | 6 files |
 | Phase 03 P04 | 16min | 2 tasks | 4 files |
 | Phase 03 P05 | 11min | 3 tasks | 5 files |
+| Phase 03 P06 | 15min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -180,6 +181,13 @@ Recent decisions affecting current work:
 - [Phase 03-05]: .github/workflows/ci.yml needs NO change, confirmed by reading it - DATABASE_URL already names taskmanager_test and TEST_DATABASE_URL is unset, so resolve_test_database_url derives the identical URL and the name guard passes
 - [Phase 03-05]: Requirement ticks DB-02/DB-04/DB-05 deliberately NOT taken - 03-11 is the last claimant, the fifth consecutive plan in this phase to make the same call
 
+- [Phase 03-06]: The IntegrityError translation is ONE private NoReturn helper per adapter called from both write paths, not the block copied into add() and update() - a second copy ages separately, and the foreign-key branch cannot fire from update() (apply_task_list_to_row deliberately does not write owner_id), so a copy would ship a branch no test could reach
+- [Phase 03-06]: Opening a SAVEPOINT flushes whatever is already pending, so anything a test needs PostgreSQL to refuse must be added INSIDE begin_nested() - the first unrecognised-IntegrityError test was green with add() entirely uncovered, caught by reading the per-test coverage row rather than the exit status
+- [Phase 03-06]: exists_with_name returns `count is not None and count > 0` as one expression: AsyncSession.scalar is typed int | None so the plan's bare comparison fails mypy strict, and the expression form adds no branch coverage would want a second test for
+- [Phase 03-06]: The SC-4 gate is a source-TEXT scan, not an AST walk and never a runtime check - the property is about the text, and the project's prose-not-literal convention makes a docstring mention under that package a violation too; the AST upgrade is recorded as legitimate, the runtime check as not
+- [Phase 03-06]: The SC-4 gate adds no pre-commit hook and no CI step - it rides inside pytest, which the hook set, the Docker test stage and CI already run, so ADR-015's two-places rule does not apply (same argument as 02-06)
+- [Phase 03-06]: Requirement ticks DB-01/DB-03/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the sixth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -207,6 +215,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T23:02:05.105Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-09-18T23:27:14.487Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
