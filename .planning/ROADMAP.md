@@ -66,7 +66,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — pre-commit hooks and the one-word Makefile targets
+- [x] 01-04-PLAN.md — pre-commit hooks and the one-word Makefile targets
 - [ ] 01-05-PLAN.md — Multistage non-root Dockerfile and the GitHub Actions CI workflow
 
 **Wave 5** *(blocked on Wave 4 completion)*
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 3/8 | In Progress|  |
+| 1. Foundation & Quality Gates | 4/8 | In Progress|  |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |

@@ -18,8 +18,8 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **FND-05**: A `pytest.ini` file holds all pytest configuration (asyncio mode, markers, coverage options, `filterwarnings = error`) [PDF 3.c]
 - [x] **FND-06**: Coverage is measured over the real source package (`source` set, tests excluded) and the run fails under 75% [PDF 3.b]
 - [x] **FND-07**: mypy runs in strict mode over `src/` and passes [NL]
-- [ ] **FND-08**: pre-commit hooks run black, isort, flake8 and mypy [NL]
-- [ ] **FND-09**: A `Makefile` exposes one-word commands: `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` [NL]
+- [x] **FND-08**: pre-commit hooks run black, isort, flake8 and mypy [NL]
+- [x] **FND-09**: A `Makefile` exposes one-word commands: `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` [NL]
 - [ ] **FND-10**: GitHub Actions CI runs lint, typecheck, architecture check and tests with the coverage gate against a Postgres service, on every push [NL]
 - [x] **FND-11**: Settings are loaded from environment via pydantic-settings; no secret has a hard-coded production default; `.env.example` documents every variable [R]
 
@@ -160,8 +160,8 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | FND-05 | Phase 1 | Complete |
 | FND-06 | Phase 1 | Complete |
 | FND-07 | Phase 1 | Complete |
-| FND-08 | Phase 1 | Pending |
-| FND-09 | Phase 1 | Pending |
+| FND-08 | Phase 1 | Complete |
+| FND-09 | Phase 1 | Complete |
 | FND-10 | Phase 1 | Pending |
 | FND-11 | Phase 1 | Complete |
 | ARC-01 | Phase 1 | Complete |

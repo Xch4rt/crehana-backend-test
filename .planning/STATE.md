@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-17T23:00:24.763Z"
-last_activity: 2026-09-17
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-18T01:17:01.470Z"
+last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 01 (foundation-quality-gates) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
-Last activity: 2026-09-17
+Last activity: 2026-09-18
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████░░░░░░] 38%
 | Phase 01 P01 | 13min | 3 tasks | 15 files |
 | Phase 01 P02 | 5min | 3 tasks | 7 files |
 | Phase 01 P03 | 8min | 3 tasks | 3 files |
+| Phase 01 P04 | 14min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 01-03]: Root-level .importlinter (not [tool.importlinter] in pyproject.toml): equivalent, but an evaluator finds a file named after the tool in five seconds
 - [Phase 01-03]: The architecture contract runs inside pytest via importlinter.application.use_cases.lint_imports; python -m importlinter.cli is forbidden - it exits 0 with a real violation in place
 - [Phase 01-03]: RESEARCH Pitfall 2 corrected by execution: the [importlinter:contracts:] plural typo is harmless on 2.15; the real zero-contract trap is the hyphenated [import-linter:] prefix, and the guard test was observed catching it
+- [Phase 01-04]: pre-commit repo-local hooks use .venv/bin-qualified entries; RESEARCH's bare entries were executed and both whole-program gates died with 'Executable not found' under a minimal PATH (evidence/pre-commit-venv-entry.txt)
+- [Phase 01-04]: consequence accepted - .pre-commit-config.yaml is developer-host-only, so CI and the Docker image must never call pre-commit run; CI runs black/isort/flake8/mypy/lint-imports/pytest as named steps
+- [Phase 01-04]: Makefile comments describe forbidden forms (ONESHELL, a version-suffixed python3, the python -m import-linter module) without spelling them, so the plan's grep gates stay strict - same convention as 01-03's docstring
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-17T23:00:09.754Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-09-18T01:17:01.451Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
