@@ -53,12 +53,13 @@ REPOSITORIES: Final[Path] = (
 
 FORBIDDEN_CALL: Final[str] = ".commit()"
 
-# `tasks.py` is deliberately absent: it arrives with the task adapter in plan
-# 03-07, and that plan adds it here. Requiring the two modules that exist today
-# is what makes the scan non-vacuous - a renamed or emptied package fails the
-# guard below instead of leaving the real test asserting that nothing is nothing.
+# All three adapters, named rather than counted. Requiring them by name is what
+# makes the scan non-vacuous - a renamed or emptied package, or a newest adapter
+# that quietly stopped being scanned, fails the guard below instead of leaving
+# the real test asserting that nothing is nothing. A fourth adapter adds its name
+# here in the same commit that creates it.
 REQUIRED_SCANNED_MODULES: Final[frozenset[str]] = frozenset(
-    {"task_lists.py", "users.py"}
+    {"task_lists.py", "tasks.py", "users.py"}
 )
 
 

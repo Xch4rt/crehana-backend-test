@@ -21,10 +21,11 @@ field their request never contained. Untranslated, it reaches Phase 2's
 catch-all and becomes the fixed 500 with no message at all (T-3-14).
 """
 
+from collections.abc import Sequence
 from typing import NoReturn
 from uuid import UUID
 
-from sqlalchemy import delete
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,9 @@ from taskmanager.domain.exceptions import (
     TaskNotFoundError,
     UserNotFoundError,
 )
+from taskmanager.domain.value_objects.completion import CompletionStats
+from taskmanager.domain.value_objects.task_priority import TaskPriority
+from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.constraints import (
     FK_TASKS_ASSIGNEE_ID_USERS,
     FK_TASKS_TASK_LIST_ID_TASK_LISTS,
@@ -45,6 +49,30 @@ from taskmanager.infrastructure.db.mappers import (
     task_to_row,
 )
 from taskmanager.infrastructure.db.models import TaskRow
+
+
+def completion_statement(task_list_id: UUID) -> Select[tuple[int, int]]:
+    """The one statement behind the completion percentage (ADR-009).
+
+    Two counters over one pass of the list's rows: how many tasks there are, and
+    how many of them are completed. `count(*) FILTER (WHERE ...)` is what makes
+    the second one free - the alternative shapes are two queries, which can
+    disagree with each other because they see the table at two different moments,
+    or a full read counted in Python, which is Anti-Pattern 8 and turns a number
+    into a table scan the moment a list gets long.
+
+    It is a module-level function rather than a few lines inside the method so
+    the SQL it produces can be compiled and asserted on with no server at all:
+    `test_the_aggregate_is_a_single_statement` fails if a later refactor turns
+    this back into two queries. The filter value is `TaskStatus.COMPLETED.value`
+    and travels as a bound parameter, like every other value in this package.
+    """
+    return select(
+        func.count().label("total"),
+        func.count()
+        .filter(TaskRow.status == TaskStatus.COMPLETED.value)
+        .label("completed"),
+    ).where(TaskRow.task_list_id == task_list_id)
 
 
 class SqlAlchemyTaskRepository:
@@ -107,6 +135,63 @@ class SqlAlchemyTaskRepository:
         """
         await self._session.execute(delete(TaskRow).where(TaskRow.id == task_id))
         await self._session.flush()
+
+    async def list_for_task_list(
+        self,
+        task_list_id: UUID,
+        *,
+        status: TaskStatus | None = None,
+        priority: TaskPriority | None = None,
+    ) -> Sequence[Task]:
+        """The tasks of one list, oldest first, filtered where asked.
+
+        Both filters are appended to the statement, never applied to the result.
+        TASK-06 makes them a requirement of the listing endpoint, so a Phase 4
+        request for the high-priority tasks of a list must ask PostgreSQL for
+        exactly those rows; a comprehension over a full read would answer the
+        same thing today and become the slow path the first time a list holds a
+        thousand tasks - while also reading rows the caller never asked for
+        (T-3-17, T-3-20). The values reach SQL as bound parameters, and they are
+        always an enum member's `.value`, so nothing a query string carries can
+        arrive as text.
+
+        The keyword-only signature is the port's and must not be widened: a
+        caller that could pass these positionally would be relying on an order
+        the Protocol does not promise.
+
+        The order is `created_at` and then `id`, because `created_at` alone is
+        not a total order - two tasks created in the same request share an
+        instant, and PostgreSQL may then return them either way round, which is
+        how a Phase 4 assertion about the first element passes on one run and
+        fails on the next.
+        """
+        statement = select(TaskRow).where(TaskRow.task_list_id == task_list_id)
+        if status is not None:
+            statement = statement.where(TaskRow.status == status.value)
+        if priority is not None:
+            statement = statement.where(TaskRow.priority == priority.value)
+        rows = await self._session.scalars(
+            statement.order_by(TaskRow.created_at, TaskRow.id)
+        )
+        return [task_to_entity(row) for row in rows]
+
+    async def completion_stats(self, task_list_id: UUID) -> CompletionStats:
+        """The list's two counters, from the one statement above (ADR-009).
+
+        No filter argument, and that is the contract rather than an omission:
+        roadmap Phase 4 SC-4 makes the percentage a property of the whole list,
+        so it must not move when a caller narrows the listing beside it.
+
+        The two values are handed to `CompletionStats` as they arrive. psycopg
+        decodes PostgreSQL's `bigint` as a Python `int`, which
+        `test_completion_stats_counts_the_whole_list` asserts rather than
+        assumes; converting here anyway would hide the day that stops being true
+        behind a silent `int(...)`, and converting inside `CompletionStats` would
+        put a persistence concern in a domain value object.
+        """
+        row = await self._session.execute(completion_statement(task_list_id))
+        total, completed = row.one()
+        return CompletionStats(total=total, completed=completed)
 
     def _refused(self, error: IntegrityError, task: Task) -> NoReturn:
         """Re-raise a refusal as the error it means, or exactly as it arrived.

@@ -23,8 +23,11 @@ cleans up after itself.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Final
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Dialect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
@@ -42,9 +45,18 @@ from taskmanager.infrastructure.db.constraints import CK_TASKS_STATUS
 from taskmanager.infrastructure.db.errors import violated_constraint
 from taskmanager.infrastructure.db.mappers import task_list_to_row, user_to_row
 from taskmanager.infrastructure.db.models import TaskRow
-from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
+from taskmanager.infrastructure.db.repositories.tasks import (
+    SqlAlchemyTaskRepository,
+    completion_statement,
+)
 
 pytestmark = pytest.mark.integration
+
+# The dialect the application actually runs on, obtained without a connection -
+# `create_engine` resolves it eagerly and connects lazily. `postgresql.dialect()`
+# is rejected for the reason `tests/unit/infrastructure/test_models.py` records:
+# it is an unannotated call, which mypy strict refuses.
+DIALECT: Final[Dialect] = create_engine("postgresql+psycopg://").dialect
 
 # Fixed identifiers and fixed instants, never generated ones: a value produced at
 # run time would make an assertion about "the task that was completed" true of
@@ -58,6 +70,9 @@ OTHER_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000012")
 MISSING_LIST_ID = uuid.UUID("00000000-0000-4000-8000-0000000000ff")
 TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000021")
 OTHER_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000022")
+THIRD_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000023")
+FOURTH_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000024")
+FOREIGN_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000025")
 MISSING_TASK_ID = uuid.UUID("00000000-0000-4000-8000-0000000000fd")
 
 NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
@@ -156,6 +171,57 @@ async def given_a_list_with_an_owner(session: AsyncSession) -> None:
             )
         )
     await session.flush()
+
+
+async def given_a_mixed_list(repository: SqlAlchemyTaskRepository) -> None:
+    """Four tasks in `Groceries` and one in `Chores` that must never appear.
+
+    The mix is asymmetric on purpose: one completed task out of four makes the
+    percentage 25.0, a number no off-by-one produces by accident, and each filter
+    below matches a different pair - so a listing that ignored its arguments
+    would return four rows where two are asserted rather than being right by
+    coincidence.
+
+    They are written newest-first-ish rather than in creation order, and two of
+    them share an instant. A statement ordering only by `created_at` would have
+    to be lucky to put those two in the asserted order, which is what makes the
+    `id` tie-break a tested claim rather than a comment.
+    """
+    await repository.add(a_task(priority=TaskPriority.MEDIUM))
+    await repository.add(
+        a_task(
+            task_id=THIRD_TASK_ID,
+            title="Call the plumber",
+            status=TaskStatus.IN_PROGRESS,
+            priority=TaskPriority.HIGH,
+            created_at=LATER,
+        )
+    )
+    await repository.add(
+        a_task(
+            task_id=OTHER_TASK_ID,
+            title="Buy bread",
+            status=TaskStatus.COMPLETED,
+            priority=TaskPriority.HIGH,
+            created_at=EARLIER,
+            completed_at=EARLIER,
+        )
+    )
+    await repository.add(
+        a_task(
+            task_id=FOURTH_TASK_ID,
+            title="Water the plants",
+            priority=TaskPriority.LOW,
+        )
+    )
+    await repository.add(
+        a_task(
+            task_id=FOREIGN_TASK_ID,
+            task_list_id=OTHER_LIST_ID,
+            title="Sweep the floor",
+            created_at=EARLIER,
+        )
+    )
 
 
 async def test_a_stored_task_comes_back_as_a_domain_entity(
@@ -396,3 +462,205 @@ async def test_delete_removes_the_row_and_is_a_no_op_for_an_unknown_id(
     assert await repository.get(TASK_ID) is None
 
     await repository.delete(MISSING_TASK_ID)
+
+
+async def test_listing_returns_every_task_of_the_list_in_a_stable_order(
+    session: AsyncSession,
+) -> None:
+    """Oldest first, and `id` breaks the tie, so the order is total.
+
+    `created_at` alone is not enough: `Buy milk` and `Water the plants` share an
+    instant, and PostgreSQL is free to return two equally-ordered rows either way
+    round on different runs. A Phase 4 assertion about the first element of a
+    list response would then be flaky rather than wrong, which is much worse to
+    diagnose.
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    listed = await repository.list_for_task_list(LIST_ID)
+
+    assert [task.title for task in listed] == [
+        "Buy bread",
+        "Buy milk",
+        "Water the plants",
+        "Call the plumber",
+    ]
+    # Entities, not rows, exactly as `get()` returns (DB-03).
+    assert all(type(task) is Task for task in listed)
+
+
+async def test_listing_filtered_by_status_returns_only_matching_tasks(
+    session: AsyncSession,
+) -> None:
+    """TASK-06's first filter, applied by PostgreSQL rather than by Python."""
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    pending = await repository.list_for_task_list(LIST_ID, status=TaskStatus.PENDING)
+
+    assert [task.title for task in pending] == ["Buy milk", "Water the plants"]
+    assert all(task.status is TaskStatus.PENDING for task in pending)
+
+
+async def test_listing_filtered_by_priority_returns_only_matching_tasks(
+    session: AsyncSession,
+) -> None:
+    """TASK-06's second filter, and it selects a different pair on purpose."""
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    urgent = await repository.list_for_task_list(LIST_ID, priority=TaskPriority.HIGH)
+
+    assert [task.title for task in urgent] == ["Buy bread", "Call the plumber"]
+    assert all(task.priority is TaskPriority.HIGH for task in urgent)
+
+
+async def test_listing_filtered_by_both_applies_the_conjunction(
+    session: AsyncSession,
+) -> None:
+    """Two filters narrow, they do not accumulate.
+
+    The second assertion is the one that matters. `pending` matches two tasks and
+    `high` matches two others, so an implementation that combined the two
+    predicates with `OR` - or that applied only the last one it was given - would
+    return rows here instead of none, while still satisfying both single-filter
+    tests above.
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    narrowed = await repository.list_for_task_list(
+        LIST_ID, status=TaskStatus.PENDING, priority=TaskPriority.LOW
+    )
+    contradictory = await repository.list_for_task_list(
+        LIST_ID, status=TaskStatus.PENDING, priority=TaskPriority.HIGH
+    )
+
+    assert [task.title for task in narrowed] == ["Water the plants"]
+    assert list(contradictory) == []
+
+
+async def test_listing_never_returns_a_task_from_another_list(
+    session: AsyncSession,
+) -> None:
+    """Every statement is scoped in SQL, so no caller can read across lists.
+
+    `Sweep the floor` belongs to the second list and is the oldest task in the
+    database, so it would be the *first* element of an unscoped result - the
+    loudest possible failure for the quietest possible bug (T-3-20, ADR-008).
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    listed = await repository.list_for_task_list(LIST_ID)
+    filtered = await repository.list_for_task_list(LIST_ID, status=TaskStatus.PENDING)
+
+    assert all(task.task_list_id == LIST_ID for task in listed)
+    assert "Sweep the floor" not in [task.title for task in listed]
+    assert "Sweep the floor" not in [task.title for task in filtered]
+    assert [
+        task.title for task in await repository.list_for_task_list(OTHER_LIST_ID)
+    ] == ["Sweep the floor"]
+    assert list(await repository.list_for_task_list(MISSING_LIST_ID)) == []
+
+
+async def test_completion_stats_counts_the_whole_list(
+    session: AsyncSession,
+) -> None:
+    """ADR-009: one completed task out of four, counted by PostgreSQL.
+
+    The percentage is asserted but not re-derived - `tests/unit/domain/
+    test_completion.py` already pins the arithmetic, and this suite's job is the
+    two counters that feed it. The `int` assertions are the plan's open question
+    answered by observation: psycopg decodes `bigint` as a Python `int`, so the
+    adapter hands the values over unconverted, and this is where that stops being
+    an assumption.
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    stats = await repository.completion_stats(LIST_ID)
+
+    assert stats.total == 4
+    assert stats.completed == 1
+    assert type(stats.total) is int
+    assert type(stats.completed) is int
+    assert stats.percentage == 25.0
+
+
+async def test_completion_stats_of_an_empty_list_is_zero(
+    session: AsyncSession,
+) -> None:
+    """No rows is `0 / 0`, and the aggregate answers it without dividing.
+
+    `count(*)` over no rows is `0`, not `NULL`, which is why nothing here has to
+    coalesce - and `CompletionStats.percentage` returns `0.0` for an empty list
+    rather than raising, because a list with no tasks is an ordinary list.
+
+    A list that does not exist answers the same zeros. That is deliberate: the
+    adapter cannot tell "empty" from "absent" and must not guess, because whether
+    a missing list is a 404 or a 403 depends on who is asking, which only the use
+    case knows (ADR-008).
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+
+    empty = await repository.completion_stats(LIST_ID)
+    absent = await repository.completion_stats(MISSING_LIST_ID)
+
+    assert (empty.total, empty.completed, empty.percentage) == (0, 0, 0.0)
+    assert (absent.total, absent.completed, absent.percentage) == (0, 0, 0.0)
+
+
+async def test_completion_stats_is_unaffected_by_a_filter(
+    session: AsyncSession,
+) -> None:
+    """Roadmap Phase 4 SC-4: the percentage describes the list, not the view.
+
+    This is why `completion_stats` takes no filter arguments. A caller reading
+    the pending tasks of a list must still be told the list is 25% done, not that
+    it is 0% done because none of the two rows in front of them is completed -
+    and an implementation that derived the counters from the listing it just
+    produced would report exactly that.
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_a_mixed_list(repository)
+
+    pending = await repository.list_for_task_list(LIST_ID, status=TaskStatus.PENDING)
+    stats = await repository.completion_stats(LIST_ID)
+
+    assert len(pending) == 2
+    assert not any(task.status is TaskStatus.COMPLETED for task in pending)
+    assert (stats.total, stats.completed) == (4, 1)
+
+
+def test_the_aggregate_is_a_single_statement() -> None:
+    """ADR-009 as a property of the SQL, not of a round-trip count.
+
+    Compiled rather than observed: counting queries on the wire would need an
+    event listener and would still only describe the one call path the test
+    happened to take. The rendered statement is the claim itself - one `FROM
+    tasks`, and a `FILTER` clause doing the conditional half - so a refactor into
+    two queries, or into a Python `sum()` over a full read, fails here regardless
+    of how it is invoked.
+
+    Both `count` calls are also asserted to be `count(*)`: `count(status)` would
+    skip nothing today, because the column is `NOT NULL`, and would silently
+    start undercounting the day it is not.
+    """
+    compiled = str(completion_statement(LIST_ID).compile(dialect=DIALECT))
+
+    assert "FILTER (WHERE" in compiled
+    assert compiled.count("FROM tasks") == 1
+    assert compiled.count("count(*)") == 2
+    # The filter value travels as a bound parameter, never as an inlined literal
+    # (T-3-17): the same discipline every statement in this package follows.
+    assert "completed" not in compiled.replace("AS completed", "")
