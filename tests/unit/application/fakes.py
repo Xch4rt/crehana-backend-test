@@ -1,0 +1,275 @@
+"""In-memory test doubles for the eight application ports.
+
+They live under `tests/` on purpose. A fake under `src/` would be shipped code
+with no caller, and it would drag the ports into the coverage report as
+*implemented* rather than declared - which is precisely the claim ARC-04 and
+roadmap success criterion 3 make about them. Here they are test material:
+outside `coverage`'s source, outside import-linter's graph, and unreachable
+from the production application.
+
+They are also the reason the application layer is cheap to cover. Every use case
+is pure orchestration over these ports, so a full happy path plus every failure
+branch runs in microseconds against dictionaries, with no database, no event
+loop tuning and no fixtures beyond a constructor call. Phase 3 writes the real
+SQLAlchemy adapters against the same Protocols; nothing here is replaced by
+them, because nothing here was ever the implementation.
+"""
+
+from collections.abc import Sequence
+from datetime import datetime
+from types import TracebackType
+from typing import Self
+from uuid import UUID
+
+from taskmanager.application.ports.repositories import (
+    TaskListRepository,
+    TaskRepository,
+    UserRepository,
+)
+from taskmanager.domain.entities.task import Task
+from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
+from taskmanager.domain.value_objects.completion import CompletionStats
+from taskmanager.domain.value_objects.task_priority import TaskPriority
+from taskmanager.domain.value_objects.task_status import TaskStatus
+
+
+class FakeTaskRepository:
+    """Tasks in a dict, plus a record of every mutation that was asked for.
+
+    `added`, `updated` and `deleted` exist so a use-case test can assert that a
+    write happened *exactly once*. Asserting only on the final stored state
+    would pass just as happily if the use case saved twice.
+    """
+
+    def __init__(self) -> None:
+        self.stored: dict[UUID, Task] = {}
+        self.added: list[Task] = []
+        self.updated: list[Task] = []
+        self.deleted: list[UUID] = []
+
+    async def get(self, task_id: UUID) -> Task | None:
+        return self.stored.get(task_id)
+
+    async def add(self, task: Task) -> None:
+        self.stored[task.id] = task
+        self.added.append(task)
+
+    async def update(self, task: Task) -> None:
+        self.stored[task.id] = task
+        self.updated.append(task)
+
+    async def delete(self, task_id: UUID) -> None:
+        self.stored.pop(task_id, None)
+        self.deleted.append(task_id)
+
+    async def list_for_task_list(
+        self,
+        task_list_id: UUID,
+        *,
+        status: TaskStatus | None = None,
+        priority: TaskPriority | None = None,
+    ) -> Sequence[Task]:
+        tasks = [
+            task for task in self.stored.values() if task.task_list_id == task_list_id
+        ]
+        if status is not None:
+            tasks = [task for task in tasks if task.status is status]
+        if priority is not None:
+            tasks = [task for task in tasks if task.priority is priority]
+        return tasks
+
+    async def completion_stats(self, task_list_id: UUID) -> CompletionStats:
+        # Counted from what is stored, not canned: the aggregate Phase 3 will
+        # write in SQL has to agree with this, so the fake must be able to
+        # disagree with a wrong use case.
+        tasks = [
+            task for task in self.stored.values() if task.task_list_id == task_list_id
+        ]
+        completed = [task for task in tasks if task.status is TaskStatus.COMPLETED]
+        return CompletionStats(total=len(tasks), completed=len(completed))
+
+
+class FakeTaskListRepository:
+    """Task lists in a dict, with the same mutation record as its sibling."""
+
+    def __init__(self) -> None:
+        self.stored: dict[UUID, TaskList] = {}
+        self.added: list[TaskList] = []
+        self.updated: list[TaskList] = []
+        self.deleted: list[UUID] = []
+
+    async def get(self, task_list_id: UUID) -> TaskList | None:
+        return self.stored.get(task_list_id)
+
+    async def add(self, task_list: TaskList) -> None:
+        self.stored[task_list.id] = task_list
+        self.added.append(task_list)
+
+    async def update(self, task_list: TaskList) -> None:
+        self.stored[task_list.id] = task_list
+        self.updated.append(task_list)
+
+    async def delete(self, task_list_id: UUID) -> None:
+        self.stored.pop(task_list_id, None)
+        self.deleted.append(task_list_id)
+
+    async def list_for_owner(self, owner_id: UUID) -> Sequence[TaskList]:
+        return [
+            task_list
+            for task_list in self.stored.values()
+            if task_list.owner_id == owner_id
+        ]
+
+    async def exists_with_name(self, owner_id: UUID, name: str) -> bool:
+        # Case-insensitive, matching the `(owner_id, lower(name))` unique index
+        # LIST-06 asks Phase 3 for; a fake that compared case-sensitively would
+        # let a use-case test pass against a rule the database will refuse.
+        return any(
+            task_list.owner_id == owner_id
+            and task_list.name.casefold() == name.strip().casefold()
+            for task_list in self.stored.values()
+        )
+
+
+class FakeUserRepository:
+    """Users in a dict, indexed by id, with the login lookup over the values."""
+
+    def __init__(self) -> None:
+        self.stored: dict[UUID, User] = {}
+        self.added: list[User] = []
+
+    async def get(self, user_id: UUID) -> User | None:
+        return self.stored.get(user_id)
+
+    async def get_by_email(self, email: str) -> User | None:
+        # `User` lowercases on construction, so the stored side is canonical
+        # already and only the argument needs folding.
+        wanted = email.strip().lower()
+        return next(
+            (user for user in self.stored.values() if user.email == wanted),
+            None,
+        )
+
+    async def add(self, user: User) -> None:
+        self.stored[user.id] = user
+        self.added.append(user)
+
+    async def list_all(self) -> Sequence[User]:
+        return list(self.stored.values())
+
+
+class FakeUnitOfWork:
+    """The three fake repositories behind one countable transaction boundary.
+
+    `commits` and `rollbacks` are the point of this class. A use case that
+    forgets to commit, or commits on a path that raised, is otherwise
+    indistinguishable from a correct one when the repositories are dictionaries
+    that never had a transaction to begin with.
+
+    Each repository is reachable under two names, and that is not redundancy.
+    `UnitOfWork` declares `tasks`, `task_lists` and `users` as mutable attributes,
+    and mypy checks a mutable protocol member *invariantly* - so the attribute
+    the use case sees has to be annotated with the port type exactly, or this
+    class stops satisfying the port at all. The `*_repository` aliases beside
+    them are the very same objects under their concrete type, and they are what
+    a test asserts on when it needs `added`, `updated`, `deleted` or `stored`.
+    """
+
+    def __init__(
+        self,
+        tasks: FakeTaskRepository | None = None,
+        task_lists: FakeTaskListRepository | None = None,
+        users: FakeUserRepository | None = None,
+    ) -> None:
+        self.task_repository = tasks if tasks is not None else FakeTaskRepository()
+        self.task_list_repository = (
+            task_lists if task_lists is not None else FakeTaskListRepository()
+        )
+        self.user_repository = users if users is not None else FakeUserRepository()
+        self.tasks: TaskRepository = self.task_repository
+        self.task_lists: TaskListRepository = self.task_list_repository
+        self.users: UserRepository = self.user_repository
+        self.commits = 0
+        self.rollbacks = 0
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        # Two deliberate non-behaviours, both load-bearing. Returning `None`
+        # rather than a true value means an exception leaving the block is
+        # never swallowed, so a failing use case cannot answer 200. And no
+        # automatic commit happens here: D-17 and ARC-08 put the commit in the
+        # use case, explicitly, which is what the `commits` counter measures.
+        return None
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+class FrozenClock:
+    """A clock stopped at one instant, which it returns for ever.
+
+    The domain never reads a clock (D-13): every entity method takes `now` as a
+    keyword argument, and the use case is the one component that calls this
+    port. So a frozen instant is all a test needs to make every `updated_at` and
+    `completed_at` assertion an exact equality rather than a tolerance.
+    """
+
+    def __init__(self, instant: datetime) -> None:
+        self._instant = instant
+
+    def now(self) -> datetime:
+        return self._instant
+
+
+class FakePasswordHasher:
+    """A reversible prefix in place of Argon2id: deterministic and instant.
+
+    Real hashing is intentionally expensive, which is a property no unit test
+    wants to pay for on every run. The prefix keeps `verify` honest - a wrong
+    password still fails - without any of the cost.
+    """
+
+    PREFIX = "fake-hash:"
+
+    async def hash(self, password: str) -> str:
+        return f"{self.PREFIX}{password}"
+
+    async def verify(self, password: str, hashed: str) -> bool:
+        return hashed == f"{self.PREFIX}{password}"
+
+
+class FakeTokenService:
+    """A token that is the stringified subject, so decoding is inspectable."""
+
+    async def issue_access_token(self, subject: UUID) -> str:
+        return str(subject)
+
+    async def decode(self, token: str) -> UUID:
+        return UUID(token)
+
+
+class FakeEmailNotifier:
+    """Records what would have been sent, so a test can assert on it."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, UUID]] = []
+
+    async def send_task_assigned(
+        self,
+        *,
+        recipient_email: str,
+        task_title: str,
+        task_id: UUID,
+    ) -> None:
+        self.sent.append((recipient_email, task_title, task_id))
