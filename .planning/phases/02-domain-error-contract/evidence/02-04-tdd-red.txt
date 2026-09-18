@@ -1,0 +1,41 @@
+02-04 TDD RED/GREEN capture
+===========================
+
+Why this file exists
+--------------------
+Plans 02-01, 02-02 and 02-03 hit the same wall and established the convention this
+file follows: a RED commit cannot stand on its own in this repository. The
+`mypy (strict)` pre-commit hook type-checks `src` and `tests` on every commit and
+rejects a test (or a probe script) importing a module that does not exist yet, and
+CLAUDE.md forbids `--no-verify`. So the RED step is executed for real, captured here
+verbatim, and committed alongside the code that turns it green.
+
+Everything below is copied from the terminal, not retyped.
+
+
+Task 1 - RED: the behaviour probe before problem.py and mapping.py exist
+------------------------------------------------------------------------
+Command (the plan's own <verify> body, saved to a scratch file so the traceback is
+readable):
+
+    $ .venv/bin/python scratch/t1_probe.py
+
+Output:
+
+    Traceback (most recent call last):
+      File ".../t1_probe.py", line 14, in <module>
+        from taskmanager.presentation.api.errors.mapping import status_for
+    ModuleNotFoundError: No module named 'taskmanager.presentation.api'
+
+The failure is the import, which is the honest RED for a module that does not exist:
+`taskmanager.presentation` was an empty package until this plan.
+
+
+Task 1 - GREEN: the same command after problem.py and mapping.py exist
+----------------------------------------------------------------------
+    $ .venv/bin/python scratch/t1_probe.py
+    TASK 1 BEHAVIOUR CHECKS PASSED
+
+The seven `status_for` cases (409 / 404 / 422 / 409 / 401 / 403 / 500), the exact
+serialized key order, the `urn:taskmanager:problem:x` type member, the
+`application/problem+json` media type and both `errors` omission cases all hold.
