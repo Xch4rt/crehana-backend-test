@@ -20,3 +20,18 @@ ERROR tests/unit/domain/test_task_priority.py
 ERROR tests/unit/domain/test_task_status.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
 2 errors in 0.06s
+
+RED - plan 02-01 task 2, before src/taskmanager/domain/value_objects/completion.py existed
+$ .venv/bin/pytest tests/unit/domain/test_completion.py -q --no-cov
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_completion.py:7: in <module>
+    from taskmanager.domain.value_objects.completion import CompletionStats
+E   ModuleNotFoundError: No module named 'taskmanager.domain.value_objects.completion'
+=========================== short test summary info ============================
+ERROR tests/unit/domain/test_completion.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.06s
