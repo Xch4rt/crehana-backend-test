@@ -1,0 +1,29 @@
+TDD RED for plan 02-03. The cycle was run for real; the RED state is not
+committable on its own, because the mypy (strict) pre-commit hook rejects a
+test importing a module that does not exist and --no-verify is forbidden by
+CLAUDE.md. Same convention as plans 02-01 and 02-02.
+
+=== Tasks 1 and 2 - RED ===
+$ .venv/bin/pytest tests/unit/domain/test_validation.py tests/unit/domain/test_task.py -q --no-cov
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_validation.py:8: in <module>
+    from taskmanager.domain.validation import optional_text, require_text, require_utc
+E   ModuleNotFoundError: No module named 'taskmanager.domain.validation'
+_______________ ERROR collecting tests/unit/domain/test_task.py ________________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/domain/test_task.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_task.py:8: in <module>
+    from taskmanager.domain.entities.task import Task
+E   ModuleNotFoundError: No module named 'taskmanager.domain.entities'
+=========================== short test summary info ============================
+ERROR tests/unit/domain/test_validation.py
+ERROR tests/unit/domain/test_task.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.06s
