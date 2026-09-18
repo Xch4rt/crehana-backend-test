@@ -1,0 +1,35 @@
+Mutable (non-frozen) slots=True dataclass: setattr on a name that is NOT a
+field behaves identically on both interpreters this project runs on. Captured
+while writing the negative attribute tests of plan 02-03, after reading
+evidence/02-01-frozen-slots-setattr.txt.
+
+Why the check was repeated: plan 02-01 found that a FROZEN slotted dataclass
+raises FrozenInstanceError on CPython 3.13 and TypeError on 3.14.3 for a
+non-field name, so its test had to assert the portable claim instead of an
+exception type. The entities of this plan are mutable, and the question is
+whether the same divergence applies to them.
+
+It does not, and the reason is structural: the divergence comes from the
+__setattr__ that dataclasses generates for a frozen class, which tests
+`type(self) is cls` before delegating to `super(cls, self).__setattr__`. A
+mutable dataclass installs no __setattr__ at all, so the refusal comes from the
+type machinery itself and is the same on every CPython.
+
+Probe:
+  @dataclass(slots=True)
+  class T:
+      status: str
+  setattr(T(status="pending"), "statsu", "x")
+
+$ docker run --rm python:3.13-slim-trixie python -c ...   (Docker/CI runtime)
+  AttributeError 'T' object has no attribute 'statsu' and no __dict__ for setting new attributes
+  has __dict__: False
+  slots: ('status',)
+
+$ .venv/bin/python   (developer host, CPython 3.14.3, via the test suite)
+  tests/unit/domain/test_task.py::test_task_rejects_an_undeclared_attribute PASSED
+  with pytest.raises(AttributeError)
+
+Consequence: the entity tests assert AttributeError directly - a single
+exception type, no tuple - and say in a comment why that is safe here while it
+was not safe for CompletionStats.

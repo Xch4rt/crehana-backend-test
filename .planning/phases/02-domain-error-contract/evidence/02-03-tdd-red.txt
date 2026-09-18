@@ -27,3 +27,32 @@ ERROR tests/unit/domain/test_validation.py
 ERROR tests/unit/domain/test_task.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
 2 errors in 0.06s
+
+=== Task 3 - RED ===
+$ .venv/bin/pytest tests/unit/domain/test_task_list.py tests/unit/domain/test_user.py -q --no-cov
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_task_list.py:8: in <module>
+    from taskmanager.domain.entities.task_list import TaskList
+E   ModuleNotFoundError: No module named 'taskmanager.domain.entities.task_list'
+_______________ ERROR collecting tests/unit/domain/test_user.py ________________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/domain/test_user.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/domain/test_user.py:8: in <module>
+    from taskmanager.domain.entities.user import User
+E   ModuleNotFoundError: No module named 'taskmanager.domain.entities.user'
+=========================== short test summary info ============================
+ERROR tests/unit/domain/test_task_list.py
+ERROR tests/unit/domain/test_user.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.07s
+
+=== GREEN (all four modules, after the implementation landed) ===
+$ .venv/bin/pytest tests/unit/domain -q --no-cov
+........................................................................ [ 78%]
+....................                                                     [100%]
+92 passed in 0.05s
