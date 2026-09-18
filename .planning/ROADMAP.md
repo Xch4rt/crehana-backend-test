@@ -26,7 +26,7 @@ evidence rather than reconstructed at the end.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & Quality Gates** - Tooling, layer skeleton, enforced boundaries and CI exist before any application code
+- [x] **Phase 1: Foundation & Quality Gates** - Tooling, layer skeleton, enforced boundaries and CI exist before any application code (completed 2026-09-18)
 - [ ] **Phase 2: Domain & Error Contract** - Framework-free entities, ports and the single RFC 9457 error contract
 - [ ] **Phase 3: Persistence & Runnable Stack** - PostgreSQL, Alembic, UnitOfWork and a one-command `docker compose up`
 - [ ] **Phase 4: Task Lists & Tasks** - The full brief 1.a vertical slice: CRUD, status changes, filters, completion percentage
@@ -76,7 +76,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-08-PLAN.md — Full phase gate run and the public GitHub repository checkpoint
+- [x] 01-08-PLAN.md — Full phase gate run and the public GitHub repository checkpoint
 
 Notes: this phase also locks in the decisions the research flagged as conflicts (Python 3.13,
 `src/taskmanager` layout, RFC 9457, psycopg 3, Alembic, `postgres:18-alpine`,
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 7/8 | In Progress|  |
+| 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
