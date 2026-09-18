@@ -90,8 +90,9 @@ class TaskListRow(Base):
     __table_args__ = (
         # Unnamed on purpose: the `uq` convention renders exactly D-12's
         # `uq_task_lists_owner_id_name`. It is case-SENSITIVE - plain
-        # `UNIQUE (owner_id, name)`, never `lower(name)` - which is the
-        # deliberate opposite of `uq_users_email_lower` above. `User` lowercases
+        # `UNIQUE (owner_id, name)`, never a case-folding expression over the
+        # name - which is the deliberate opposite of the users index. `User`
+        # lowercases
         # its address on construction, so that index only defends a rule the
         # entity already enforces; `TaskList` folds no case at all, so a
         # case-insensitive index here would refuse two names the entity

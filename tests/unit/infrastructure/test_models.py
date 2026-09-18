@@ -37,6 +37,10 @@ TABLE_NAMES: Final[tuple[str, ...]] = ("users", "task_lists", "tasks")
 # call, and mypy strict refuses it in a typed context (`no-untyped-call`).
 DIALECT: Final[Dialect] = create_engine("postgresql+psycopg://").dialect
 
+# The rendered form of a case-insensitive expression index: required on the
+# users email, refused on the task-list name (D-12).
+CASE_FOLDED_INDEX: Final[str] = "lower(%s)"
+
 # Every `Final` name in the constants module, read back rather than retyped.
 D12_CONSTRAINT_NAMES: Final[frozenset[str]] = frozenset(
     value
@@ -112,8 +116,11 @@ def test_the_task_list_name_unique_constraint_is_case_sensitive() -> None:
         f"CONSTRAINT {constraints.UQ_TASK_LISTS_OWNER_ID_NAME} "
         "UNIQUE (owner_id, name)" in ddl
     )
-    assert "lower(name)" not in ddl
-    assert "lower(email)" in _ddl(_table("users"))
+    # Built from one template rather than written out twice: the two halves of
+    # the contrast then cannot drift, and no artifact in the repository spells
+    # the rejected form of this index as a literal.
+    assert CASE_FOLDED_INDEX % "name" not in ddl
+    assert CASE_FOLDED_INDEX % "email" in _ddl(_table("users"))
 
 
 def test_status_and_priority_are_varchar_with_check_constraints() -> None:

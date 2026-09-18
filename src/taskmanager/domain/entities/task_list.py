@@ -9,9 +9,14 @@ use-case concern.
 The rejected alternative is enforcing per-owner name uniqueness here. An entity
 cannot see its siblings, so the check would either be a lie or would need a
 repository handed into the domain. Uniqueness is therefore a use-case pre-check
-plus a unique index on `(owner_id, lower(name))` (LIST-06, Phases 3 and 4), and
-it raises `DuplicateTaskListNameError` there rather than `ValidationError` here:
+plus a unique index on `(owner_id, name)` (LIST-06, Phases 3 and 4), and it
+raises `DuplicateTaskListNameError` there rather than `ValidationError` here:
 a collision is a conflict with other state, not a malformed input.
+
+That index is case-sensitive, unlike the one over `lower(email)` on users,
+because this entity performs no case folding on `name`: `Alpha` and `alpha` are
+two names it considers distinct, and an index that disagreed would refuse a list
+the domain accepts (D-12).
 """
 
 from dataclasses import dataclass

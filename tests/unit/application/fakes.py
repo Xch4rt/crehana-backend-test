@@ -122,12 +122,14 @@ class FakeTaskListRepository:
         ]
 
     async def exists_with_name(self, owner_id: UUID, name: str) -> bool:
-        # Case-insensitive, matching the `(owner_id, lower(name))` unique index
-        # LIST-06 asks Phase 3 for; a fake that compared case-sensitively would
-        # let a use-case test pass against a rule the database will refuse.
+        # Case-SENSITIVE, matching `uq_task_lists_owner_id_name` - the plain
+        # `UNIQUE (owner_id, name)` of D-12, not a case-folding expression index.
+        # `TaskList` folds no case on its name, so `Alpha` and `alpha` are two
+        # distinct lists and a fake that compared case-insensitively would fail
+        # a use case the database would have accepted. The stored value is
+        # already trimmed by `require_text`, so only the argument is stripped.
         return any(
-            task_list.owner_id == owner_id
-            and task_list.name.casefold() == name.strip().casefold()
+            task_list.owner_id == owner_id and task_list.name == name.strip()
             for task_list in self.stored.values()
         )
 
