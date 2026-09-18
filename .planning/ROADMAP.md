@@ -114,7 +114,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-05-PLAN.md — The eight typing.Protocol ports, the frozen-dataclass DTO conventions and the ChangeTaskStatus reference use case
+- [x] 02-05-PLAN.md — The eight typing.Protocol ports, the frozen-dataclass DTO conventions and the ChangeTaskStatus reference use case
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
-| 2. Domain & Error Contract | 4/7 | In Progress | - |
+| 2. Domain & Error Contract | 5/7 | In Progress | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-09-18T06:58:55.348Z"
-last_activity: 2026-09-18 -- Phase 02 plan 04 complete (the single RFC 9457 exception-handling point)
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-18T07:29:02.487Z"
+last_activity: 2026-09-18 -- Phase 02 plan 05 complete (application ports, DTO conventions, the ChangeTaskStatus reference use case)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 15
-  completed_plans: 12
+  completed_plans: 13
   percent: 14
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 02 (domain-error-contract) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 02 plan 04 complete (the single RFC 9457 exception-handling point)
+Last activity: 2026-09-18 -- Phase 02 plan 05 complete (application ports, DTO conventions, the ChangeTaskStatus reference use case)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 80%
 | Phase 02 P02 | 14min | 2 tasks | 4 files |
 | Phase 02 P03 | 12min | 3 tasks | 11 files |
 | Phase 02 P04 | 18min | 3 tasks | 12 files |
+| Phase 02 P05 | 22min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,10 @@ Recent decisions affecting current work:
 - [Phase 02-04]: Exception handlers annotate the base Exception type and narrow with an isinstance assertion: mypy strict rejects the narrower annotation (callable parameters are contravariant) and the if/raise form adds partial branches the 100% gate cannot cover
 - [Phase 02-04]: STATUS_BY_EXCEPTION holds eight entries and no leaf class: TaskNotFoundError and its four siblings resolve through their parent by MRO, and the table uses int literals because 422's HTTPStatus member name changed across Python versions
 - [Phase 02-04]: coverage report --include A --include B keeps only B, so the plan's presentation coverage command measured main.py alone; the comma-separated single-flag form is the honest one and is captured in evidence/02-04-tdd-red.txt
+- [Phase 02-05]: ARC-04 satisfied: the eight ports are typing.Protocol classes with ... bodies only, and each has a conforming in-memory fake under tests/ named in eight test_fake_*_satisfies_the_*_port tests
+- [Phase 02-05]: mypy checks a MUTABLE protocol member invariantly, so FakeUnitOfWork.tasks must be annotated TaskRepository exactly; the fake exposes the same object twice (tasks + task_repository) and Phase 3's SqlAlchemyUnitOfWork will need the same annotation
+- [Phase 02-05]: The invisible-task test catches the base DomainError and then asserts the leaf is TaskNotFoundError and not AuthorizationError - catching the leaf directly would pass against an implementation that never considered the 403 question (ADR-008)
+- [Phase 02-05]: ChangeTaskStatus has no same-state branch and no AuthorizationError branch, both deliberate: idempotence is a change_status invariant (D-02) and ASGN-02 leaves no visible-but-forbidden case for this verb
 
 ### Pending Todos
 
@@ -152,6 +157,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T06:58:55.341Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-09-18T07:29:02.479Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None
