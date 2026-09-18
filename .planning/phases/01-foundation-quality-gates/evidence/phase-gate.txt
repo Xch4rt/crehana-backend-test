@@ -392,3 +392,121 @@ That is plan 01-08 Task 2, and it is a blocking human checkpoint - creating a
 public repository is outward-facing and irreversible, so its name and visibility
 are the user's call. Nothing outward-facing has happened at the time this file
 was committed.
+
+
+===============================================================================
+Task 2 - first real CI run
+===============================================================================
+
+Captured 2026-09-18 (UTC), immediately after the human checkpoint above was
+answered. The user supplied an already-created, empty, public repository:
+
+  git@github.com:Xch4rt/crehana-backend-test.git
+
+Because the repository already existed, no `gh repo create` was run and no
+README or "first commit" was fabricated - the history pushed is this
+repository's real `main`, unchanged, ending at 6d73281 (the Task 1 evidence
+commit). No force push was used at any point.
+
+=== FND-10 preflight (read-only, before touching anything) ===
+$ gh auth status
+  Logged in to github.com account Xch4rt (keyring), active, protocol ssh
+$ gh repo view Xch4rt/crehana-backend-test --json name,visibility,isEmpty
+  {"isEmpty":true,"name":"crehana-backend-test","visibility":"PUBLIC"}
+
+The `isEmpty: true` check is the guard that made the push safe: an already
+populated remote would have meant someone else's history, and the documented
+response was to stop rather than force anything on top of it.
+
+=== $ git remote add origin ... && git push -u origin main ===
+To github.com:Xch4rt/crehana-backend-test.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.
+
+$ git remote -v
+origin	git@github.com:Xch4rt/crehana-backend-test.git (fetch)
+origin	git@github.com:Xch4rt/crehana-backend-test.git (push)
+
+=== FND-10  $ gh run list --limit 1 ===
+completed	success	docs(01-08): capture the whole phase gate green in one uninterrupted run	CI	main	push	35301518310	53s	2026-09-18T03:00:09Z
+
+run id:   35301518310
+url:      https://github.com/Xch4rt/crehana-backend-test/actions/runs/35301518310
+head sha: 6d7328163ebc70a926f68201a8b580c22f92ee75
+status:   completed
+result:   success
+duration: 53s (job `quality-gates` 49s)
+
+=== $ gh run watch 35301518310 --exit-status ===
+JOBS
+v quality-gates in 49s (ID 105464963409)
+  v Set up job
+  v Initialize containers
+  v Run actions/checkout@v7
+  v Run actions/setup-python@v7
+  v Install dependencies
+  v Format check (black)
+  v Import order check (isort)
+  v Lint (flake8)
+  v Type check (mypy strict)
+  v Architecture contracts (import-linter)
+  v Tests with coverage gate
+  v Post Run actions/setup-python@v7
+  v Post Run actions/checkout@v7
+  v Stop containers
+  v Complete job
+
+All six gate steps ran as real, individually named steps - none was skipped and
+none no-opped (threat T-01-43). The Postgres service container came up and was
+health-checked even though no Phase 1 test touches it; that is deliberate, so
+Phase 3 adds a marker rather than CI infrastructure.
+
+=== Runner-side evidence, quoted from the job log ===
+Architecture contracts (import-linter):
+  Contracts: 3 kept, 0 broken.
+
+Tests with coverage gate:
+  platform linux -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+  configfile: pytest.ini
+  testpaths: tests
+  plugins: anyio-4.15.1, cov-7.1.0, asyncio-1.4.0
+  collected 8 items
+  TOTAL                                                  19      0      0      0   100%
+  Required test coverage of 75% reached. Total coverage: 100.00%
+  ============================== 8 passed in 0.71s ===============================
+
+Three interpreters have now run this suite green: the host venv (3.14.3, 18
+statements), the Docker image (3.13.15, 19 statements) and the runner (3.13.15,
+19 statements). The runner and the image agree exactly, which is the pair that
+matters - the image is what `docker compose up` gives an evaluator.
+
+=== Fix-up budget: unused ===
+RESEARCH assumption A2 budgeted one fix-up commit on the grounds that the
+workflow had never executed on a real runner. It passed on the first attempt, so
+no fix-up commit exists and nothing was pushed after the initial push. A2 is
+therefore now stale as written; the "never run on a real runner" caveat in
+01-RESEARCH.md and in DECISION_LOG.md ADR-019 should be refreshed in Phase 7,
+which already owns the README badge (AIW-05). DECISION_LOG.md is append-only and
+is not edited here.
+
+=== D-20 re-check, after the push ===
+$ git log --all --format='%B' | grep -ciE 'co-authored-by|claude|generated with|anthropic'
+raw match count: 1
+$ git log --all --format='%B' | grep -v 'CLAUDE\.md' | grep -ciE '...'
+refined match count: 0
+
+Unchanged from Task 1, and for the same reason: the single raw match is the
+filename CLAUDE.md appearing in commit 0456070's subject line. It is a file
+being referenced, not a trailer. No commit body on any branch carries an AI
+co-author trailer, a generation notice or a vendor name - and that history is
+now public and immutable.
+
+-------------------------------------------------------------------------------
+RESULT - Task 2
+-------------------------------------------------------------------------------
+
+The repository is public at https://github.com/Xch4rt/crehana-backend-test, the
+real history is pushed to `main`, and the first CI run on a real GitHub runner
+concluded `success` with every gate step green and the 75% coverage gate reached
+at 100% on Python 3.13.15. FND-10 is satisfied by observation rather than by
+fallback, and no fix-up commit was needed.
