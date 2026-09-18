@@ -26,3 +26,48 @@ $ .venv/bin/pytest tests/unit/application -q --no-cov
 
 $ .venv/bin/mypy src tests   (the structural conformance proof for all eight ports)
 Success: no issues found in 51 source files
+
+--- Task 3 RED: tests/unit/application/test_change_task_status.py against a tree with no dto/ and no use_cases/ ---
+$ .venv/bin/pytest tests/unit/application -q --no-cov
+
+==================================== ERRORS ====================================
+______ ERROR collecting tests/unit/application/test_change_task_status.py ______
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/application/test_change_task_status.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/application/test_change_task_status.py:19: in <module>
+    from taskmanager.application.dto.commands import ChangeTaskStatusCommand
+E   ModuleNotFoundError: No module named 'taskmanager.application.dto'
+=========================== short test summary info ============================
+ERROR tests/unit/application/test_change_task_status.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.08s
+
+--- Task 3 GREEN: the same command once dto/ and use_cases/ exist ---
+$ .venv/bin/pytest tests/unit/application -q --no-cov
+......................                                                   [100%]
+22 passed in 0.02s
+
+$ .venv/bin/pytest -q   (whole suite)
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+138 passed in 0.29s
+
+$ .venv/bin/coverage report --include='*/taskmanager/application/*' --fail-under=100
+  (single comma-free include: one slice, so the 02-04 two-flag trap does not apply here)
+src/taskmanager/application/ports/unit_of_work.py                       4      0      0      0   100%
+src/taskmanager/application/use_cases/__init__.py                       0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/__init__.py                 0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/change_task_status.py      28      0      6      0   100%
+-----------------------------------------------------------------------------------------------------
+TOTAL                                                                  70      0      6      0   100%
+
+--- Task 3: the same suite on the target runtime (CPython 3.13, Docker test stage) ---
+$ make docker-test
+138 passed in 0.64s
+Required test coverage of 75% reached. Total coverage: 100.00%
+(The frozen+slots undeclared-attribute hedge in test_change_task_status.py is what
+ lets the same two tests pass here and on the host's CPython 3.14.3.)
