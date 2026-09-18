@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-18T21:32:58.673Z"
-last_activity: 2026-09-18 -- Phase 03 plan 01 complete (ORM base, constraint names, three row classes)
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-18T22:01:09.509Z"
+last_activity: 2026-09-18 -- Phase 03 plan 02 complete (Alembic wiring, compose db service, 0001 baseline migration)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 16
-  percent: 62
+  completed_plans: 17
+  percent: 65
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 2 of 11
+Plan: 3 of 11
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 03 plan 01 complete (ORM base, constraint names, three row classes)
+Last activity: 2026-09-18 -- Phase 03 plan 02 complete (Alembic wiring, compose db service, 0001 baseline migration)
 
-Progress: [██████░░░░] 62%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [██████░░░░] 62%
 | Phase 02 P06 | 10min | 2 tasks | 3 files |
 | Phase 02 P07 | 19min | 2 tasks | 6 files |
 | Phase 03 P01 | 16min | 3 tasks | 9 files |
+| Phase 03 P02 | 24min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,11 @@ Recent decisions affecting current work:
 - [Phase 03-01]: The schema is proven by compiling CreateTable + CreateIndex against the psycopg dialect and asserting on the rendered SQL, with no database; plan 03-05 owns the live-server counterpart, and the two test modules say so to each other
 - [Phase 03-01]: mypy strict rejects postgresql.dialect() as no-untyped-call (PGDialect() too), so the typed create_engine('postgresql+psycopg://').dialect is used - it resolves the dialect eagerly and connects lazily, so no test needs PostgreSQL
 - [Phase 03-01]: Requirement ticks DB-01/03/04/05 deliberately NOT taken - 03-11 is the last claimant of all four under the project's last-claimant convention
+- [Phase 03-02]: alembic.ini carries no database URL key at all - env.py reads config.attributes['sqlalchemy_url'] then DATABASE_URL, so ConfigParser interpolation never sees a percent character and no live credential sits in a printable config object
+- [Phase 03-02]: PostgreSQL 18 images mount the data volume at /var/lib/postgresql, not /var/lib/postgresql/data - RESEARCH Pattern 6's path is pre-18 and postgres:18-alpine exits 1 on it, which would have broken docker compose up for the evaluator
+- [Phase 03-02]: The baseline revision keeps literal constraint names instead of importing constraints.py - a revision is a frozen record, and the agreement is already checked in two hops (test_models.py, then alembic check)
+- [Phase 03-02]: Autogenerate DID render the three CHECK constraints: Pitfall 8's blindness applies to comparing an existing table, not to adding one - but alembic check still cannot prove they survive, so DB-04 rests on 03-05's insert-and-refuse tests
+- [Phase 03-02]: sa.literal_column('lower(email)') in the migration against text('lower(email)') in the model is drift-free, because alembic check compares the reflected database to the model and never to the revision file
 
 ### Pending Todos
 
@@ -178,6 +184,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T21:32:29.034Z
-Stopped at: Completed 03-01-PLAN.md
-Resume file: .planning/phases/03-persistence-runnable-stack/03-02-PLAN.md
+Last session: 2026-09-18T22:01:09.503Z
+Stopped at: Completed 03-02-PLAN.md
+Resume file: None
