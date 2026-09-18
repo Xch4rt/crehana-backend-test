@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-09-18T01:48:25.826Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-18T02:26:49.463Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 01 (foundation-quality-gates) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [██████░░░░] 63%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████░░░░] 63%
 | Phase 01 P03 | 8min | 3 tasks | 3 files |
 | Phase 01 P04 | 14min | 2 tasks | 3 files |
 | Phase 01 P05 | 17min | 2 tasks | 3 files |
+| Phase 01 P06 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 01-05]: The research Dockerfile's test stage was observed red before shipping: it never copied .env.example, so 01-02's parity test failed while the run still printed 'Total coverage: 100.00%'; fix and both captures in evidence/docker-test-stage.txt
 - [Phase 01-05]: Image size recorded as observed (368MB on linux/arm64 with a BuildKit attestation manifest), not RESEARCH's 285MB; both far under the 500MB ceiling
 - [Phase 01-05]: ci.yml runs six gates as named direct steps with permissions contents:read and lint-imports --no-logo; the local hook framework is never invoked, since a runner has no .venv
+- [Phase 01-06]: CLAUDE.md gains a hand-maintained ## Project Rules section placed outside every GSD delimiter block, transcribing the layer order from .importlinter rather than from CONTEXT so documentation cannot drift from enforcement
+- [Phase 01-06]: DECISION_LOG.md opens with 19 ADRs (17 required): the two extra are 01-05's Dockerfile test stage and major-tag action pinning, both handed over as owed
+- [Phase 01-06]: the duplicated gate list is documented twice on purpose - as a rule in CLAUDE.md and as a consequence in ADR-015 - because silent divergence between pre-commit and ci.yml is threat T-01-47
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T01:48:25.795Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-09-18T02:26:49.455Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None

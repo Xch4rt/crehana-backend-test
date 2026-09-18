@@ -71,7 +71,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-06-PLAN.md — CLAUDE.md project rules and DECISION_LOG.md in ADR style
+- [x] 01-06-PLAN.md — CLAUDE.md project rules and DECISION_LOG.md in ADR style
 - [ ] 01-07-PLAN.md — AI_WORKFLOW.md skeleton and incident log opened with real incidents
 
 **Wave 6** *(blocked on Wave 5 completion)*
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Quality Gates | 5/8 | In Progress|  |
+| 1. Foundation & Quality Gates | 6/8 | In Progress|  |
 | 2. Domain & Error Contract | 0/TBD | Not started | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
