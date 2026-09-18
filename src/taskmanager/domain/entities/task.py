@@ -56,7 +56,7 @@ class Task:
     assignee_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        """Normalise and validate every field, however the task was built."""
+        """Normalise and validate every field, and the invariant spanning two."""
         self.title = require_text(
             self.title, field="title", max_length=self.TITLE_MAX_LENGTH
         )
@@ -71,6 +71,20 @@ class Task:
             self.due_date = require_utc(self.due_date, field="due_date")
         if self.completed_at is not None:
             self.completed_at = require_utc(self.completed_at, field="completed_at")
+        # D-03 - `completed_at` is set exactly when the status is completed, so
+        # a reopened task is never reported as finished - held only as long as
+        # every task in existence had been mutated through `change_status`. A
+        # row written by a migration, a hand-edited fixture or a Phase 3 mapper
+        # bug rehydrates straight through this constructor and would otherwise
+        # serialise into a `TaskResult` claiming to be finished with no finish
+        # stamp, or unfinished while carrying one. The entity is the single copy
+        # of the state machine, so it refuses the incoherent pair here for the
+        # same reason it refuses a naive timestamp.
+        if (self.status is TaskStatus.COMPLETED) != (self.completed_at is not None):
+            raise ValidationError(
+                "completed_at must be set exactly when status is completed.",
+                details={"field": "completed_at"},
+            )
 
     @classmethod
     def create(

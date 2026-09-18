@@ -302,6 +302,61 @@ def test_task_rejects_a_naive_completed_at() -> None:
     assert excinfo.value.details == {"field": "completed_at"}
 
 
+def test_task_rejects_a_completed_status_with_no_completion_stamp() -> None:
+    """D-03 is an invariant of the type, not a habit of one mutator.
+
+    Only `change_status` ever maintained the pair. This constructs the state a
+    migration, a fixture or a Phase 3 mapper bug can produce directly.
+    """
+    with pytest.raises(ValidationError) as excinfo:
+        Task(
+            id=TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Write the specification",
+            status=TaskStatus.COMPLETED,
+            priority=TaskPriority.MEDIUM,
+            created_at=NOW,
+            updated_at=NOW,
+            completed_at=None,
+        )
+
+    assert excinfo.value.details == {"field": "completed_at"}
+
+
+def test_task_rejects_a_completion_stamp_on_an_unfinished_task() -> None:
+    """The other half of the same invariant: an unfinished task has no stamp."""
+    with pytest.raises(ValidationError) as excinfo:
+        Task(
+            id=TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Write the specification",
+            status=TaskStatus.PENDING,
+            priority=TaskPriority.MEDIUM,
+            created_at=NOW,
+            updated_at=NOW,
+            completed_at=NOW,
+        )
+
+    assert excinfo.value.details == {"field": "completed_at"}
+
+
+def test_task_accepts_a_completed_task_carrying_its_stamp() -> None:
+    """The coherent pair rehydrates without complaint, as Phase 3 needs it to."""
+    task = Task(
+        id=TASK_ID,
+        task_list_id=TASK_LIST_ID,
+        title="Write the specification",
+        status=TaskStatus.COMPLETED,
+        priority=TaskPriority.MEDIUM,
+        created_at=NOW,
+        updated_at=LATER,
+        completed_at=LATER,
+    )
+
+    assert task.status is TaskStatus.COMPLETED
+    assert task.completed_at == LATER
+
+
 def test_task_rejects_a_naive_now_argument() -> None:
     """The clock reading the caller passes in is validated like any other input."""
     task = _task()
