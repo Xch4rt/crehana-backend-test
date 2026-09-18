@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from taskmanager.domain.exceptions import (
+    AuthenticationError,
     AuthorizationError,
     InvalidStatusTransitionError,
     TaskNotFoundError,
@@ -50,6 +51,17 @@ async def probe_domain() -> dict[str, str]:
 async def probe_not_found() -> dict[str, str]:
     """Raise a leaf that the status table maps only through its parent."""
     raise TaskNotFoundError(PROBE_TASK_ID)
+
+
+@probe_router.get("/_probe/unauthenticated", include_in_schema=False)
+async def probe_unauthenticated() -> dict[str, str]:
+    """Raise the domain error Phase 5's `TokenService.decode` will raise.
+
+    Unlike `/_probe/http-error` below, this one travels through
+    `handle_domain_error`, which is where the 401 challenge header has to come
+    from: the domain error carries no headers of its own.
+    """
+    raise AuthenticationError("The access token could not be verified.")
 
 
 @probe_router.get("/_probe/forbidden", include_in_schema=False)

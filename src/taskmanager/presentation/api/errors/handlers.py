@@ -51,10 +51,11 @@ logger = logging.getLogger(__name__)
 async def handle_domain_error(request: Request, exc: Exception) -> JSONResponse:
     """Translate any `DomainError` - base or grandchild - into problem+json."""
     assert isinstance(exc, DomainError)
-    return problem(
+    status = status_for(exc)
+    response = problem(
         code=exc.code,
         title=exc.title,
-        status=status_for(exc),
+        status=status,
         # `exc.message`, never `str(exc)`: the base keeps a 2-tuple `args`, so
         # the stringified form of a sloppier hierarchy would drag the details
         # dict into the response body.
@@ -62,6 +63,16 @@ async def handle_domain_error(request: Request, exc: Exception) -> JSONResponse:
         instance=request.url.path,
         errors=exc.details or None,
     )
+    # RFC 9110 section 15.5.2: a server generating a 401 MUST send a challenge.
+    # `handle_http_exception` gets this for free by forwarding `exc.headers`,
+    # but a domain `AuthenticationError` carries no headers of its own, and
+    # `ports/security.py` already specifies that Phase 5's `TokenService.decode`
+    # raises exactly that. The challenge therefore belongs here, at the one
+    # place a business failure becomes an HTTP response, rather than in the
+    # adapter that has not been written yet.
+    if status == 401:
+        response.headers["WWW-Authenticate"] = "Bearer"
+    return response
 
 
 async def handle_validation_error(request: Request, exc: Exception) -> JSONResponse:

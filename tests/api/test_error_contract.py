@@ -92,6 +92,29 @@ async def test_forbidden_route_returns_authorization_error_as_problem_json_403(
     assert body["title"] == "Authorization failed"
 
 
+async def test_authentication_error_answers_401_with_the_mandatory_challenge(
+    client: AsyncClient,
+) -> None:
+    """RFC 9110 15.5.2: the 401 this handler builds must carry a challenge.
+
+    The header cannot come from the exception, the way it does for a Starlette
+    `HTTPException`: a domain `AuthenticationError` has no headers. So it has to
+    be added here, or every bad-token response Phase 5 produces would violate
+    the spec.
+    """
+    response = await client.get("/_probe/unauthenticated")
+
+    assert response.status_code == 401
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.headers["www-authenticate"] == "Bearer"
+
+    body = response.json()
+
+    assert list(body) == MEMBERS
+    assert body["code"] == "authentication_failed"
+    assert body["title"] == "Authentication failed"
+
+
 async def test_request_validation_failure_is_translated_to_422(
     client: AsyncClient,
 ) -> None:
@@ -234,6 +257,7 @@ async def test_every_error_response_uses_the_problem_json_media_type(
         ("GET", "/_probe/domain"),
         ("GET", "/_probe/not-found"),
         ("GET", "/_probe/forbidden"),
+        ("GET", "/_probe/unauthenticated"),
         ("POST", "/_probe/validation?q=nope"),
         ("GET", "/_probe/http-error"),
         ("GET", "/_probe/nonexistent"),
