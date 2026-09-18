@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-09-18T22:38:14.580Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-09-18T23:02:15.170Z"
 last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 19
-  percent: 29
+  completed_plans: 20
+  percent: 77
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 5 of 11
+Plan: 6 of 11
 Status: Ready to execute
 Last activity: 2026-09-18
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progress: [███████░░░] 73%
 | Phase 03 P02 | 24min | 3 tasks | 8 files |
 | Phase 03 P03 | 6min | 2 tasks | 6 files |
 | Phase 03 P04 | 16min | 2 tasks | 4 files |
+| Phase 03 P05 | 11min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,15 @@ Recent decisions affecting current work:
 - [Phase 03-04]: One _aware() guard serves mandatory and nullable timestamp columns through two @overload stubs, so no mapper call site needs a cast and none can silently widen a required field into an optional one
 - [Phase 03-04]: Requirement ticks DB-03/DB-04 deliberately NOT taken - 03-11 is the last claimant, the fourth consecutive plan in this phase to make the same call
 
+- [Phase 03-05]: migrated_database refuses any database whose name is not taskmanager_test BEFORE opening a connection - the fixture runs downgrade base, which drops every table, and 03-03 exported TEST_DATABASE_NAME for exactly this check; it sits after _require_database so an unreachable host still produces the D-03 instruction first (T-3-18)
+- [Phase 03-05]: The D-03 fail-fast raises pytest.fail AFTER the except block, never inside it - raised inside, the Failed carries the driver error in __context__ and pytest prints two chained tracebacks above the one line of instruction, which is the exact outcome D-03 exists to prevent; both forms were run and compared
+- [Phase 03-05]: alembic_config() lives in tests/integration/conftest.py and test_migrations.py imports it, so the Pitfall 4 argument for configure_logging=False is written once; both tests/ and tests/integration/ are packages, so pytest and the test import the same module object
+- [Phase 03-05]: An expected IntegrityError runs inside connection.begin_nested() - a refused statement aborts the PostgreSQL transaction the isolation fixture owns, so the savepoint is what lets the next assertion in the same test still run; written once in a refused() helper rather than as a comment repeated seven times
+- [Phase 03-05]: Constraint tests assert the constraint NAME through violated_constraint(), not the exception type - IntegrityError alone would pass for a violation the test never intended, and this makes the suite a live test of the function D-13's translation calls
+- [Phase 03-05]: RESEARCH assumptions A2 and A4 are settled empirically here: psycopg populates diag.constraint_name for FOREIGN-KEY violations too (closing the last uncovered line in src/taskmanager, so coverage is now 100.00%), and a timestamptz column round-trips an aware UTC value unchanged
+- [Phase 03-05]: .github/workflows/ci.yml needs NO change, confirmed by reading it - DATABASE_URL already names taskmanager_test and TEST_DATABASE_URL is unset, so resolve_test_database_url derives the identical URL and the name guard passes
+- [Phase 03-05]: Requirement ticks DB-02/DB-04/DB-05 deliberately NOT taken - 03-11 is the last claimant, the fifth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -197,6 +207,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T22:38:14.571Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-09-18T23:02:05.105Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None

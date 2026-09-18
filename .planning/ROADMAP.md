@@ -152,7 +152,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-05-PLAN.md — The integration fixtures (D-01..D-04) plus the migration, schema and constraint proofs
+- [x] 03-05-PLAN.md — The integration fixtures (D-01..D-04) plus the migration, schema and constraint proofs
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -248,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
-| 3. Persistence & Runnable Stack | 4/11 | In Progress | - |
+| 3. Persistence & Runnable Stack | 5/11 | In Progress | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
