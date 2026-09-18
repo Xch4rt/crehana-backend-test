@@ -1574,7 +1574,7 @@ in the README (Phase 7).
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED during planning, 2026-09-17)
 
 1. **Does `TaskList` need a `CompletionStats` value object in Phase 2?** (Conflict C-04)
    - What we know: `TaskRepository.completion_stats` appears in ARCHITECTURE.md Pattern 2 and

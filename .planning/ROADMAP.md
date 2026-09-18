@@ -96,7 +96,7 @@ every subsequent phase.
   3. Every application port (`TaskRepository`, `TaskListRepository`, `UserRepository`, `UnitOfWork`, `PasswordHasher`, `TokenService`, `EmailNotifier`, `Clock`) exists as a `typing.Protocol` with no implementation, and the use-case class shape is fixed and documented.
   4. A single exception-handling point converts any `DomainError`, any request-validation error and any unexpected error into an `application/problem+json` body with one consistent RFC 9457 shape, proven by tests against a throwaway probe route — before any real router exists.
 
-**Plans**: 7 plans (5 waves)
+**Plans**: 7 plans (6 waves)
 
 Plans:
 **Wave 1**
@@ -115,9 +115,12 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [ ] 02-05-PLAN.md — The eight typing.Protocol ports, the frozen-dataclass DTO conventions and the ChangeTaskStatus reference use case
-- [ ] 02-06-PLAN.md — The AST proof that the domain is stdlib-only, its red/green evidence, and ADR-020/021/022
 
 **Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-06-PLAN.md — The AST proof that the domain is stdlib-only, its red/green evidence, and ADR-020/021/022
+
+**Wave 6** *(blocked on Wave 5 completion)*
 
 - [ ] 02-07-PLAN.md — Reconcile ARC-05, ROADMAP SC-5, .importlinter and CLAUDE.md with ADR-020; append the Phase 2 AI_WORKFLOW record
 
