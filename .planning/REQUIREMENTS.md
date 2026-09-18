@@ -20,7 +20,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **FND-07**: mypy runs in strict mode over `src/` and passes [NL]
 - [x] **FND-08**: pre-commit hooks run black, isort, flake8 and mypy [NL]
 - [x] **FND-09**: A `Makefile` exposes one-word commands: `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` [NL]
-- [ ] **FND-10**: GitHub Actions CI runs lint, typecheck, architecture check and tests with the coverage gate against a Postgres service, on every push [NL]
+- [x] **FND-10**: GitHub Actions CI runs lint, typecheck, architecture check and tests with the coverage gate against a Postgres service, on every push [NL]
 - [x] **FND-11**: Settings are loaded from environment via pydantic-settings; no secret has a hard-coded production default; `.env.example` documents every variable [R]
 
 ### Architecture (ARC)
@@ -93,10 +93,10 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Docker (DOCK)
 
-- [ ] **DOCK-01**: A multistage `Dockerfile` builds a slim image that runs the app as a non-root user [PDF 5.a, 2.g]
+- [x] **DOCK-01**: A multistage `Dockerfile` builds a slim image that runs the app as a non-root user [PDF 5.a, 2.g]
 - [ ] **DOCK-02**: `docker-compose.yml` starts API + PostgreSQL with one command; the API waits for a healthy database (`pg_isready -h 127.0.0.1`) and applies migrations [PDF 5.a, 2.g]
 - [ ] **DOCK-03**: `/health` reports liveness and database readiness and backs the container healthcheck [R]
-- [ ] **DOCK-04**: The test suite can be run with one documented command without a local Python setup [R]
+- [x] **DOCK-04**: The test suite can be run with one documented command without a local Python setup [R]
 - [ ] **DOCK-05**: A clean-clone rehearsal (fresh clone, `down -v`, `--no-cache` build, follow README verbatim) passes before delivery [NL]
 
 ### Documentation (DOC)
@@ -162,7 +162,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | FND-07 | Phase 1 | Complete |
 | FND-08 | Phase 1 | Complete |
 | FND-09 | Phase 1 | Complete |
-| FND-10 | Phase 1 | Pending |
+| FND-10 | Phase 1 | Complete |
 | FND-11 | Phase 1 | Complete |
 | ARC-01 | Phase 1 | Complete |
 | ARC-02 | Phase 2 | Pending |
@@ -208,10 +208,10 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | TEST-03 | Phase 6 | Pending |
 | TEST-04 | Phase 6 | Pending |
 | TEST-05 | Phase 6 | Pending |
-| DOCK-01 | Phase 1 | Pending |
+| DOCK-01 | Phase 1 | Complete |
 | DOCK-02 | Phase 3 | Pending |
 | DOCK-03 | Phase 3 | Pending |
-| DOCK-04 | Phase 1 | Pending |
+| DOCK-04 | Phase 1 | Complete |
 | DOCK-05 | Phase 7 | Pending |
 | DOC-01 | Phase 7 | Pending |
 | DOC-02 | Phase 7 | Pending |
