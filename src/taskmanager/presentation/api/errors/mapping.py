@@ -31,7 +31,11 @@ from taskmanager.domain.exceptions import (
 # name differs across Python versions (the entity/content spelling changed),
 # and an int sidesteps the question while staying perfectly readable.
 #
-# The eight entries are the seven families plus the base. The five leaf classes
+# The eight entries are the seven families plus the base. The base entry is not
+# a business answer: 500 is the signal `handle_domain_error` reads to hand the
+# exception to the catch-all handler instead, so an unmapped domain error gets
+# the fixed D-08 body and a logged traceback rather than a bespoke 500 built
+# from its own message. The five leaf classes
 # - TaskNotFoundError, TaskListNotFoundError, UserNotFoundError,
 # DuplicateTaskListNameError and EmailAlreadyRegisteredError - are deliberately
 # absent: each resolves through its parent by the MRO walk below, so listing

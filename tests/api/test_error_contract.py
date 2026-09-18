@@ -147,6 +147,52 @@ async def test_validation_problem_never_echoes_the_client_input(
     assert "url" not in response.text
 
 
+async def test_unmapped_domain_error_answers_the_fixed_internal_error_body(
+    client: AsyncClient,
+) -> None:
+    """A `DomainError` with no status of its own is a server fault, not a 4xx.
+
+    `STATUS_BY_EXCEPTION[DomainError]` is 500, so the base class - and any
+    future subclass registered under it without a table entry - reaches
+    `handle_domain_error`. D-08 says what a 500 looks like, and that shape has
+    no room for the error's own message or details.
+    """
+    response = await client.get("/_probe/unmapped-domain")
+
+    assert response.status_code == 500
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == MEMBERS
+    assert body["code"] == "internal_error"
+    assert body["title"] == "Internal server error"
+    assert body["detail"] == "An unexpected error occurred"
+    # Neither the message nor the details member survives the translation.
+    assert "hunter3" not in response.text
+    assert "should_never_be_exposed" not in response.text
+    assert "domain_error" not in response.text
+
+
+async def test_unmapped_domain_error_is_logged_like_any_other_server_fault(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The old behaviour answered 500 and logged nothing, which is worse (D-08)."""
+    with caplog.at_level(logging.ERROR):
+        await client.get("/_probe/unmapped-domain")
+
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "taskmanager.presentation.api.errors.handlers"
+    ]
+
+    assert len(records) == 1
+    assert records[0].levelno == logging.ERROR
+    assert records[0].exc_info is not None
+    assert "hunter3" in str(records[0].exc_info[1])
+
+
 async def test_unexpected_error_returns_the_fixed_internal_error_body(
     tolerant_client: AsyncClient,
 ) -> None:
@@ -258,6 +304,7 @@ async def test_every_error_response_uses_the_problem_json_media_type(
         ("GET", "/_probe/not-found"),
         ("GET", "/_probe/forbidden"),
         ("GET", "/_probe/unauthenticated"),
+        ("GET", "/_probe/unmapped-domain"),
         ("POST", "/_probe/validation?q=nope"),
         ("GET", "/_probe/http-error"),
         ("GET", "/_probe/nonexistent"),

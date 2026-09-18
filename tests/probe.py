@@ -22,6 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from taskmanager.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    DomainError,
     InvalidStatusTransitionError,
     TaskNotFoundError,
 )
@@ -74,6 +75,20 @@ async def probe_forbidden() -> dict[str, str]:
 async def probe_validation(body: ProbeBody, q: int) -> dict[str, str]:
     """Never reached with an invalid payload: FastAPI fails before the handler."""
     return {"title": body.title, "q": str(q)}
+
+
+@probe_router.get("/_probe/unmapped-domain", include_in_schema=False)
+async def probe_unmapped_domain() -> dict[str, str]:
+    """Raise the base class itself, which the status table maps to 500.
+
+    It stands in for any future subclass hung directly off `DomainError` that
+    nobody remembered to add to `STATUS_BY_EXCEPTION`, and it carries the same
+    kind of canary the unexpected-error probe does.
+    """
+    raise DomainError(
+        "unmapped internals: hunter3",
+        details={"field": "should_never_be_exposed"},
+    )
 
 
 @probe_router.get("/_probe/unexpected", include_in_schema=False)

@@ -52,6 +52,14 @@ async def handle_domain_error(request: Request, exc: Exception) -> JSONResponse:
     """Translate any `DomainError` - base or grandchild - into problem+json."""
     assert isinstance(exc, DomainError)
     status = status_for(exc)
+    # An unmapped domain error - the base class itself, or a future subclass
+    # hung directly off `DomainError` that nobody added to the status table -
+    # is a programming error, not a business answer. Answering it from here
+    # would emit a 500 carrying `exc.message` and an `errors` member and would
+    # log nothing, breaking D-08 three times over. The catch-all handler is
+    # already the one place that gets a 500 right, so defer to it.
+    if status >= 500:
+        return await handle_unexpected_error(request, exc)
     response = problem(
         code=exc.code,
         title=exc.title,
