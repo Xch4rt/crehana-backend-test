@@ -347,6 +347,23 @@ def test_task_rename_rejects_a_blank_title() -> None:
     assert excinfo.value.details == {"field": "title"}
 
 
+def test_task_rename_with_a_naive_now_changes_nothing() -> None:
+    """A refused rename leaves the aggregate exactly as it found it.
+
+    The title argument is valid here, so the only thing that can fail is the
+    `now` guard - which is the point: an implementation that assigned the title
+    first would leave the entity renamed with an unmoved `updated_at`.
+    """
+    task = _task()
+    before = (task.title, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.rename("Ship the thing", now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task.title, task.updated_at) == before
+
+
 def test_task_reschedule_clears_the_due_date() -> None:
     """Passing None removes the deadline and stamps the change."""
     task = Task.create(

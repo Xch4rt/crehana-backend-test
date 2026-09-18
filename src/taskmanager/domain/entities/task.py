@@ -118,10 +118,16 @@ class Task:
 
     def rename(self, title: str, *, now: datetime) -> None:
         """Replace the title, applying the same guard construction applied."""
+        # Every guard runs before the first assignment, as in `reschedule` and
+        # `change_status`. Assigning the title first and validating `now`
+        # afterwards left a refused call with the new title and the old
+        # `updated_at`: a half-applied mutation the unit of work cannot undo,
+        # because the corrupted copy is the in-memory aggregate, not the row.
+        moment = require_utc(now, field="now")
         self.title = require_text(
             title, field="title", max_length=self.TITLE_MAX_LENGTH
         )
-        self.updated_at = require_utc(now, field="now")
+        self.updated_at = moment
 
     def reschedule(self, due_date: datetime | None, *, now: datetime) -> None:
         """Move or clear the deadline, refusing one behind the supplied moment."""

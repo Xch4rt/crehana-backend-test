@@ -131,6 +131,23 @@ def test_task_list_rename_rejects_a_blank_name() -> None:
     assert excinfo.value.details == {"field": "name"}
 
 
+def test_task_list_rename_with_a_naive_now_changes_nothing() -> None:
+    """A refused rename leaves the aggregate exactly as it found it.
+
+    The name argument is valid, so only the `now` guard can fail - which is
+    what makes this test able to observe an implementation that assigned the
+    name before finishing its validation.
+    """
+    task_list = _task_list()
+    before = (task_list.name, task_list.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task_list.rename("Personal", now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task_list.name, task_list.updated_at) == before
+
+
 def test_task_list_rejects_a_naive_created_at() -> None:
     """A datetime with no timezone cannot become a stored timestamp (D-14)."""
     with pytest.raises(ValidationError) as excinfo:

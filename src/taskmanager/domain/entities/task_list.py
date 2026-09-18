@@ -83,5 +83,9 @@ class TaskList:
 
     def rename(self, name: str, *, now: datetime) -> None:
         """Replace the name, applying the same guard construction applied."""
+        # Validate everything before assigning anything, for the reason spelled
+        # out in `Task.rename`: a refused call must leave the aggregate exactly
+        # as it found it.
+        moment = require_utc(now, field="now")
         self.name = require_text(name, field="name", max_length=self.NAME_MAX_LENGTH)
-        self.updated_at = require_utc(now, field="now")
+        self.updated_at = moment
