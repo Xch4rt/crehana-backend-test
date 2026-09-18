@@ -28,6 +28,18 @@ and on two real CI runs (`Xch4rt/crehana-backend-test`).
 - [x] Dockerfile (multistage) — three-stage, non-root runtime, `test` stage runs the suite on
       Python 3.13; `docker-compose.yml` remains Active (Phase 3)
 
+Validated in Phase 2: Domain & Error Contract (2026-09-18) — 4/4 success criteria verified,
+151 tests, 100% coverage, code review warnings fixed (WR-05 deferred to Phase 3 by locked D-14).
+- [x] Error handling with custom exceptions — closed `DomainError` hierarchy (12 leaves, stable
+      `code`, typed `details`), no `HTTPException` outside `presentation`
+- [x] Architecture boundaries enforced by an automated test — import-linter contracts plus
+      `tests/architecture/test_domain_is_stdlib_only.py` (AST walk against
+      `sys.stdlib_module_names`; proven to catch a planted `import greenlet` that
+      import-linter alone reports as KEPT — ADR-022)
+- [x] Consistent error contract (RFC 9457 Problem Details) from a single exception-handling
+      point — `register_exception_handlers()` in `create_app()`, one `problem()` builder,
+      `WWW-Authenticate` on 401, fixed body on any 500, proven against a test-only probe router
+
 ### Active
 
 **Mandatory — stack (PDF "Requisitos")**
@@ -52,7 +64,6 @@ and on two real CI runs (`Xch4rt/crehana-backend-test`).
 **Mandatory — project structure (PDF 2)**
 - [ ] Clean layered structure: Domain, Application/UseCases, Infrastructure
 - [ ] Strong typing with Pydantic
-- [ ] Error handling with custom exceptions
 - [ ] Business validations
 - [ ] Unit and integration testing with pytest
 - [ ] docker-compose (Dockerfile validated in Phase 1)
@@ -69,11 +80,7 @@ and on two real CI runs (`Xch4rt/crehana-backend-test`).
       delegated; honest log of AI mistakes and how they were caught
 - [ ] Automated quality gates: pre-commit (black, isort, flake8), Makefile, GitHub Actions CI
       running lint + tests + `--cov-fail-under=75`
-- [ ] Architecture boundaries enforced by an automated test (domain must not import
-      infrastructure/frameworks), not just by folder names
 - [ ] Static typing check (mypy) in CI
-- [ ] Consistent error contract (RFC 9457 Problem Details, which obsoletes RFC 7807) from a single exception-handling
-      point
 - [ ] Public GitHub repository with atomic, phase-scoped commit history and green CI badge
 
 ### Out of Scope
@@ -128,11 +135,11 @@ and on two real CI runs (`Xch4rt/crehana-backend-test`).
 | PostgreSQL over SQLite | "Real database" requirement; integration tests run against the same engine as production | — Pending |
 | Include all three bonus use cases | Maximizes score; JWT enables ownership rules that make business validations meaningful | — Pending |
 | Hexagonal-style layers (domain / application / infrastructure / presentation) | Brief asks for Domain, Application/UseCases, Infrastructure; ports as Protocols keep domain framework-free | — Pending |
-| Enforce layer boundaries with an automated test | Proves architecture is a rule, not a folder convention | — Pending |
-| RFC 9457 (obsoletes 7807) error responses via one exception handler | Custom domain exceptions stay HTTP-agnostic; consistent API contract | — Pending |
+| Enforce layer boundaries with an automated test | Proves architecture is a rule, not a folder convention | ✓ Good (Phase 2: import-linter + stdlib-only AST test) |
+| RFC 9457 (obsoletes 7807) error responses via one exception handler | Custom domain exceptions stay HTTP-agnostic; consistent API contract | ✓ Good (Phase 2: 4 handlers, 1 `problem()` builder, probe-router tests) |
 | AI workflow documented as Markdown + Mermaid only | Renders natively on GitHub; user decided HTML is unnecessary | — Pending |
 | GSD workflow with `.planning/` committed | Planning/verification artifacts are themselves evidence of AI direction | — Pending |
-| Domain entities as stdlib dataclasses; Pydantic at schema/DTO/settings boundaries | Makes "domain imports nothing" provable; pydantic.ValidationError cannot carry the DomainError contract. User-confirmed | — Pending |
+| Domain entities as stdlib dataclasses; Pydantic at schema/DTO/settings boundaries | Makes "domain imports nothing" provable; pydantic.ValidationError cannot carry the DomainError contract. User-confirmed | ✓ Good (Phase 2; refined by ADR-020: application DTOs are frozen dataclasses, Pydantic stays at HTTP schemas and settings) |
 | Python 3.13, psycopg 3, PyJWT + pwdlib[argon2], Alembic | Research-verified current stack; passlib/python-jose are unmaintained or vulnerable | — Pending |
 | 404 for invisible resources, 403 for visible-but-forbidden | No existence oracle, while keeping a testable permission matrix | — Pending |
 | Completion % computed over the whole list via one SQL aggregate | A filter-scoped percentage is degenerate (`?status=completed` is always 100) | — Pending |
@@ -157,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-18 after Phase 1 (Foundation & Quality Gates) completion*
+*Last updated: 2026-09-18 after Phase 2 (Domain & Error Contract) completion*
