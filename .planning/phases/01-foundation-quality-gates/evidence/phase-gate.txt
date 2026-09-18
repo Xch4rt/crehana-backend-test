@@ -1,0 +1,394 @@
+Evidence: the complete Phase 1 gate, observed green in one uninterrupted run
+===========================================================================
+
+Captured 2026-09-18 (UTC) during plan 01-08 Task 1, on the delivery host.
+Every command below was run in sequence, in this order, against the finished
+Phase 1 tree at commit 9f1e256 with a clean working directory. Nothing was
+fixed, re-run or re-ordered part way through: this is a single pass.
+
+Host
+----
+date:   2026-09-18T02:52:59Z
+host:   Darwin 25.5.0 arm64
+python: Python 3.14.3  (.venv/bin/python)
+docker: Docker version 29.2.0, build 0b9d198
+make:   GNU Make 3.81  (the version macOS ships)
+git:    git version 2.50.1 (Apple Git-155)
+
+The host interpreter is 3.14, not the project's 3.13. That is deliberate and
+already recorded in the Makefile: the host venv exists for editor and tooling
+convenience, and the authoritative 3.13 runs are the `make docker-test` section
+below and the CI workflow. The two interpreters are visible side by side in the
+coverage tables: 3.14 counts 18 statements where 3.13 counts 19, because the
+`from __future__`-free module bodies compile slightly differently between the
+two. Both report 100%.
+
+Two conventions used in this capture
+------------------------------------
+
+1. Trailing whitespace is stripped from every captured line. This repository's
+   own `trim trailing whitespace` hook runs on this file, so leaving it in
+   would mean the evidence is rewritten the moment it is committed. The only
+   output affected is the nine-line import-linter banner, which is elided
+   below and marked as such; no line of substance is altered.
+
+2. The D-20 attribution audit is run in two forms, raw and refined, and both
+   are reported. The raw form —
+
+       git log --all --format='%B' | grep -ciE 'co-authored-by|claude|generated with|anthropic'
+
+   — returns 1, not 0. The single match is the SUBJECT LINE of commit 0456070,
+   `docs(01-06): state the enforced layer, gate and attribution rules in
+   CLAUDE.md`. That is the name of a file in this repository, not an
+   attribution trailer, and history is not going to be rewritten to hide a
+   filename. So the audit is refined by excluding the literal token
+   `CLAUDE.md` before matching —
+
+       git log --all --format='%B' | grep -v 'CLAUDE\.md' | grep -ciE 'co-authored-by|claude|generated with|anthropic'
+
+   — which must return 0, AND the raw match is printed verbatim below so a
+   reader can confirm for themselves that the only thing the loose pattern
+   ever caught is that filename. The check is not weakened in any other way:
+   all four patterns, all branches, all commit bodies, case-insensitive.
+
+
+-------------------------------------------------------------------------------
+HOST GATE
+-------------------------------------------------------------------------------
+
+=== $ make format ===
+.venv/bin/isort src tests
+.venv/bin/black src tests
+All done! 14 files left unchanged.
+exit: 0
+
+=== $ git diff --quiet ===
+exit: 0
+
+=== $ git status --porcelain ===
+(no output)
+exit: 0
+
+`make format` is the target the ROADMAP's first success criterion names, and it
+is the one target that is allowed to rewrite files. Running it first, on the
+finished tree, and then asserting `git diff --quiet` proves it is a no-op here:
+every earlier plan's `make lint` really did hold, rather than `format` being a
+target nobody ever ran.
+
+=== $ make lint ===
+.venv/bin/black --check src tests
+All done! 14 files would be left unchanged.
+.venv/bin/isort --check-only src tests
+.venv/bin/flake8 src tests
+exit: 0
+
+=== $ make typecheck ===
+.venv/bin/mypy src tests
+Success: no issues found in 14 source files
+exit: 0
+
+=== $ make arch ===
+.venv/bin/lint-imports
+(nine-line import-linter banner elided - it is the only output in this file
+that carries trailing whitespace)
+
+---------
+Contracts
+---------
+
+Analyzed 12 files, 5 dependencies.
+----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+exit: 0
+
+=== $ make test ===
+.venv/bin/pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 8 items
+
+tests/architecture/test_layer_boundaries.py ..                           [ 25%]
+tests/unit/test_app_factory.py .                                         [ 37%]
+tests/unit/test_settings.py .....                                        [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/__init__.py                 0      0      0      0   100%
+src/taskmanager/domain/__init__.py                      0      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py       0      0      0      0   100%
+src/taskmanager/infrastructure/config/settings.py      13      0      0      0   100%
+src/taskmanager/main.py                                 5      0      0      0   100%
+src/taskmanager/presentation/__init__.py                0      0      0      0   100%
+-----------------------------------------------------------------------------------------------
+TOTAL                                                  18      0      0      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================== 8 passed in 0.20s ===============================
+exit: 0
+
+
+-------------------------------------------------------------------------------
+DOCKERIZED GATE (DOCK-04) - the same suite on Python 3.13, no host Python used
+-------------------------------------------------------------------------------
+
+=== $ make docker-test ===
+docker build --target test -t taskmanager-test .
+(BuildKit layer log elided: 20 steps, all CACHED except the image export;
+ base image python:3.13-slim-trixie @ sha256:9d2e5553305c...)
+#20 naming to docker.io/library/taskmanager-test:latest done
+#20 DONE 0.2s
+docker run --rm taskmanager-test
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /app
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, asyncio-1.4.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 8 items
+
+tests/architecture/test_layer_boundaries.py ..                           [ 25%]
+tests/unit/test_app_factory.py .                                         [ 37%]
+tests/unit/test_settings.py .....                                        [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.15-final-0 _______________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/__init__.py                 0      0      0      0   100%
+src/taskmanager/domain/__init__.py                      0      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py       0      0      0      0   100%
+src/taskmanager/infrastructure/config/settings.py      14      0      0      0   100%
+src/taskmanager/main.py                                 5      0      0      0   100%
+src/taskmanager/presentation/__init__.py                0      0      0      0   100%
+-----------------------------------------------------------------------------------------------
+TOTAL                                                  19      0      0      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================== 8 passed in 0.63s ===============================
+exit: 0
+
+This is DOCK-04's acceptance in its documented one-command form. Nothing in it
+touched the host interpreter: `platform linux -- Python 3.13.15` is the image's
+own venv, and a machine with no Python installed at all would print the same
+eight passes and the same coverage gate line.
+
+
+-------------------------------------------------------------------------------
+STABILITY GATE (FND-08) - idempotence, then the venv-less shell
+-------------------------------------------------------------------------------
+
+=== $ .venv/bin/pre-commit run --all-files   (pass 1) ===
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check yaml...............................................................Passed
+check toml...............................................................Passed
+check for added large files..............................................Passed
+check for merge conflicts................................................Passed
+detect private key.......................................................Passed
+isort....................................................................Passed
+black....................................................................Passed
+flake8...................................................................Passed
+mypy (strict)............................................................Passed
+import-linter contracts..................................................Passed
+exit: 0
+
+=== $ .venv/bin/pre-commit run --all-files   (pass 2) ===
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check yaml...............................................................Passed
+check toml...............................................................Passed
+check for added large files..............................................Passed
+check for merge conflicts................................................Passed
+detect private key.......................................................Passed
+isort....................................................................Passed
+black....................................................................Passed
+flake8...................................................................Passed
+mypy (strict)............................................................Passed
+import-linter contracts..................................................Passed
+exit: 0
+
+=== $ git diff --quiet ===
+exit: 0
+
+Twelve hooks, twice, and the second pass modified nothing - the three fixer
+hooks (whitespace, end-of-file, isort/black) had nothing left to rewrite.
+
+=== $ env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/local/bin" .venv/bin/pre-commit run --all-files ===
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check yaml...............................................................Passed
+check toml...............................................................Passed
+check for added large files..............................................Passed
+check for merge conflicts................................................Passed
+detect private key.......................................................Passed
+isort....................................................................Passed
+black....................................................................Passed
+flake8...................................................................Passed
+mypy (strict)............................................................Passed
+import-linter contracts..................................................Passed
+exit: 0
+
+=== $ git diff --quiet ===
+exit: 0
+
+This is the condition a real `git commit` runs under: no activated virtualenv,
+a stripped PATH. Plan 01-04 proved (evidence/pre-commit-venv-entry.txt) that the
+RESEARCH recipe's bare `entry: mypy` / `entry: lint-imports` both die with
+"Executable not found" here; the shipped `.venv/bin/`-qualified entries still
+resolve, twelve for twelve.
+
+
+-------------------------------------------------------------------------------
+REQUIREMENT SPOT CHECKS - the VALIDATION.md rows no single earlier plan owned
+-------------------------------------------------------------------------------
+
+=== FND-02  $ .venv/bin/pip install --dry-run -r requirements-dev.txt ===
+Requirement already satisfied: fastapi==0.141.1 in ./.venv/lib/python3.14/site-packages (from -r requirements.txt (line 6)) (0.141.1)
+Requirement already satisfied: pydantic==2.13.5 in ./.venv/lib/python3.14/site-packages (from -r requirements.txt (line 7)) (2.13.5)
+Requirement already satisfied: pydantic-settings==2.15.0 in ./.venv/lib/python3.14/site-packages (from -r requirements.txt (line 8)) (2.15.0)
+Requirement already satisfied: uvicorn==0.53.0 in ./.venv/lib/python3.14/site-packages (from uvicorn[standard]==0.53.0->-r requirements.txt (line 9)) (0.53.0)
+    ... (every direct and transitive requirement already satisfied; the full
+        resolve completed with no conflict, which is the point of the check)
+Requirement already satisfied: pycparser in ./.venv/lib/python3.14/site-packages (from cffi>=2->argon2-cffi-bindings->argon2-cffi>=23.1.0->pwdlib[argon2]==0.3.1->-r requirements.txt (line 18)) (3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in ./.venv/lib/python3.14/site-packages (from Mako->alembic==1.20.0->-r requirements.txt (line 14)) (3.0.3)
+exit: 0
+
+=== FND-03  $ grep -cE '^[[:space:]]*(ignore|exclude)[[:space:]]*=' .flake8 ===
+bare ignore=/exclude= lines: 0
+extend- forms actually present:
+6:extend-ignore = E203,E701
+7:extend-exclude = .venv,build,dist,migrations
+8:extend-immutable-calls = fastapi.Depends,fastapi.Query,fastapi.Path,fastapi.Body,fastapi.Header
+
+A bare `ignore =` would silently replace pycodestyle's DEFAULT_IGNORE and a bare
+`exclude =` would replace flake8's built-in exclude list. Only the extend- forms
+appear.
+
+=== FND-05  $ .venv/bin/pytest --collect-only ===
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+collected 8 items
+========================== 8 tests collected in 0.22s ==========================
+exit: 0
+
+`configfile: pytest.ini` is the line that matters: the brief names pytest.ini
+literally, and pytest silently ignores [tool.pytest.ini_options] whenever
+pytest.ini exists. This proves the file the brief asks for is the file in use.
+
+=== ARC-03  $ .venv/bin/lint-imports --no-logo ===
+Analyzed 12 files, 5 dependencies.
+----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+exit: 0
+
+=== AIW-03  $ grep -En '^## Incident Log|^### 2026-' AI_WORKFLOW.md ===
+96:## Incident Log
+103:### 2026-09-17 - A subagent worked around a file-write guardrail with a shell heredoc
+126:### 2026-09-17 - Four research agents produced nine conflicting recommendations, and then a tenth
+157:### 2026-09-17 - The project's own research prescribed an architecture test that always passes
+186:### 2026-09-17 - Proving the gates actually fire
+exit: 0
+
+=== AIW-04  $ grep -c HTTPException CLAUDE.md ; grep -c domain CLAUDE.md ===
+HTTPException occurrences: 1
+domain occurrences:        5
+
+=== $ grep -ci pre-commit .github/workflows/ci.yml Dockerfile ===
+ci.yml:     0
+Dockerfile: 0
+
+Neither a CI runner nor the image has a `.venv`, so the `.venv/bin/`-qualified
+local hooks could only fail there with "command not found". Both files run the
+same tools as their own direct invocations instead. This grep is what stops that
+split from quietly regressing into a single `pre-commit run` step.
+
+
+-------------------------------------------------------------------------------
+SECRET AND HYGIENE AUDIT (D-16, D-20) - run BEFORE anything is pushed
+-------------------------------------------------------------------------------
+
+=== D-16  $ git log --all --name-only | grep -c '^\.env$' ===
+commits touching a path named .env: 0
+every env-ish path that has ever appeared in history:
+.env.example
+.planning/phases/01-foundation-quality-gates/evidence/pre-commit-venv-entry.txt
+
+=== D-16  $ git ls-files | grep -c '^\.env$' ===
+tracked files named .env: 0
+tracked env-ish files:
+.env.example
+.planning/phases/01-foundation-quality-gates/evidence/pre-commit-venv-entry.txt
+
+=== D-16  $ grep -n env .gitignore ===
+2:.venv/
+3:.env
+
+=== D-20  RAW FORM ===
+$ git log --all --format='%B' | grep -ciE 'co-authored-by|claude|generated with|anthropic'
+raw match count: 1
+
+the single raw match, verbatim, and the commit it belongs to:
+docs(01-06): state the enforced layer, gate and attribution rules in CLAUDE.md
+0456070 docs(01-06): state the enforced layer, gate and attribution rules in CLAUDE.md
+
+That is a filename, in a subject line, naming the file the commit creates. It is
+not a `Co-Authored-By:` trailer and not a generation notice. See the note at the
+top of this file for why the check is refined rather than the history rewritten.
+
+=== D-20  REFINED FORM ===
+$ git log --all --format='%B' | grep -v 'CLAUDE\.md' | grep -ciE 'co-authored-by|claude|generated with|anthropic'
+refined match count: 0
+
+Zero. No commit body on any branch carries an AI co-author trailer, a generation
+notice or a vendor name.
+
+=== D-16  $ docker history taskmanager | grep -ci secret ===
+secret matches in image history: 0
+image present: yes
+
+=== $ git status --porcelain ===
+(no output - the working tree was clean for the whole run; this evidence file
+ was written afterwards and is the only thing staged with it)
+
+
+-------------------------------------------------------------------------------
+RESULT
+-------------------------------------------------------------------------------
+
+format . lint . typecheck . arch . test . docker-test . pre-commit x2 .
+pre-commit under a stripped environment - every one exit 0, in one sitting, with
+no fix required between them. Coverage gate reached on both interpreters. No
+.env in the tree or in history, no secret in the image, no attribution trailer
+in any commit.
+
+The one Phase 1 acceptance that cannot be produced from this host is FND-10's
+"a push to GitHub triggers a CI run that reports green": it needs a real remote.
+That is plan 01-08 Task 2, and it is a blocking human checkpoint - creating a
+public repository is outward-facing and irreversible, so its name and visibility
+are the user's call. Nothing outward-facing has happened at the time this file
+was committed.
