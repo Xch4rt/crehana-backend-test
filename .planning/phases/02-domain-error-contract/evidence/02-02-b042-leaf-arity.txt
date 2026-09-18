@@ -1,0 +1,46 @@
+B042 on the single-argument leaves - observed, plan 02-02, flake8-bugbear 26.9.9
+
+02-RESEARCH.md Pattern 6 verified the base plus InvalidStatusTransitionError, whose
+__init__ takes two parameters and forwards two positional arguments. Every leaf that
+takes ONE domain object (TaskNotFoundError, TaskListNotFoundError, UserNotFoundError,
+DuplicateTaskListNameError) forwards a message AND a details dict, i.e. two positional
+arguments for one parameter, and B042 fires. That case never appeared in research.
+
+First run, with every leaf forwarding both values positionally:
+
+$ .venv/bin/flake8 src/taskmanager/domain/exceptions.py
+src/taskmanager/domain/exceptions.py:108:5: B042 Exception class with `__init__` should pass all args to `super().__init__()` to work in edge cases of `pickle` and `copy.copy()`. It should also not take any kwargs.
+src/taskmanager/domain/exceptions.py:121:5: B042 Exception class with `__init__` should pass all args to `super().__init__()` to work in edge cases of `pickle` and `copy.copy()`. It should also not take any kwargs.
+src/taskmanager/domain/exceptions.py:134:5: B042 Exception class with `__init__` should pass all args to `super().__init__()` to work in edge cases of `pickle` and `copy.copy()`. It should also not take any kwargs.
+src/taskmanager/domain/exceptions.py:154:5: B042 Exception class with `__init__` should pass all args to `super().__init__()` to work in edge cases of `pickle` and `copy.copy()`. It should also not take any kwargs.
+
+The rule, read out of the checker itself (bugbear.check_for_b042):
+
+$ .venv/bin/python -c "import bugbear, inspect; src = inspect.getsource(bugbear); i = src.find('# -1 to exclude the \`self\` argument'); print(src[i:i+430])"
+            # -1 to exclude the `self` argument
+            expected_arg_count = (
+                len(fun.args.posonlyargs)
+                + len(fun.args.args)
+                - 1
+                + (1 if fun.args.vararg else 0)
+            )
+            if expected_arg_count == 0:
+                # no arguments, don't need to call super().__init__()
+                return
+
+            # Look for super().__init__()
+
+and, further down, `if len(b.value.args) != expected_arg_count: self.add_error("B042", fun)`.
+
+So the check counts POSITIONAL arguments only, and compares that count with the number
+of declared parameters. Naming `details` as a keyword makes the counts agree without
+changing a single stored value, and without an inline suppression comment - which the
+plan forbids, and which would in any case hide a rule whose underlying concern
+(rebuilding a subclass through pickle) is answered once by DomainError.__reduce__ and
+asserted by test_domain_error_survives_pickle_and_copy.
+
+After the fix:
+
+$ .venv/bin/flake8 src tests
+$ echo $?
+0
