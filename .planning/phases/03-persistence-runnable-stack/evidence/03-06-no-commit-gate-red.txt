@@ -1,0 +1,52 @@
+RED/GREEN evidence for the SC-4 gate (plan 03-06, task 3).
+The gate is a source-text scan, so it is only worth anything if a planted
+violation turns it red. One line was added to
+src/taskmanager/infrastructure/db/repositories/users.py inside add(), the test
+was run, and the line was then removed and the test run again. Nothing else
+changed between the two runs.
+
+=== RED: with the planted line in users.py ===
+$ git diff --stat src/taskmanager/infrastructure/db/repositories/users.py
+ src/taskmanager/infrastructure/db/repositories/users.py | 1 +
+ 1 file changed, 1 insertion(+)
+$ .venv/bin/pytest tests/architecture/test_no_commit_in_repositories.py --no-cov -q
+
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+________________ test_no_repository_commits_its_own_transaction ________________
+
+    def test_no_repository_commits_its_own_transaction() -> None:
+        """No line under the repositories package ends a transaction."""
+        offenders = [
+            f"{path.relative_to(REPOSITORIES).as_posix()}:{number}"
+            for path in _repository_modules()
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            if FORBIDDEN_CALL in line
+        ]
+
+>       assert offenders == [], (
+            "A repository must never end its own transaction: the unit of work does "
+            "that once, when the use case says so (ARC-08, roadmap SC-4). Found "
+            f"{FORBIDDEN_CALL} at: {offenders}"
+        )
+E       AssertionError: A repository must never end its own transaction: the unit of work does that once, when the use case says so (ARC-08, roadmap SC-4). Found .commit() at: ['users.py:73']
+E       assert ['users.py:73'] == []
+E
+E         Left contains one more item: 'users.py:73'
+E         Use -v to get more diff
+
+tests/architecture/test_no_commit_in_repositories.py:94: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_no_commit_in_repositories.py::test_no_repository_commits_its_own_transaction
+1 failed, 1 passed in 0.02s
+exit status: 1
+
+=== GREEN: with the line removed, nothing else changed ===
+$ git diff --stat src/taskmanager/infrastructure/db/repositories/users.py
+(no output: the file is back to its committed state)
+
+$ .venv/bin/pytest tests/architecture/test_no_commit_in_repositories.py --no-cov -q
+
+..                                                                       [100%]
+2 passed in 0.01s
+exit status: 0
