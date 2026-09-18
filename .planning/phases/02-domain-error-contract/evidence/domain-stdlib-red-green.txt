@@ -1,0 +1,322 @@
+Stdlib-only domain demonstration - Phase 2, plan 02-06
+Date: 2026-09-18
+Host: macOS arm64, CPython 3.14.3 in .venv (297 names in sys.stdlib_module_names),
+      import-linter 2.15, pytest 9.1.1
+
+Commands, in the order they were run:
+  printf 'import greenlet\n\n__all__ = ["greenlet"]\n' \
+      > src/taskmanager/domain/_violation.py
+  .venv/bin/pytest tests/architecture -q --no-cov ;  echo $?
+  .venv/bin/lint-imports --no-logo                ;  echo $?
+  printf 'import pydantic\n\n__all__ = ["pydantic"]\n' \
+      > src/taskmanager/domain/_violation.py
+  .venv/bin/pytest tests/architecture -q --no-cov ;  echo $?
+  .venv/bin/lint-imports --no-logo                ;  echo $?
+  rm src/taskmanager/domain/_violation.py
+  .venv/bin/pytest tests/architecture -q --no-cov ;  echo $?
+  .venv/bin/lint-imports --no-logo                ;  echo $?
+
+What this proves: roadmap success criterion 1 - "the domain package imports no
+third-party library" - is now enforced rather than asserted, and the gate that enforces
+it is strictly stronger than the one that was already there. RUN 1 and RUN 2 are the
+whole point of this plan: with `import greenlet` sitting inside taskmanager.domain, the
+new AST test goes red while `lint-imports` exits 0 and reports "Domain is framework-free
+KEPT". That is Conflict C-01 demonstrated instead of argued - a `forbidden` contract can
+only prove the nine *enumerated* distributions are absent, and greenlet is the tenth.
+RUN 3 and RUN 4 plant `import pydantic` instead and both gates fail, which shows the new
+test subsumes the enumerated contract rather than replacing it. RUN 5 and RUN 6 are the
+shipped tree, both green.
+
+The violation module was deleted immediately after the red runs and exists neither on
+disk nor in git history as a tracked file; `git status --porcelain` shows no _violation
+entry. The green runs below are the shipped tree.
+
+greenlet was chosen as the planted import on purpose. It is a real, already-installed
+package (3.5.6, a transitive dependency of SQLAlchemy[asyncio]), so the demonstration
+uses an import that would genuinely resolve at runtime - not a name invented to fail -
+and it is absent from `.importlinter`'s forbidden_modules list, which is exactly the
+blind spot being closed.
+
+`--no-logo` replaces the [logo elided] marker Phase 1 used: the flag suppresses
+import-linter's nine-line ASCII banner at the source, so every capture below is
+verbatim, exit codes included, with nothing edited out.
+
+================================================================================
+RUN 1 - RED: pytest with `import greenlet` in the domain, exit code 1
+================================================================================
+
+.F..                                                                     [100%]
+=================================== FAILURES ===================================
+_______________________ test_domain_imports_only_stdlib ________________________
+
+    def test_domain_imports_only_stdlib() -> None:
+        """Every import root under `taskmanager.domain` is stdlib or `taskmanager`."""
+        violations = [
+            (path.relative_to(DOMAIN_ROOT).as_posix(), root)
+            for path in _domain_modules()
+            for root in sorted(_imported_roots(path))
+            if root != "taskmanager" and root not in sys.stdlib_module_names
+        ]
+
+>       assert violations == []
+E       AssertionError: assert [('_violation..., 'greenlet')] == []
+E
+E         Left contains one more item: ('_violation.py', 'greenlet')
+E         Use -v to get more diff
+
+tests/architecture/test_domain_is_stdlib_only.py:91: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_domain_is_stdlib_only.py::test_domain_imports_only_stdlib
+1 failed, 3 passed in 0.08s
+EXIT=1
+
+The failure names both halves of the offence - the module and the package it imported -
+because the assertion is made against the list of (module, imported) pairs rather than
+against a boolean. The anti-vacuity guard passed in the same run, so the scan really did
+walk the domain tree.
+
+================================================================================
+RUN 2 - THE CONTRAST: lint-imports, same violation, exit code 0
+================================================================================
+
+---------
+Contracts
+---------
+
+Analyzed 50 files, 80 dependencies.
+-----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+EXIT=0
+
+This is the gap. A third-party import is sitting in taskmanager.domain and every
+contract reports KEPT.
+
+It is not that grimp failed to see the import - compare the file counts against RUN 6:
+48 files / 79 dependencies clean, 50 / 80 here. The graph grew by two nodes (the
+_violation module and greenlet itself, which was not previously in the graph at all) and
+by one dependency. grimp resolved the import perfectly; the contract simply had nothing
+to say about it, because `forbidden_modules` is a list of nine names and greenlet is not
+one of them.
+
+The wildcard escape hatch does not help either. `forbidden_modules = *` was executed
+during this phase's research and reported `dataclasses`, `datetime` and `enum` as
+violations, because a graph built with `include_external_packages = True` carries stdlib
+modules as first-class nodes. There is no contract type meaning "everything except the
+standard library", which is why the check had to be written as a test.
+
+================================================================================
+RUN 3 - RED: pytest with `import pydantic` in the domain, exit code 1
+================================================================================
+
+.F.F                                                                     [100%]
+=================================== FAILURES ===================================
+_______________________ test_domain_imports_only_stdlib ________________________
+
+    def test_domain_imports_only_stdlib() -> None:
+        """Every import root under `taskmanager.domain` is stdlib or `taskmanager`."""
+        violations = [
+            (path.relative_to(DOMAIN_ROOT).as_posix(), root)
+            for path in _domain_modules()
+            for root in sorted(_imported_roots(path))
+            if root != "taskmanager" and root not in sys.stdlib_module_names
+        ]
+
+>       assert violations == []
+E       AssertionError: assert [('_violation..., 'pydantic')] == []
+E
+E         Left contains one more item: ('_violation.py', 'pydantic')
+E         Use -v to get more diff
+
+tests/architecture/test_domain_is_stdlib_only.py:91: AssertionError
+__________________________ test_import_contracts_hold __________________________
+
+    def test_import_contracts_hold() -> None:
+        """Every contract in `.importlinter` is kept by the current import graph."""
+>       assert use_cases.lint_imports(no_logo=True) is True
+E       assert False is True
+E        +  where False = <function lint_imports at 0x10c4a61f0>(no_logo=True)
+E        +    where <function lint_imports at 0x10c4a61f0> = use_cases.lint_imports
+
+tests/architecture/test_layer_boundaries.py:44: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+---------
+Contracts
+---------
+
+Analyzed 49 files, 80 dependencies.
+-----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free BROKEN
+Application knows no web framework or ORM KEPT
+
+Contracts: 2 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Domain is framework-free
+------------------------
+
+taskmanager.domain is not allowed to import pydantic:
+
+-   taskmanager.domain._violation -> pydantic (l.1)
+
+
+=========================== short test summary info ============================
+FAILED tests/architecture/test_domain_is_stdlib_only.py::test_domain_imports_only_stdlib
+FAILED tests/architecture/test_layer_boundaries.py::test_import_contracts_hold
+2 failed, 2 passed in 0.09s
+EXIT=1
+
+Both gates fire on an enumerated module. The new test does not replace the contract - it
+catches everything the contract catches, plus the rest of PyPI. The contract is kept
+because its failure message names the offending import path directly, which the generic
+test cannot do as precisely.
+
+================================================================================
+RUN 4 - RED: lint-imports, `import pydantic`, exit code 1
+================================================================================
+
+---------
+Contracts
+---------
+
+Analyzed 49 files, 80 dependencies.
+-----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free BROKEN
+Application knows no web framework or ORM KEPT
+
+Contracts: 2 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Domain is framework-free
+------------------------
+
+taskmanager.domain is not allowed to import pydantic:
+
+-   taskmanager.domain._violation -> pydantic (l.1)
+
+
+EXIT=1
+
+================================================================================
+RUN 5 - GREEN: violation removed, pytest passes, exit code 0
+================================================================================
+
+....                                                                     [100%]
+4 passed in 0.04s
+EXIT=0
+
+Four tests: the two pre-existing import-linter tests and the two added by this plan.
+
+================================================================================
+RUN 6 - GREEN: lint-imports, violation removed, exit code 0
+================================================================================
+
+---------
+Contracts
+---------
+
+Analyzed 48 files, 79 dependencies.
+-----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+EXIT=0
+
+Exit-code summary, the whole demonstration in four lines:
+
+  planted import       new AST test    lint-imports
+  -----------------    ------------    ------------
+  import greenlet      FAIL (1)        PASS (0)   <- the gap this plan closes
+  import pydantic      FAIL (1)        FAIL (1)
+  none (shipped)       PASS (0)        PASS (0)
+
+================================================================================
+APPENDIX - the second failure mode: a scan that scans nothing
+================================================================================
+
+Everything above proves the new test catches a bad import. It does not prove the test is
+looking at anything, and that is the quieter way for a check of this shape to die: if
+`DOMAIN_ROOT` stops resolving - a renamed package, a moved src/ layout, one wrong
+`parents[N]` - then `rglob("*.py")` yields nothing, the comprehension builds an empty
+list, and `assert violations == []` passes forever. Green build, zero enforcement, and
+nothing in the output to suggest anything is wrong. That is what
+test_the_domain_package_is_actually_scanned exists for, so it was worth observing too.
+
+With MINIMUM_DOMAIN_MODULES temporarily raised to 99 - standing in for a scan that finds
+nothing, since both assertions in the guard fail the same way:
+
+$ .venv/bin/pytest tests/architecture -q --no-cov -k actually_scanned
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________ test_the_domain_package_is_actually_scanned __________________
+
+    def test_the_domain_package_is_actually_scanned() -> None:
+        """A glob that matches nothing passes vacuously; assert it matched the real tree.
+
+        Without this guard a renamed directory, a moved `src/` layout or a typo in
+        `DOMAIN_ROOT` would leave `test_domain_imports_only_stdlib` asserting that an empty
+        list is empty - green forever, checking nothing, which is worse than no test at all.
+        """
+        scanned = {path.relative_to(DOMAIN_ROOT).as_posix() for path in _domain_modules()}
+
+>       assert len(scanned) >= MINIMUM_DOMAIN_MODULES
+E       AssertionError: assert 11 >= 99
+E        +  where 11 = len({'__init__.py', 'entities/__init__.py', 'entities/task.py', 'entities/task_list.py', 'entities/user.py', 'exceptions.py', ...})
+
+tests/architecture/test_domain_is_stdlib_only.py:78: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_domain_is_stdlib_only.py::test_the_domain_package_is_actually_scanned
+1 failed, 3 deselected in 0.05s
+EXIT=1
+
+The constant was restored immediately; the shipped value is 10, against the 11 modules
+the domain package currently holds. The second assertion,
+`REQUIRED_SCANNED_MODULES <= scanned`, names exceptions.py, validation.py,
+value_objects/task_status.py and entities/task.py explicitly, so the guard also fails if
+the count is met by files that are not the domain.
+
+Both failure modes of this gate have now been observed firing, and both are covered by a
+test: a third-party import (test_domain_imports_only_stdlib) and an empty scan
+(test_the_domain_package_is_actually_scanned).
+
+================================================================================
+APPENDIX 2 - the same test on the target runtime
+================================================================================
+
+`sys.stdlib_module_names` is per-interpreter, and this project runs two: CPython 3.14.3
+on the host and CPython 3.13 in Docker and CI. The sets are not identical - 297 names on
+3.14.3, 290 on python:3.13-slim-trixie (verified by running
+`python -c "import sys; print(len(sys.stdlib_module_names))"` in both) - so "passes on
+the host" does not imply "passes in CI" for a check built on this constant.
+
+$ .venv/bin/pytest -q                  # host, CPython 3.14.3
+140 passed, coverage 100.00%
+EXIT=0
+
+$ make docker-test                     # python:3.13-slim-trixie, CPython 3.13.15
+140 passed, coverage 100.00%
+EXIT=0
+
+Same test count, same result. Every module the domain actually imports - dataclasses,
+datetime, typing, uuid, enum, collections.abc - is in both sets, so the seven-name
+difference between the two interpreters never touches this test.
