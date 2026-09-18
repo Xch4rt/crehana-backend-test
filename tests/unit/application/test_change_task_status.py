@@ -202,15 +202,28 @@ async def test_change_task_status_raises_task_not_found_for_an_unknown_task() ->
     assert unit_of_work.commits == 0
 
 
-async def test_change_task_status_raises_task_list_not_found_for_an_orphan() -> None:
-    """A task whose list is gone cannot be authorized, so it is a 404 too."""
+async def test_change_task_status_hides_an_orphaned_task_behind_the_same_404() -> None:
+    """A task whose list is gone answers exactly as an absent task does.
+
+    The orphan branch runs *before* authorization, so an answer of its own
+    would tell an actor who is neither owner nor assignee that the task exists
+    - its code would differ from `task_not_found` - and would hand them the
+    list id in the `errors` member. ADR-008 requires the two cases to be
+    indistinguishable, so the assertion is on the exact leaf and the exact
+    details, not merely on "some 404".
+    """
     unit_of_work = _uow(with_task_list=False)
     use_case = ChangeTaskStatus(unit_of_work, FrozenClock(LATER))
 
-    with pytest.raises(TaskListNotFoundError) as excinfo:
+    with pytest.raises(DomainError) as excinfo:
         await use_case.execute(_command(TaskStatus.IN_PROGRESS))
 
-    assert excinfo.value.details == {"task_list_id": str(TASK_LIST_ID)}
+    error = excinfo.value
+    assert isinstance(error, TaskNotFoundError)
+    assert not isinstance(error, TaskListNotFoundError)
+    assert error.details == {"task_id": str(TASK_ID)}
+    assert str(TASK_LIST_ID) not in str(error.details)
+    assert unit_of_work.task_repository.updated == []
     assert unit_of_work.commits == 0
 
 

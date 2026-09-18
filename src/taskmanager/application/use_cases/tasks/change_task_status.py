@@ -28,7 +28,13 @@ assignee change a task's status, so every actor who can see the task may also
 change it - there is no visible-but-forbidden case left to answer 403 with. An
 actor who cannot see it gets `TaskNotFoundError` instead, per ADR-008: a 403
 would confirm the task exists to someone who is not entitled to know that, which
-is the IDOR leak AUTH-06 is written against. The 403 leg of ADR-008 belongs to
+is the IDOR leak AUTH-06 is written against. A task whose list has vanished
+answers the same way, for the same reason: `task_list_not_found` would carry a
+different code *and* a foreign identifier, so it would distinguish exactly the
+two cases ADR-008 requires to be indistinguishable. The branch stops being
+reachable once Phase 3 adds the cascading foreign key, but this module is the
+template Phases 4 and 5 copy, and a template must not hand a pre-authorization
+disclosure down to them. The 403 leg of ADR-008 belongs to
 the owner-only operations - edit, delete, assign - in Phases 4 and 5, and the
 mapping from `AuthorizationError` to a 403 problem body is already proven end to
 end by `tests/api/test_error_contract.py` (plan 02-04).
@@ -42,7 +48,7 @@ from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.unit_of_work import UnitOfWork
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
-from taskmanager.domain.exceptions import TaskListNotFoundError, TaskNotFoundError
+from taskmanager.domain.exceptions import TaskNotFoundError
 
 
 def _may_change_status(task: Task, task_list: TaskList, actor_id: UUID) -> bool:
@@ -67,11 +73,15 @@ class ChangeTaskStatus:
             if task is None:
                 raise TaskNotFoundError(command.task_id)
             task_list = await self._uow.task_lists.get(task.task_list_id)
-            if task_list is None:
-                raise TaskListNotFoundError(task.task_list_id)
-            if not _may_change_status(task, task_list, command.actor_id):
-                # ADR-008: the same answer an absent task gets. Anything that
-                # distinguished the two would leak the task's existence.
+            # ADR-008: the same answer an absent task gets, on both legs. An
+            # orphaned task cannot be authorized at all, and answering it with
+            # `task_list_not_found` would tell an actor who is neither owner nor
+            # assignee two things they are not entitled to know - that the task
+            # exists, because the code differs from the one an absent task
+            # returns, and what its list id is, because the error carries it.
+            if task_list is None or not _may_change_status(
+                task, task_list, command.actor_id
+            ):
                 raise TaskNotFoundError(command.task_id)
             # The entity owns the state machine and the timestamps; this line
             # is the only place the clock is read, and the instant is handed
