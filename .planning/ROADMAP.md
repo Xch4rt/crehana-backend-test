@@ -142,7 +142,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — ORM base, D-12 naming convention, the three row classes, and the case-sensitivity reconciliation
+- [x] 03-01-PLAN.md — ORM base, D-12 naming convention, the three row classes, and the case-sensitivity reconciliation
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -248,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
-| 3. Persistence & Runnable Stack | 0/11 | Planned | - |
+| 3. Persistence & Runnable Stack | 1/11 | In Progress | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
