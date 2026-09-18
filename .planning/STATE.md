@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-09-18T05:25:35.866Z"
-last_activity: 2026-09-18 -- Phase 02 planning complete
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-18T05:51:44.898Z"
+last_activity: 2026-09-18 -- Phase 02 plan 01 complete (domain value objects)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 15
-  completed_plans: 8
+  completed_plans: 9
   percent: 14
 ---
 
@@ -22,16 +22,16 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 2 — domain & error contract
+**Current focus:** Phase 02 — domain-error-contract
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (domain-error-contract) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 02 planning complete
+Last activity: 2026-09-18 -- Phase 02 plan 01 complete (domain value objects)
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [██████████] 100%
 | Phase 01 P06 | 10min | 2 tasks | 2 files |
 | Phase 01 P07 | 11min | 2 tasks | 1 files |
 | Phase 01 P08 | 14min | 2 tasks | 2 files |
+| Phase 02 P01 | 10min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 01-08]: 01-RESEARCH.md assumption A2 and DECISION_LOG.md ADR-019 ('the workflow has never run on a real runner') are now stale; Phase 7 owns the refresh since DECISION_LOG.md is append-only
 - [Phase 01-08]: The user supplied an already-created empty public repo, so gh repo create was never run and GitHub's quick-setup README/first-commit snippet was ignored: the real eight-commit main was pushed unchanged, no force
 - [Phase 01-08]: The attribution audit publishes both counts (raw=1, refined=0); the single raw match is the filename CLAUDE.md in commit 0456070's subject, not a trailer
+- [Phase 02-01]: TDD RED is observed and captured as evidence/02-01-tdd-red.txt, never as a separate test() commit - the mypy (strict) pre-commit hook rejects a test importing a module that does not exist yet, and --no-verify is forbidden
+- [Phase 02-01]: frozen+slots dataclass setattr on a NON-field raises FrozenInstanceError on CPython 3.13 (Docker/CI) but TypeError on 3.14.3 (host); negative attribute tests assert the portable claim (refused, no __dict__, exact __slots__) - evidence/02-01-frozen-slots-setattr.txt
+- [Phase 02-01]: No can_transition() helper beside ALLOWED_TRANSITIONS - the state machine is a Task invariant owned by the entity (02-03); CompletionStats carries no __post_init__ guard because Phase 3's COUNT(*) FILTER aggregate owns that invariant
 
 ### Pending Todos
 
@@ -134,6 +138,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T03:56:01.843Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-domain-error-contract/02-CONTEXT.md
+Last session: 2026-09-18T05:51:44.888Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
