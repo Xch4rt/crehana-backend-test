@@ -110,7 +110,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 02-03-PLAN.md — Task, TaskList and User entities plus the task state machine and the shared validation guards
-- [ ] 02-04-PLAN.md — The single RFC 9457 exception-handling point, wired into create_app() and proven by a probe router
+- [x] 02-04-PLAN.md — The single RFC 9457 exception-handling point, wired into create_app() and proven by a probe router
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
-| 2. Domain & Error Contract | 3/7 | In Progress | - |
+| 2. Domain & Error Contract | 4/7 | In Progress | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |

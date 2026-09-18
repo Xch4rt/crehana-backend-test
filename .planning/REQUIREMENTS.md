@@ -31,7 +31,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [ ] **ARC-04**: Every use case is a single-purpose class in `application/` depending only on `typing.Protocol` ports (repositories, UnitOfWork, PasswordHasher, TokenService, EmailNotifier, Clock) [PDF 2.a]
 - [ ] **ARC-05**: Pydantic v2 models type every boundary: HTTP request/response schemas, application command/result DTOs, settings [PDF 2.b]
 - [ ] **ARC-06**: A `DomainError` hierarchy (not found, conflict, business-rule violation, authentication, authorization) carries a stable `code` and details; no `HTTPException` is raised outside `presentation` [PDF 2.c]
-- [ ] **ARC-07**: One exception-handling point maps `DomainError`, request-validation errors and unexpected errors to RFC 9457 `application/problem+json` responses with a single shape [NL]
+- [x] **ARC-07**: One exception-handling point maps `DomainError`, request-validation errors and unexpected errors to RFC 9457 `application/problem+json` responses with a single shape [NL]
 - [ ] **ARC-08**: Transactions are owned by a UnitOfWork committed explicitly by the use case (never in a `yield` dependency teardown) [R]
 
 ### Persistence (DB)
@@ -170,7 +170,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | ARC-04 | Phase 2 | Pending |
 | ARC-05 | Phase 4 | Pending |
 | ARC-06 | Phase 2 | Pending |
-| ARC-07 | Phase 2 | Pending |
+| ARC-07 | Phase 2 | Complete |
 | ARC-08 | Phase 3 | Pending |
 | DB-01 | Phase 3 | Pending |
 | DB-02 | Phase 3 | Pending |

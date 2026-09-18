@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-18T06:35:06.484Z"
-last_activity: 2026-09-18 -- Phase 02 plan 03 complete (entities and the task state machine)
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-09-18T06:58:55.348Z"
+last_activity: 2026-09-18 -- Phase 02 plan 04 complete (the single RFC 9457 exception-handling point)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
   percent: 14
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 02 (domain-error-contract) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 02 plan 03 complete (entities and the task state machine)
+Last activity: 2026-09-18 -- Phase 02 plan 04 complete (the single RFC 9457 exception-handling point)
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [███████░░░] 73%
 | Phase 02 P01 | 10min | 2 tasks | 10 files |
 | Phase 02 P02 | 14min | 2 tasks | 4 files |
 | Phase 02 P03 | 12min | 3 tasks | 11 files |
+| Phase 02 P04 | 18min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,10 @@ Recent decisions affecting current work:
 - [Phase 02-03]: domain/validation.py owns require_utc/require_text/optional_text and every entity delegates to them, so each limit exists exactly once - in the entity ClassVar passed as max_length, never as a literal in a guard, a message or a test
 - [Phase 02-03]: change_status checks ALLOWED_TRANSITIONS before normalising now, so a rejected move leaves the entity byte-identical; the same-state no-op returns before either check (D-02)
 - [Phase 02-03]: User.PASSWORD_HASH_MAX_LENGTH = 512 is a sanity bound, not a policy - the minimum-password-length rule applies to the plaintext, which never reaches the domain; the entity validates no email format either, because EmailStr owns that at the boundary (D-04)
+- [Phase 02-04]: ARC-07 is satisfied: register_exception_handlers(app), called by create_app(), is the only place an error body is produced - four handlers, one problem() builder, one class-keyed status table resolved by MRO walk
+- [Phase 02-04]: Exception handlers annotate the base Exception type and narrow with an isinstance assertion: mypy strict rejects the narrower annotation (callable parameters are contravariant) and the if/raise form adds partial branches the 100% gate cannot cover
+- [Phase 02-04]: STATUS_BY_EXCEPTION holds eight entries and no leaf class: TaskNotFoundError and its four siblings resolve through their parent by MRO, and the table uses int literals because 422's HTTPStatus member name changed across Python versions
+- [Phase 02-04]: coverage report --include A --include B keeps only B, so the plan's presentation coverage command measured main.py alone; the comma-separated single-flag form is the honest one and is captured in evidence/02-04-tdd-red.txt
 
 ### Pending Todos
 
@@ -147,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T06:32:02.417Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-09-18T06:58:55.341Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
