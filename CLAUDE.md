@@ -260,3 +260,60 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
+
+## Project Rules
+
+> Hand-maintained section. It sits outside every `<!-- GSD:*-start -->` / `<!-- GSD:*-end -->`
+> block on purpose, so regenerating the blocks above cannot delete it. Every rule below is
+> enforced by a gate that fails a build — none of it is advisory.
+
+### Layers
+
+- Import direction, high to low:
+  `taskmanager.main` > `taskmanager.presentation` > `taskmanager.infrastructure` >
+  `taskmanager.application` > `taskmanager.domain`. Imports only ever point downward;
+  a lower layer never imports a higher one.
+- `taskmanager.domain` imports **no third-party library at all** — stdlib only
+  (`dataclasses`, `enum`, `datetime`, `typing.Protocol`). Not even Pydantic: a Pydantic
+  `ValidationError` cannot carry the domain error contract, so validation lives at the
+  boundaries.
+- `taskmanager.application` imports **no web framework and no ORM** (no `fastapi`,
+  `starlette`, `sqlalchemy`, `alembic`). Pydantic *is* allowed there — application DTOs are
+  Pydantic models.
+- This is enforced automatically by the contracts in `.importlinter`, executed by
+  `tests/architecture/test_layer_boundaries.py`, by `make arch` and by CI. A violating
+  import fails a test, not a review.
+
+### Error handling
+
+- `fastapi.HTTPException` may **never** be raised outside the `presentation` layer.
+- Business failures raise a `DomainError` subclass (Phase 2) and are translated once, at a
+  single exception-handling point, into an RFC 9457 `application/problem+json` response.
+  No handler builds an error body by hand.
+
+### Quality gates
+
+- `make lint`, `make typecheck`, `make arch` and `make test` must all be green before any
+  commit. pre-commit enforces the same set locally on every `git commit`.
+- Coverage is gated at **75%** over `src/taskmanager` (`--cov-fail-under=75` in
+  `pytest.ini`). The threshold is never lowered, and it is never reached with
+  `# pragma: no cover` or a coverage `omit` entry. If the number is short, write the test.
+- Where each gate runs: pre-commit is the **developer-host** gate and depends on `.venv`
+  existing (its whole-program hook entries are `.venv/bin/`-qualified). CI and the Docker
+  `test` stage have no `.venv`, so they run the same tools **directly** as named steps.
+  A new gate must therefore be added in **both** `.pre-commit-config.yaml` and
+  `.github/workflows/ci.yml` — neither derives from the other.
+
+### Configuration
+
+- No secret ever gets a default value in code.
+- Every setting is read through `taskmanager.infrastructure.config.settings`, documented in
+  `.env.example`, and `.env` is never committed.
+
+### Language and attribution
+
+- Everything is written in English: code, comments, docs, commit messages and planning
+  artifacts.
+- Git commit messages carry **no Claude/AI co-author or attribution trailer of any kind**.
+  AI involvement is documented transparently in `AI_WORKFLOW.md` instead — that is this
+  project's chosen form of honesty about it, not a way of hiding it.
