@@ -165,7 +165,10 @@ class FakeUnitOfWork:
     `commits` and `rollbacks` are the point of this class. A use case that
     forgets to commit, or commits on a path that raised, is otherwise
     indistinguishable from a correct one when the repositories are dictionaries
-    that never had a transaction to begin with.
+    that never had a transaction to begin with. `rollbacks` only measures
+    anything because `__aexit__` below honours the port's obligation to roll
+    back an uncommitted block: a fake that skipped it would let every failure
+    test pass against an adapter that leaks a dirty session back to the pool.
 
     Each repository is reachable under two names, and that is not redundancy.
     `UnitOfWork` declares `tasks`, `task_lists` and `users` as mutable attributes,
@@ -192,8 +195,10 @@ class FakeUnitOfWork:
         self.users: UserRepository = self.user_repository
         self.commits = 0
         self.rollbacks = 0
+        self._finished = False
 
     async def __aenter__(self) -> Self:
+        self._finished = False
         return self
 
     async def __aexit__(
@@ -202,6 +207,15 @@ class FakeUnitOfWork:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        # The port makes this method responsible for rolling back whatever was
+        # not committed, on every exit path, so the fake models exactly that.
+        # Leaving `rollbacks` as a counter nothing ever incremented is what let
+        # the whole suite stay green against a use case - or a Phase 3 adapter -
+        # that never returns its session clean: `commits == 0` proves nothing
+        # was written, never that the transaction was actually closed.
+        if not self._finished:
+            self.rollbacks += 1
+        self._finished = False
         # Two deliberate non-behaviours, both load-bearing. Returning `None`
         # rather than a true value means an exception leaving the block is
         # never swallowed, so a failing use case cannot answer 200. And no
@@ -211,9 +225,11 @@ class FakeUnitOfWork:
 
     async def commit(self) -> None:
         self.commits += 1
+        self._finished = True
 
     async def rollback(self) -> None:
         self.rollbacks += 1
+        self._finished = True
 
 
 class FrozenClock:

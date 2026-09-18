@@ -91,6 +91,45 @@ async def test_frozen_clock_returns_the_same_instant_on_every_call() -> None:
     assert clock.now() == NOW
 
 
+async def test_fake_unit_of_work_rolls_back_a_block_that_never_committed() -> None:
+    """`__aexit__` owns the rollback, per the port; the fake has to model that.
+
+    Without this behaviour `rollbacks` is a counter nothing increments, and no
+    test in the suite could fail if Phase 3's SQLAlchemy adapter forgot to roll
+    back - `commits == 0` proves nothing was written, not that the session was
+    returned clean.
+    """
+    unit_of_work = FakeUnitOfWork()
+
+    async with unit_of_work:
+        pass
+
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
+async def test_fake_unit_of_work_does_not_roll_back_after_a_commit() -> None:
+    """A committed block has nothing left to undo."""
+    unit_of_work = FakeUnitOfWork()
+
+    async with unit_of_work:
+        await unit_of_work.commit()
+
+    assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
+
+
+async def test_fake_unit_of_work_counts_an_explicit_rollback_only_once() -> None:
+    """An explicit rollback finishes the transaction, so `__aexit__` adds nothing."""
+    unit_of_work = FakeUnitOfWork()
+
+    async with unit_of_work:
+        await unit_of_work.rollback()
+
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
 async def test_fake_task_repository_counts_completion_from_the_stored_tasks() -> None:
     # Four tasks in the list, one of them completed: the fake computes the
     # value object the port declares rather than returning a canned one, so the

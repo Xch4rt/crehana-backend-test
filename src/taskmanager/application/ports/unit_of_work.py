@@ -10,9 +10,13 @@ boundary in the use case instead: the three repositories arrive already bound to
 one transaction through this single async context manager, and the use case
 calls `commit()` itself, explicitly, after the last write succeeds.
 
-Nothing here commits on exit. Leaving the block without a `commit()` must leave
-the transaction unfinished so the adapter can roll it back; an implementation
-that commits in `__aexit__` would turn every early `return` into a silent write.
+Nothing here commits on exit, and the exit is not permissive about what happens
+instead. `__aexit__` MUST roll back whatever was not committed, whether the
+block was left normally or by an exception; the use case never calls
+`rollback()` itself, on any path. An implementation that commits in `__aexit__`
+would turn every early `return` into a silent write, and one that merely
+*returns* without finishing the transaction hands a pooled session back dirty -
+which, with `expire_on_commit=False`, is a leak the next request inherits.
 
 `__aenter__` returns `typing.Self` rather than `UnitOfWork`, so an adapter that
 adds its own affordances keeps them visible to the caller inside the block.
@@ -46,9 +50,10 @@ class UnitOfWork(Protocol):
 
     async def __aenter__(self) -> Self: ...
 
-    # Returning `None` is part of the contract: an implementation that returned
-    # a true value here would swallow the exception that left the block, and a
-    # failed use case would answer 200.
+    # Two obligations, both part of the contract. An implementation MUST roll
+    # back anything `commit()` did not make durable, on every exit path. And it
+    # MUST return `None`: returning a true value would swallow the exception
+    # that left the block, so a failed use case would answer 200.
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,

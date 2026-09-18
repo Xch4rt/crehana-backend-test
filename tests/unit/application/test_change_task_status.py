@@ -5,9 +5,12 @@ behaviour but a shape: constructor injection, a single `execute`, the commit
 inside the transaction block, and - the part that is easiest to get wrong once
 routers exist - the ADR-008 answer for a task the caller cannot see.
 
-Every failure test asserts `uow.commits == 0` as well as the exception, so "a
-refused operation writes nothing" is a property of the whole suite rather than
-of whichever test happened to remember it.
+Every failure test asserts `uow.commits == 0` and `uow.rollbacks == 1` as well
+as the exception, and every success test asserts the mirror image, so "a refused
+operation writes nothing *and* closes its transaction" is a property of the
+whole suite rather than of whichever test happened to remember it. The rollback
+half only measures anything because `FakeUnitOfWork.__aexit__` honours the
+obligation the port states; see `test_ports.py` for that behaviour on its own.
 """
 
 from dataclasses import FrozenInstanceError
@@ -176,6 +179,7 @@ async def test_change_task_status_moves_a_pending_task_to_in_progress() -> None:
     assert result.completed_at is None
     assert len(unit_of_work.task_repository.updated) == 1
     assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
 
 
 async def test_change_task_status_stamps_completed_at_when_entering_completed() -> None:
@@ -188,6 +192,7 @@ async def test_change_task_status_stamps_completed_at_when_entering_completed() 
     assert result.status is TaskStatus.COMPLETED
     assert result.completed_at == LATER
     assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
 
 
 async def test_change_task_status_raises_task_not_found_for_an_unknown_task() -> None:
@@ -200,6 +205,7 @@ async def test_change_task_status_raises_task_not_found_for_an_unknown_task() ->
 
     assert excinfo.value.details == {"task_id": str(TASK_ID)}
     assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
 
 
 async def test_change_task_status_hides_an_orphaned_task_behind_the_same_404() -> None:
@@ -225,6 +231,7 @@ async def test_change_task_status_hides_an_orphaned_task_behind_the_same_404() -
     assert str(TASK_LIST_ID) not in str(error.details)
     assert unit_of_work.task_repository.updated == []
     assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
 
 
 async def test_change_task_status_hides_a_task_the_actor_cannot_see() -> None:
@@ -247,6 +254,7 @@ async def test_change_task_status_hides_a_task_the_actor_cannot_see() -> None:
     assert error.details == {"task_id": str(TASK_ID)}
     assert unit_of_work.task_repository.updated == []
     assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
 
 
 async def test_change_task_status_allows_the_assignee_who_does_not_own_the_list() -> (
@@ -261,6 +269,7 @@ async def test_change_task_status_allows_the_assignee_who_does_not_own_the_list(
     assert result.status is TaskStatus.IN_PROGRESS
     assert result.assignee_id == ACTOR_ID
     assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
 
 
 async def test_change_task_status_propagates_a_forbidden_transition() -> None:
@@ -274,6 +283,7 @@ async def test_change_task_status_propagates_a_forbidden_transition() -> None:
     assert excinfo.value.details == {"from": "completed", "to": "pending"}
     assert unit_of_work.task_repository.updated == []
     assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
 
 
 async def test_change_task_status_is_idempotent_for_the_status_already_held() -> None:
@@ -295,3 +305,4 @@ async def test_change_task_status_is_idempotent_for_the_status_already_held() ->
     assert result.completed_at is None
     assert unit_of_work.task_repository.stored[TASK_ID].updated_at == NOW
     assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
