@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-09-18T22:11:41.628Z"
-last_activity: 2026-09-18 -- Phase 03 plan 03 complete (TEST_DATABASE_URL on Settings and .env.example, the make_url derivation, SystemClock)
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-09-18T22:38:14.580Z"
+last_activity: 2026-09-18
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 18
-  percent: 69
+  completed_plans: 19
+  percent: 29
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 4 of 11
+Plan: 5 of 11
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 03 plan 03 complete (TEST_DATABASE_URL on Settings and .env.example, the make_url derivation, SystemClock)
+Last activity: 2026-09-18
 
-Progress: [███████░░░] 69%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [███████░░░] 69%
 | Phase 03 P01 | 16min | 3 tasks | 9 files |
 | Phase 03 P02 | 24min | 3 tasks | 8 files |
 | Phase 03 P03 | 6min | 2 tasks | 6 files |
+| Phase 03 P04 | 16min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,13 @@ Recent decisions affecting current work:
 - [Phase 03-03]: .env.example documents the compose host as a COMMENTED DATABASE_URL line - a second live assignment would survive the parity test (it collects key names) while silently changing which host pydantic reads (D-15)
 - [Phase 03-03]: SystemClock is the runtime Clock adapter in infrastructure, returning datetime.now(UTC); conformance is structural under mypy strict, with no base class and no ABC
 
+- [Phase 03-04]: WR-05 resolved as RESEARCH Open Question 5 recommends - D-14 is refined by SCOPE, not by error type: a naive datetime reaching the domain is still a ValidationError, while one read FROM the database raises NaiveDatetimeFromDatabaseError, a RuntimeError deliberately outside the DomainError hierarchy, so a schema regression becomes the fixed 500 and never a 422 naming a column no request contains. This is the ADR 03-11 owes
+- [Phase 03-04]: NaiveDatetimeFromDatabaseError forwards its COLUMN to super().__init__() and renders the message in __str__ - flake8-bugbear B042 rejects a keyword-only exception parameter outright, and forwarding the rendered message would rebuild the error with its own message as the column name under copy.copy()
+- [Phase 03-04]: violated_constraint() narrows error.orig with a real `if isinstance(...)`, not the assertion idiom handlers.py uses, because the None result is a reachable documented outcome; three tests cover both None paths (non-psycopg original, orig=None, psycopg.Error with an empty Diagnostic)
+- [Phase 03-04]: The positive branch of violated_constraint() is the ONE uncovered line in src/taskmanager, left to 03-06/03-07 on purpose - a psycopg Diagnostic is populated by libpq and a hand-built stand-in would pass against a broken implementation too
+- [Phase 03-04]: One _aware() guard serves mandatory and nullable timestamp columns through two @overload stubs, so no mapper call site needs a cast and none can silently widen a required field into an optional one
+- [Phase 03-04]: Requirement ticks DB-03/DB-04 deliberately NOT taken - 03-11 is the last claimant, the fourth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -189,6 +197,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T22:09:51.683Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-09-18T22:38:14.571Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
