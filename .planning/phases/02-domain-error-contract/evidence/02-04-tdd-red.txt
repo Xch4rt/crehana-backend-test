@@ -65,3 +65,94 @@ Task 2 - GREEN: the same command after handlers.py and the create_app() wiring
     $ .venv/bin/pytest tests/unit/test_app_factory.py -q --no-cov
     ...                                                                      [100%]
     3 passed in 0.18s
+
+
+Task 3 - RED: the contract suite before probe.py and conftest.py exist
+-----------------------------------------------------------------------
+The 14 contract tests were written first and run against a tree with no probe
+router and no fixtures:
+
+    $ .venv/bin/pytest tests/api -q --no-cov
+    ==================================== ERRORS ====================================
+    ______________ ERROR collecting tests/api/test_error_contract.py _______________
+    ImportError while importing test module '.../tests/api/test_error_contract.py'.
+    Hint: make sure your test modules/packages have valid Python names.
+    Traceback:
+    .../importlib/__init__.py:88: in import_module
+        return _bootstrap._gcd_import(name[level:], package, level)
+    tests/api/test_error_contract.py:16: in <module>
+        from tests.probe import PROBE_TASK_ID
+    E   ModuleNotFoundError: No module named 'tests.probe'
+    =========================== short test summary info ============================
+    ERROR tests/api/test_error_contract.py
+    !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+    1 error in 0.27s
+
+
+Task 3 - GREEN: the same command with the probe router and the fixtures in place
+---------------------------------------------------------------------------------
+    $ .venv/bin/pytest tests/api -q --no-cov
+    ..............                                                           [100%]
+    14 passed in 0.05s
+
+Note honestly: the handlers those 14 tests exercise were written in Task 2, so
+this suite is a specification of code that already existed, and all 14 passed on
+the first run. The RED above is genuine for the fixtures and the probe router -
+the subjects Task 3 actually creates - not for the handler bodies.
+
+
+Full gate, host (CPython 3.14.3)
+--------------------------------
+    $ make lint && make typecheck && make arch && make test
+    .venv/bin/black --check src tests      All done! 42 files would be left unchanged.
+    .venv/bin/isort --check-only src tests
+    .venv/bin/flake8 src tests
+    .venv/bin/mypy src tests               Success: no issues found in 42 source files
+    .venv/bin/lint-imports                 Contracts: 3 kept, 0 broken.
+    .venv/bin/pytest                       Required test coverage of 75% reached.
+                                           Total coverage: 100.00%
+                                           116 passed in 0.19s
+
+
+The presentation slice at 100%
+-------------------------------
+The plan's command passes two separate `--include` flags. coverage.py treats the
+second as a *replacement* for the first, so that form silently measures only
+`main.py` - it exits 0, but it proves less than it looks like it proves:
+
+    $ .venv/bin/coverage report --include='*/taskmanager/presentation/*' \
+        --include='*/taskmanager/main.py' --fail-under=100
+    Name                      Stmts   Miss Branch BrPart  Cover
+    -----------------------------------------------------------
+    src/taskmanager/main.py       8      0      0      0   100%
+    -----------------------------------------------------------
+    TOTAL                         8      0      0      0   100%
+    EXIT=0
+
+The one-flag, comma-separated form measures what the plan meant:
+
+    $ .venv/bin/coverage report \
+        --include='*/taskmanager/presentation/*,*/taskmanager/main.py' --fail-under=100
+    Name                                                  Stmts   Miss Branch BrPart  Cover
+    ---------------------------------------------------------------------------------------
+    src/taskmanager/main.py                                   8      0      0      0   100%
+    src/taskmanager/presentation/__init__.py                  0      0      0      0   100%
+    src/taskmanager/presentation/api/__init__.py              0      0      0      0   100%
+    src/taskmanager/presentation/api/errors/__init__.py       0      0      0      0   100%
+    src/taskmanager/presentation/api/errors/handlers.py      29      0      2      0   100%
+    src/taskmanager/presentation/api/errors/mapping.py        5      0      0      0   100%
+    src/taskmanager/presentation/api/errors/problem.py        8      0      2      0   100%
+    ---------------------------------------------------------------------------------------
+    TOTAL                                                    50      0      4      0   100%
+    EXIT=0
+
+
+Target runtime (CPython 3.13, Docker test stage)
+-------------------------------------------------
+    $ make docker-test
+    src/taskmanager/presentation/api/errors/handlers.py        29      0      2      0   100%
+    src/taskmanager/presentation/api/errors/mapping.py          5      0      0      0   100%
+    src/taskmanager/presentation/api/errors/problem.py          8      0      2      0   100%
+    TOTAL                                                     284      0     32      0   100%
+    Required test coverage of 75% reached. Total coverage: 100.00%
+    116 passed in 0.52s
