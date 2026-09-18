@@ -1,0 +1,81 @@
+Evidence: why the repo-local pre-commit hooks are .venv/bin-qualified
+=================================================================
+
+Captured 2026-09-17 during plan 01-04 Task 1, on the delivery host
+(macOS arm64, CPython 3.14.3 venv at .venv/, no project tools on PATH).
+
+RESEARCH (01-RESEARCH.md, ".pre-commit-config.yaml - FND-08") publishes the
+repo-local hooks with bare entries: `entry: mypy` and `entry: lint-imports`.
+That recipe was reasoned, not executed (RESEARCH Assumptions Log, A1).
+Executed here, it does not hold. Both scenarios below run the SAME command
+under the SAME minimal environment; only the two `entry` values differ.
+
+Command (no activated virtualenv, minimal PATH, git kept at /usr/bin/git,
+HOME kept so pre-commit finds its hook cache):
+
+    env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/local/bin" \
+        .venv/bin/pre-commit run --all-files
+
+-----------------------------------------------------------------
+SCENARIO A - the RESEARCH recipe: entry: mypy / entry: lint-imports
+-----------------------------------------------------------------
+
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check yaml...........................................(no files to check)Skipped
+check toml...............................................................Passed
+check for added large files..............................................Passed
+check for merge conflicts................................................Passed
+detect private key.......................................................Passed
+isort....................................................................Passed
+black....................................................................Passed
+flake8...................................................................Passed
+mypy (strict)............................................................Failed
+- hook id: mypy
+- exit code: 1
+
+Executable `mypy` not found
+
+import-linter contracts..................................................Failed
+- hook id: import-linter
+- exit code: 1
+
+Executable `lint-imports` not found
+
+
+$ echo $?
+1
+
+Both whole-program gates are DEAD. pre-commit never activates a virtualenv,
+so it resolves a bare entry against the invoking PATH - which, for anyone who
+has not sourced .venv/bin/activate, does not contain mypy or lint-imports.
+A real `git commit` from a fresh terminal hits exactly this.
+
+---------------------------------------------------------------------------
+SCENARIO B - as shipped: entry: .venv/bin/mypy / entry: .venv/bin/lint-imports
+---------------------------------------------------------------------------
+
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check yaml...........................................(no files to check)Skipped
+check toml...............................................................Passed
+check for added large files..............................................Passed
+check for merge conflicts................................................Passed
+detect private key.......................................................Passed
+isort....................................................................Passed
+black....................................................................Passed
+flake8...................................................................Passed
+mypy (strict)............................................................Passed
+import-linter contracts..................................................Passed
+
+$ echo $?
+0
+
+Relative paths resolve because pre-commit runs every hook with the repository
+root as the working directory, wherever git was invoked from.
+
+Consequence carried forward: .pre-commit-config.yaml now only works where
+.venv exists - the developer host. CI runners and the Docker image have no
+.venv, so neither may ever call `pre-commit run`; CI runs black, isort,
+flake8, mypy, lint-imports and pytest as its own named steps (plan 01-05),
+and plan 01-06 records the tradeoff as an ADR.

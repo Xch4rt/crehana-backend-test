@@ -1,0 +1,74 @@
+# Local quality gate. Hook order is load-bearing: isort rewrites imports, black
+# reformats what isort produced, and only then does flake8 judge the result. Any
+# other order makes the hooks fight each other and a second consecutive run keeps
+# modifying files.
+#
+# Two tiers on purpose:
+#   * file-scoped formatters/linters (isort, black, flake8) come from pinned
+#     mirror repos, where an isolated environment is exactly what you want;
+#   * whole-program tools (mypy, import-linter) are `repo: local` with
+#     `language: system`, because they must see the real installed environment.
+#     mypy loads `plugins = ["pydantic.mypy"]` and aborts with exit 2 without
+#     pydantic; import-linter resolves `root_package = taskmanager` by importing
+#     it, which needs the editable install. An isolated env has neither.
+#
+# Every `entry` below is `.venv/bin/`-qualified: pre-commit never activates a
+# virtualenv, and this repository keeps no tools on PATH. A bare `entry: mypy`
+# dies with "Executable ... not found" the moment a commit is made from a shell
+# that has not sourced `.venv/bin/activate`. The relative path resolves because
+# pre-commit runs every hook with the repository root as the working directory.
+#
+# Consequence, carried deliberately: this file only works where `.venv` exists,
+# i.e. a developer host. CI runners and the Docker image have no `.venv`, so
+# neither may ever call `pre-commit run` — CI runs black, isort, flake8, mypy,
+# lint-imports and pytest as its own named steps.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 9.0.1
+    hooks:
+      # `profile = "black"` comes from pyproject.toml; repeating it here as a
+      # hook arg would create a second place to keep in sync.
+      - id: isort
+
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.5.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.3.0
+    hooks:
+      # Without these three, the hook still reports "Passed" while running none
+      # of the B / C4 / N checks. Versions match requirements-dev.txt exactly.
+      - id: flake8
+        additional_dependencies:
+          - flake8-bugbear==26.9.9
+          - flake8-comprehensions==3.17.0
+          - pep8-naming==0.15.1
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        entry: .venv/bin/mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [src, tests]
+      - id: import-linter
+        name: import-linter contracts
+        entry: .venv/bin/lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
