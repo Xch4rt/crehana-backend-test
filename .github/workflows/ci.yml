@@ -1,0 +1,96 @@
+# Every quality gate, on every push and every pull request, with no branch filter.
+#
+# Each gate below is a direct tool invocation, and that is a requirement rather than a
+# style preference. This repository's local git-hook configuration resolves its two
+# whole-program hooks through `.venv/bin/`-qualified entries so they work on a developer
+# host with no activated virtualenv; a runner installs into the system interpreter and
+# has no `.venv` at all, so driving the hooks from here could only fail with
+# "command not found". The nine steps below are the runner-side equivalent of the same
+# gate set, running the same tools at the same pins from requirements-dev.txt. The step
+# names are deliberately aligned with the hook ids so the two files can be read side by
+# side. DECISION_LOG.md records the split as an ADR.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# This job reads code and runs gates. It needs nothing else.
+permissions:
+  contents: read
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+
+    # Unused by Phase 1 tests on purpose. Having it green now means Phase 3's
+    # integration tests add a pytest marker rather than new CI infrastructure.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: taskmanager
+          POSTGRES_PASSWORD: taskmanager
+          POSTGRES_DB: taskmanager_test
+        ports:
+          - 5432:5432
+        # `-h 127.0.0.1` is load-bearing: the official image's init-time server listens
+        # only on a Unix socket, so a health command without it reports ready too early.
+        # The runner blocks on this declared check before the first step, which is why
+        # there is no hand-rolled `until pg_isready` loop anywhere in this file.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U taskmanager -d taskmanager_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 10s
+
+    # The only two settings fields with no default. Both values here are obviously fake
+    # and CI-only; nothing in this phase needs a real credential, and no repository
+    # secret is referenced anywhere in this workflow.
+    env:
+      DATABASE_URL: postgresql+psycopg://taskmanager:taskmanager@localhost:5432/taskmanager_test
+      JWT_SECRET: ci-only-secret-not-a-real-credential
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          # 3.13 is the authoritative interpreter for this project. The host venv may
+          # be newer; this job and the Docker image are what decide.
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Format check (black)
+        run: black --check src tests
+
+      - name: Import order check (isort)
+        run: isort --check-only src tests
+
+      - name: Lint (flake8)
+        run: flake8 src tests
+
+      - name: Type check (mypy strict)
+        run: mypy src tests
+
+      # Its own step so a boundary violation is a readable red step in the job log, in
+      # addition to being a failing test inside pytest. Always the console script -
+      # import-linter's command-line module run through `python -m` exits 0 with a real
+      # violation in place. `--no-logo` drops a nine-line banner from the log.
+      - name: Architecture contracts (import-linter)
+        run: lint-imports --no-logo
+
+      # The 75% coverage threshold rides along through pytest.ini addopts.
+      - name: Tests with coverage gate
+        run: pytest
