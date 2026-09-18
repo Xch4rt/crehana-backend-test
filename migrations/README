@@ -1,0 +1,21 @@
+Alembic revisions for the Task Manager API.
+
+Layout
+    env.py                  the migration driver (synchronous; see its docstring)
+    script.py.mako          the template new revisions are generated from
+    versions/0001_baseline.py   the complete schema, with a working downgrade()
+
+There is exactly one revision, and that is deliberate: 0001 creates the whole
+schema the domain entities describe. A second revision appears only when a real
+change needs one, never as a demonstration that versioning works.
+
+Commands (DATABASE_URL must be set; alembic.ini holds no URL on purpose)
+
+    alembic upgrade head        build the schema
+    alembic check               assert the schema matches the ORM models
+    alembic downgrade base      remove it again
+
+`alembic check` cannot see CHECK constraints - SQLAlchemy does not reflect them
+into a comparable form - so it proves the columns, types, keys and indexes and
+nothing about ck_tasks_status and its two siblings. Those are proven by the
+integration tests that attempt a forbidden insert and assert the refusal.
