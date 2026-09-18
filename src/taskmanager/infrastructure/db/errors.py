@@ -16,6 +16,9 @@ constraint prefix. A `flush()` inside each write method keeps the failure where
 its meaning still is, and this module is what the method inspects it with.
 """
 
+import psycopg
+from sqlalchemy.exc import IntegrityError
+
 
 class NaiveDatetimeFromDatabaseError(RuntimeError):
     """A timestamp came back from the database with no timezone attached.
@@ -53,3 +56,37 @@ class NaiveDatetimeFromDatabaseError(RuntimeError):
             f"{self.column} was read from the database without a timezone; "
             "the column must be TIMESTAMP WITH TIME ZONE."
         )
+
+
+def violated_constraint(error: IntegrityError) -> str | None:
+    """The name of the constraint PostgreSQL refused on, or None if unknowable.
+
+    The returned name is meant to be compared against the `Final` constants in
+    `constraints.py`, never against a literal: that comparison is the one place
+    a schema rename silently stops matching, because it fails no type check and
+    no lint run.
+
+    `None` means *unknowable*, and a caller must read it as "re-raise" rather
+    than as "no conflict". Both of the paths that produce it are real - a
+    non-psycopg original (a driver-level failure, or a unit test's stand-in) and
+    a psycopg error whose diagnostics carry no constraint name - and D-13 gives
+    them the same answer: let the exception reach the catch-all handler and
+    become the fixed 500 body, instead of inventing a business meaning for a
+    failure nothing here recognises.
+
+    Nothing but the *name* is read. The `IntegrityError` also carries the SQL
+    statement and its bound parameters, which is user data the moment a `WHERE`
+    clause holds an address; forwarding any of it into a `DomainError` would put
+    it in a response body (T-3-13).
+    """
+    original = error.orig
+    # `IntegrityError.orig` is typed `BaseException | None`, so this narrowing is
+    # mandatory under mypy strict and no suppression comment would remove it.
+    # It is a real `if` rather than the assertion-based narrowing idiom
+    # `presentation/api/errors/handlers.py` uses - the form this file's grep gate
+    # forbids, which is why it is described rather than spelled. There the
+    # narrowing can never fail, so an assertion costs no untestable branch; here
+    # the `None` result is a documented outcome with two tests of its own.
+    if isinstance(original, psycopg.Error) and original.diag.constraint_name:
+        return original.diag.constraint_name
+    return None
