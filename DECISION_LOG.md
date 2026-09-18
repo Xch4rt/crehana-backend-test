@@ -612,3 +612,169 @@ secret referenced by any step.
   Every component is verified individually (action tags, the `postgres:18-alpine` service, the
   `cache: pip` syntax, and every shell command executed locally), but the assembled YAML is
   unproven. One fix-up commit after the first push is budgeted.
+
+---
+
+## ADR-020: application command and result DTOs are frozen dataclasses, refining ADR-004
+
+**Context**
+Five artifacts written before Phase 2 assert that Pydantic types the application DTOs —
+`REQUIREMENTS.md` ARC-05, ADR-004's own decision line, the `.importlinter` comment above the
+`application-framework-free` contract, ROADMAP Phase 4 SC-5, and the `CLAUDE.md` rule that
+"Pydantic *is* allowed there". The Phase 2 planning session decided the opposite: commands and
+results are `@dataclass(frozen=True, slots=True)` and the application layer stays free of
+Pydantic. That decision is the newest and is authoritative, so five documents now contradict
+the code that Phase 2 actually shipped.
+
+**Options**
+
+- **Pydantic command and result models** — the shape four documents already describe, and
+  consistent with "strong typing with Pydantic" read maximally. Rejected: shape validation has
+  already happened once, at the HTTP boundary, where the request schema rejected a malformed
+  payload before a command object could exist. Running it a second time buys no safety and
+  makes the application layer depend on the web stack's validation library, which is the
+  dependency the layering exists to avoid.
+- **Frozen, slotted dataclasses** — `frozen=True` so a use case cannot rewrite its own input
+  halfway through, `slots=True` so a misspelled field is an `AttributeError` at the call site
+  rather than a silently ignored keyword.
+
+**Decision**
+Frozen slotted dataclasses, with `actor_id: UUID` as the first field of every command. This
+**refines ADR-004 rather than overturning it**: ADR-004's real claim is that Pydantic lives at
+the boundaries and never in the centre, and that claim is unchanged. Only the list of what
+counts as a boundary narrows — from "HTTP schemas, application DTOs and settings" to "HTTP
+schemas and settings". ADR-004 is not edited; this log is append-only, and a refinement by id
+is exactly the mechanism its header describes.
+
+`pydantic` is deliberately **not** added to the `application-framework-free` contract's
+`forbidden_modules`. Enforcement stays permissive on purpose: a later phase may have a
+legitimate reason for a Pydantic DTO, the current contract shape is a locked decision from the
+phase context, and a rule nobody has needed yet is a rule that will be deleted under pressure
+rather than obeyed. The convention is stated once, in `application/dto/commands.py`'s
+docstring, where the next person to write a command will read it.
+
+**Consequences**
+
+- ARC-05's wording, ROADMAP Phase 4 SC-5, the `.importlinter` comment and the `CLAUDE.md`
+  Project Rules line are amended to match (plan 02-07). Without that, Phase 4 verification
+  fails against its own text while the code is correct — the worst kind of red.
+- The mismatch is recorded here rather than quietly reconciled. Five documents saying one thing
+  and the code doing another is a fact about this project's history, and a decision log that
+  hides it is not worth keeping.
+- A command carries no validation of its own. Anything the domain must guarantee is guaranteed
+  by the entity, in one place, per the "no rule lives in two layers" rule.
+
+---
+
+## ADR-021: the `DomainError` base shape, and what the four handlers deliberately do not catch
+
+**Context**
+`.planning/research/ARCHITECTURE.md` Pattern 6 prescribes `__init__(self, message, **details)`
+for the base domain error. This repository's own flake8 rejects that signature with
+flake8-bugbear's B042, and each obvious B042-clean alternative breaks something else. The base
+class is also where the error contract's serialisability is won or lost, because the
+presentation layer turns `details` straight into a `problem+json` member.
+
+**Options**
+
+- **`__init__(self, message, **details)`** — the sketched shape. Rejected: it fails `make lint`,
+  and an inline `# noqa: B042` would suppress a check that is pointing at a real defect rather
+  than at a style opinion.
+- **`super().__init__(message)` only** — the smaller signature. Rejected: also B042, because the
+  check compares the number of *positional* arguments forwarded to `super().__init__()` with the
+  number of parameters the signature declares.
+- **A leaf subclass with its own signature and no `__reduce__`** — for example
+  `InvalidStatusTransitionError(current, requested)`. Rejected, and this is the interesting one:
+  it *passes* B042 and still breaks. `Exception.__reduce__` rebuilds an instance by calling
+  `cls(*self.args)`, so the leaf is reconstructed with the base class's arguments and raises
+  `AttributeError` during `pickle.loads` or `copy.copy`. B042's heuristic gives a false pass
+  here, which is precisely why the check is worth keeping unsuppressed elsewhere.
+- **One `__init__(message, details=None)` on the base, plus `__reduce__`.**
+
+**Decision**
+One `__init__(self, message: str, details: Details | None = None)` forwarding both parameters to
+`super().__init__()`; one `__reduce__` on the base delegating to a module-level `_restore` that
+rebuilds any subclass via `cls.__new__` without ever calling a subclass `__init__`; and an
+explicit `__str__` returning `self.message`, because forwarding two parameters makes `self.args`
+a 2-tuple and the inherited `__str__` would otherwise render the whole `details` dict into every
+log line built from `str(exc)`.
+
+The status mapping is decided here too. A domain `ValidationError` is **422**, on the
+well-formed-but-semantically-invalid reading — the same 422 an evaluator has already seen come
+out of Pydantic, so the API answers one code for one meaning. An invalid status transition is
+**409**, per D-01 and TASK-05: it is a conflict with the current state of the resource, not a
+defect in the payload.
+
+**Consequences**
+
+- A pickle/copy round-trip test is mandatory, not optional — it is the only thing standing
+  between a future leaf signature and the `AttributeError` above. It is also what takes
+  `exceptions.py` to 100% coverage, so the cost is already paid.
+- `details` values are constrained to `str | int | float | bool | None` rather than `Any`. A
+  `UUID` or a `TaskStatus` left in there would raise while the handler serialised the problem
+  body, turning a precise business answer into an unexplained 500. The narrow alias makes that
+  a mypy error at the raise site instead.
+- **`ResponseValidationError` is not a `RequestValidationError`** — both subclass
+  `fastapi.exceptions.ValidationException` and neither is a parent of the other. A response-model
+  mismatch therefore falls past the four registered handlers into the catch-all `Exception`
+  handler and becomes a 500 `internal_error`, not a 422. That is the intended outcome, because a
+  response-model mismatch is a server bug and not a client error, and it is recorded here so it
+  reads as a choice rather than as something nobody checked.
+- Leaf classes forward `details` as a keyword, which looks inconsistent next to
+  `InvalidStatusTransitionError`'s positional call. The reason is B042's positional-argument
+  count and it is documented in the module docstring; the stored state is identical either way.
+
+---
+
+## ADR-022: the domain's stdlib-only rule is proven by an AST test, not by import-linter alone
+
+**Context**
+ROADMAP success criterion 1 for Phase 2 says "the import-linter contract proves the `domain`
+package imports no third-party library". It cannot, as written. `domain-framework-free` is a
+`forbidden` contract with an enumerated list of nine distributions; it proves those nine are
+absent and says nothing about the tenth.
+
+**Options**
+
+- **`forbidden_modules = *`** — import-linter 2.15 does support the wildcard. Rejected on
+  evidence, not on taste: it was executed during this phase's research and reported
+  `dataclasses`, `datetime` and `enum` as violations, because a grimp graph built with
+  `include_external_packages = True` carries stdlib modules as first-class nodes. There is no
+  contract type meaning "everything except the standard library".
+- **`grimp.build_graph` inside a test** — reuses the resolver import-linter already uses, and
+  was verified working. Rejected: `grimp` reaches this environment only as a transitive
+  dependency of `import-linter`, and `requirements-dev.txt` states that it is intentionally
+  absent from the declared set. Importing it in a test would let a future `import-linter` bump
+  break the suite with a confusing `ModuleNotFoundError` in a file that has nothing to do with
+  the upgrade.
+- **`ast` + `sys.stdlib_module_names`** — parse every module under `src/taskmanager/domain/`,
+  collect each import's root name, and check it against the interpreter's own list.
+
+**Decision**
+The AST test, at `tests/architecture/test_domain_is_stdlib_only.py`, **kept alongside the
+enumerated contract rather than replacing it**. The contract gives targeted, readable failures
+naming the exact import path for the nine distributions that matter most; the AST test closes
+the general case. `sys.stdlib_module_names` is maintained by CPython for the running
+interpreter, so the check is honest on 3.13 in CI and on 3.14 on the developer host — the two
+sets differ (290 names against 297) and the test passes on both.
+
+**Consequences**
+
+- **No gate is added to `.pre-commit-config.yaml` or `.github/workflows/ci.yml`.** The check
+  rides inside `pytest`, which both files already invoke. That matters because those two files
+  do not derive from one another: per ADR-015 a new gate would have to be added to both, and the
+  cheapest way to avoid that divergence is not to create a gate at all.
+- The test carries an anti-vacuity guard, because a glob that matches nothing makes
+  `assert violations == []` pass forever. It asserts the scan found at least ten modules and
+  that four named ones — `exceptions.py`, `validation.py`, `value_objects/task_status.py` and
+  `entities/task.py` — were among them.
+- The gate was **observed** red on a planted `import greenlet` that `lint-imports` reported as
+  KEPT in the same tree, and green once the import was removed. Both captures, and the
+  contrasting exit codes, are committed at
+  `.planning/phases/02-domain-error-contract/evidence/domain-stdlib-red-green.txt`. Following
+  the Phase 1 precedent: a quality gate is not trusted here until it has been seen failing.
+- Import parsing is hand-rolled, which is a real cost — roughly fifteen statements that a
+  library would otherwise own. It is bounded: relative imports are skipped by `node.level`
+  rather than resolved, so the test never has to model Python's import system, only read it.
+
+---
