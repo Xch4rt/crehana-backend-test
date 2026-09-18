@@ -278,8 +278,10 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   `ValidationError` cannot carry the domain error contract, so validation lives at the
   boundaries.
 - `taskmanager.application` imports **no web framework and no ORM** (no `fastapi`,
-  `starlette`, `sqlalchemy`, `alembic`). Pydantic *is* allowed there — application DTOs are
-  Pydantic models.
+  `starlette`, `sqlalchemy`, `alembic`). Pydantic *is* permitted there and the contract is
+  deliberately not tightened — but application command and result DTOs are frozen dataclasses
+  (`@dataclass(frozen=True, slots=True)`) per ADR-020, so nothing in the layer imports it
+  today.
 - This is enforced automatically by the contracts in `.importlinter`, executed by
   `tests/architecture/test_layer_boundaries.py`, by `make arch` and by CI. A violating
   import fails a test, not a review.

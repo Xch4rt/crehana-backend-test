@@ -42,8 +42,13 @@ forbidden_modules =
     pwdlib
     httpx
 
-# The application layer orchestrates use cases through ports. It may use pydantic
-# (DTOs are pydantic models), but it must never see the web framework or the ORM.
+# The application layer orchestrates use cases through ports. pydantic is left out
+# of the list below deliberately: the contract is not tightened, because a later
+# phase may have a legitimate reason for a Pydantic DTO. ADR-020 chooses frozen
+# dataclasses for command and result DTOs, so nothing in this layer imports pydantic
+# today - that is a convention, stated once in application/dto/commands.py, not a
+# rule enforced here. What is enforced: the layer must never see the web framework
+# or the ORM.
 [importlinter:contract:application-framework-free]
 name = Application knows no web framework or ORM
 type = forbidden

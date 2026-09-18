@@ -91,7 +91,7 @@ every subsequent phase.
 **Requirements**: ARC-02, ARC-04, ARC-06, ARC-07
 **Success Criteria** (what must be TRUE):
 
-  1. `TaskList`, `Task` and `User` entities plus `TaskStatus`/`TaskPriority` enums are stdlib dataclasses/Enums, and the import-linter contract proves the `domain` package imports no third-party library.
+  1. `TaskList`, `Task` and `User` entities plus `TaskStatus`/`TaskPriority` enums are stdlib dataclasses/Enums, and `tests/architecture/test_domain_is_stdlib_only.py` proves the `domain` package imports no third-party library by checking every import root against `sys.stdlib_module_names` — something the enumerated import-linter contract cannot do (ADR-022).
   2. A closed `DomainError` hierarchy (not found, conflict, business-rule violation, authentication, authorization) carries a stable `code` and details, and domain unit tests show an invalid status transition raising the specific error rather than a generic exception.
   3. Every application port (`TaskRepository`, `TaskListRepository`, `UserRepository`, `UnitOfWork`, `PasswordHasher`, `TokenService`, `EmailNotifier`, `Clock`) exists as a `typing.Protocol` with no implementation, and the use-case class shape is fixed and documented.
   4. A single exception-handling point converts any `DomainError`, any request-validation error and any unexpected error into an `application/problem+json` body with one consistent RFC 9457 shape, proven by tests against a throwaway probe route — before any real router exists.
@@ -150,7 +150,7 @@ Plans:
   2. A caller can create, read, PATCH and delete a task inside a list; a task id requested under the wrong list returns 404; blank titles, over-length fields and past due dates are rejected with a specific error code.
   3. A dedicated status endpoint moves a task through `pending` → `in_progress` → `completed`, and an invalid transition returns a problem+json body naming the transition rather than a generic error; `status` cannot be changed through the generic PATCH.
   4. Listing a list's tasks filtered by `status` and/or `priority` returns only matching tasks, rejects invalid filter values with 422, and always reports `completion_percentage`, `total_tasks` and `completed_tasks` for the whole list — unchanged by the filter, `0.0` when empty, and produced by a single SQL aggregate.
-  5. Pydantic v2 models type every boundary crossed in this slice (HTTP request/response schemas and application command/result DTOs), and no router imports SQLAlchemy or raises `HTTPException` for a business failure.
+  5. Pydantic v2 models type every HTTP boundary crossed in this slice (request and response schemas), application command/result DTOs are frozen dataclasses per ADR-020, and no router imports SQLAlchemy or raises `HTTPException` for a business failure.
 
 **Plans**: TBD
 
