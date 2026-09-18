@@ -53,6 +53,27 @@ def test_short_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "at least 16 characters" in str(excinfo.value)
 
 
+def test_test_database_url_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The test-only DSN is optional: nothing in production depends on it."""
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("TEST_DATABASE_URL", raising=False)
+
+    assert Settings(_env_file=None).test_database_url is None
+
+
+def test_test_database_url_is_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When TEST_DATABASE_URL is exported it is read back verbatim (D-04)."""
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    explicit = "postgresql+psycopg://user:pass@localhost:5432/somewhere_else"
+    monkeypatch.setenv("TEST_DATABASE_URL", explicit)
+
+    assert Settings(_env_file=None).test_database_url == explicit
+
+
 def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     """get_settings() hands back one identical instance per process."""
     for key, value in ENV.items():

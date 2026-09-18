@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     app_name: str = "Task Manager API"
     environment: str = "local"
     database_url: str
+    # Test-only (D-04): nothing in the running application ever reads it, and
+    # `tests/integration/conftest.py` falls back to deriving the URL from
+    # `database_url` when it is unset. It is declared here anyway because the
+    # two ends of the configuration contract cannot be separated: the key must
+    # exist in `.env.example` and in this class, or in neither. `.env.example`
+    # parity is an exact set equality, and `extra="forbid"` turns an undeclared
+    # key present in a copied `.env` into a boot-time ValidationError - so
+    # documenting the key without declaring the field would break
+    # `cp .env.example .env && docker compose up` in production, not just in
+    # tests. `None` is the default, so no secret gains one.
+    test_database_url: str | None = None
     jwt_secret: str = Field(min_length=16)
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = Field(default=30, gt=0)
