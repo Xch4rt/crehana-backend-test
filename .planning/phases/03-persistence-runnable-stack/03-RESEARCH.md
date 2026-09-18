@@ -1539,7 +1539,7 @@ def test_the_models_and_the_migrations_do_not_disagree(migrated_database: None, 
 | A4 | psycopg 3 returns timezone-aware `datetime` for `timestamptz`, so the mapper never sees a naive value | WR-05 / D-11 | If a naive value can arrive, `require_utc` raises a domain `ValidationError` for an infrastructure fault — the exact defect WR-05 flagged. Mitigation: the WR-05 ADR must state the chosen behaviour, and one integration test must round-trip a timestamp and assert `tzinfo is not None` |
 | A5 | The two `caplog` tests in `tests/api/test_error_contract.py` will run *after* the migration fixture in a default (file-order) run | Pitfall 4 | If they run first they pass today and break on a `-p randomly` or `--lf` run — a latent, order-dependent failure. Mitigation: apply the `disable_existing_loggers=False` fix regardless of observed ordering; it costs one keyword argument |
 
-## Open Questions
+## Open Questions (RESOLVED — each recommendation below was adopted by the plans: Q1 → 03-10, Q2 → 03-03, Q3 → 03-02, Q4 → 03-01/03-06, Q5 → 03-04/03-11)
 
 1. **Where does the entrypoint's retry logic live — shell heredoc or `src/taskmanager`?**
    - What we know: a module under `src/taskmanager/` is unit-testable but enters the coverage
