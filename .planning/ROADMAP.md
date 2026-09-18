@@ -122,7 +122,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 02-07-PLAN.md — Reconcile ARC-05, ROADMAP SC-5, .importlinter and CLAUDE.md with ADR-020; append the Phase 2 AI_WORKFLOW record
+- [x] 02-07-PLAN.md — Reconcile ARC-05, ROADMAP SC-5, .importlinter and CLAUDE.md with ADR-020; append the Phase 2 AI_WORKFLOW record
 
 ### Phase 3: Persistence & Runnable Stack
 
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
-| 2. Domain & Error Contract | 6/7 | In Progress | - |
+| 2. Domain & Error Contract | 7/7 | In Progress | - |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |

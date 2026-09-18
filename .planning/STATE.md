@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-09-18T07:48:34.490Z"
-last_activity: 2026-09-18 -- Phase 02 plan 06 complete (the AST stdlib-only proof of the domain, plus ADR-020, ADR-021 and ADR-022)
+status: verifying
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-09-18T16:03:35.885Z"
+last_activity: 2026-09-18 -- Phase 02 plan 07 complete (documentation reconciled with ADR-020 and the Phase 2 AI_WORKFLOW record appended); phase ready for verification
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 15
-  completed_plans: 14
-  percent: 14
+  completed_plans: 15
+  percent: 29
 ---
 
 # Project State
@@ -28,10 +28,10 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 02 (domain-error-contract) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 02 plan 06 complete (the AST stdlib-only proof of the domain, plus ADR-020, ADR-021 and ADR-022)
+Status: Phase complete — ready for verification
+Last activity: 2026-09-18 -- Phase 02 plan 07 complete (documentation reconciled with ADR-020 and the Phase 2 AI_WORKFLOW record appended); phase ready for verification
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [█████████░] 93%
 | Phase 02 P04 | 18min | 3 tasks | 12 files |
 | Phase 02 P05 | 22min | 3 tasks | 17 files |
 | Phase 02 P06 | 10min | 2 tasks | 3 files |
+| Phase 02 P07 | 19min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,10 @@ Recent decisions affecting current work:
 - [Phase 02-06]: The gap is demonstrated, not asserted: a planted 'import greenlet' turns the new test red while lint-imports exits 0 reporting 'Domain is framework-free' KEPT - the graph even grew from 48 to 50 files, so grimp saw the import and the contract had nothing to say about it
 - [Phase 02-06]: The new check adds no gate to .pre-commit-config.yaml or ci.yml on purpose - it rides inside pytest, which both already invoke, so ADR-015's two-places rule never applies
 - [Phase 02-06]: ADR-020 refines ADR-004 rather than overturning it: DTOs are frozen slotted dataclasses, and pydantic is deliberately NOT added to application-framework-free's forbidden_modules
+- [Phase 02-07]: ROADMAP Phase 2 SC-1 amended beyond the plan's four artifacts: it credited the import-linter contract with proving the domain is stdlib-only, which 02-06 demonstrated it cannot; it now names tests/architecture/test_domain_is_stdlib_only.py and ADR-022
+- [Phase 02-07]: pydantic stays absent from application-framework-free's forbidden_modules and the .importlinter comment now records that as a decision - the previous comment claimed the opposite of the code, which is worse than either option
+- [Phase 02-07]: AI_WORKFLOW.md gained nine Phase 2 incident entries rather than the three the plan owes; each is traceable to a summary, an evidence file or a commit hash, and the uncommittable TDD RED step is recorded as a compromise with its cost
+- [Phase 02-07]: ARC-02 and ARC-04 were re-verified against the code before being ticked (three slotted entity dataclasses plus two StrEnums plus the AST proof; eight Protocol ports and a use case depending only on UnitOfWork and Clock), not inherited from a plan header
 
 ### Pending Todos
 
@@ -163,6 +168,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T07:45:55.865Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-09-18T16:03:35.878Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
