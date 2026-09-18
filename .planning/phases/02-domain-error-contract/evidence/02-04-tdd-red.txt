@@ -39,3 +39,29 @@ Task 1 - GREEN: the same command after problem.py and mapping.py exist
 The seven `status_for` cases (409 / 404 / 422 / 409 / 401 / 403 / 500), the exact
 serialized key order, the `urn:taskmanager:problem:x` type member, the
 `application/problem+json` media type and both `errors` omission cases all hold.
+
+
+Task 2 - RED: the two new app-factory tests before handlers.py exists
+----------------------------------------------------------------------
+    $ .venv/bin/pytest tests/unit/test_app_factory.py -q --no-cov
+    ==================================== ERRORS ====================================
+    _______________ ERROR collecting tests/unit/test_app_factory.py ________________
+    ImportError while importing test module '.../tests/unit/test_app_factory.py'.
+    Hint: make sure your test modules/packages have valid Python names.
+    Traceback:
+    .../importlib/__init__.py:88: in import_module
+        return _bootstrap._gcd_import(name[level:], package, level)
+    tests/unit/test_app_factory.py:11: in <module>
+        from taskmanager.presentation.api.errors.handlers import (
+    E   ModuleNotFoundError: No module named 'taskmanager.presentation.api.errors.handlers'
+    =========================== short test summary info ============================
+    ERROR tests/unit/test_app_factory.py
+    !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+    1 error in 0.31s
+
+
+Task 2 - GREEN: the same command after handlers.py and the create_app() wiring
+------------------------------------------------------------------------------
+    $ .venv/bin/pytest tests/unit/test_app_factory.py -q --no-cov
+    ...                                                                      [100%]
+    3 passed in 0.18s

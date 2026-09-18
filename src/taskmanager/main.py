@@ -10,13 +10,16 @@ runs `uvicorn --factory taskmanager.main:create_app`.
 from fastapi import FastAPI
 
 from taskmanager.infrastructure.config.settings import Settings, get_settings
+from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application, optionally with explicitly injected settings."""
     resolved = settings or get_settings()
-    return FastAPI(
+    app = FastAPI(
         title=resolved.app_name,
         version="0.1.0",
         openapi_url="/openapi.json",
     )
+    register_exception_handlers(app)
+    return app
