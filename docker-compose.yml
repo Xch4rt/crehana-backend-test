@@ -1,0 +1,52 @@
+# The runnable stack. One command: `docker compose up`.
+#
+# No top-level `version:` key. It has been obsolete since Compose v2 and only
+# earns a deprecation warning on every single invocation.
+#
+# Only `db` is defined so far. The `api` and `test` services arrive with the
+# Dockerfile entrypoint and the /health route later in this phase; `db` lands
+# first because nothing under tests/integration/ can run without it.
+
+services:
+  db:
+    # Pinned to the major version (ADR-013). `postgres:latest` would make the
+    # stack a different database from one clone to the next.
+    image: postgres:18-alpine
+    # Deliberately fake local-evaluation credentials, identical to the ones
+    # .github/workflows/ci.yml uses for its service container. No repository
+    # secret and no real credential appears anywhere in this file.
+    environment:
+      POSTGRES_USER: taskmanager
+      POSTGRES_PASSWORD: taskmanager
+      POSTGRES_DB: taskmanager
+    volumes:
+      # /var/lib/postgresql, NOT /var/lib/postgresql/data. PostgreSQL 18 images
+      # store the cluster in a major-version-specific subdirectory
+      # (PGDATA=/var/lib/postgresql/18/docker) so that `pg_upgrade --link` can
+      # work across a single mount point. A volume mounted at the old
+      # .../data path makes the entrypoint refuse to start, with a message
+      # about "PostgreSQL data in /var/lib/postgresql/data (unused
+      # mount/volume)" - observed on postgres:18-alpine while writing this file.
+      - pgdata:/var/lib/postgresql
+      # Read-only: the entrypoint executes these files as the database
+      # superuser, so the container has no business being able to rewrite them.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Published on purpose (D-15): host-side `make test` runs against this
+      # very container, so the integration suite and `docker compose up` share
+      # one database instead of drifting into two.
+      - "5432:5432"
+    healthcheck:
+      # `-h 127.0.0.1` is load-bearing: the official image's init-time server
+      # listens only on a Unix socket, so a health command without it reports
+      # ready too early - and `depends_on: condition: service_healthy` would
+      # then start the API against a server with no TCP listener. Identical
+      # reasoning, and identical flags, to .github/workflows/ci.yml.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:

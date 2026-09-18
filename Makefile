@@ -62,8 +62,15 @@ docker-test:
 	docker build --target test -t taskmanager-test .
 	docker run --rm taskmanager-test
 
+# The evaluator's path, and the reason it runs in the foreground: `up` streams
+# the database and API logs, so a failed migration or a refused connection is
+# visible instead of hidden behind a later `docker compose logs`.
 up:
-	@echo "docker compose arrives in Phase 3. For now: make docker-test"
+	docker compose up --build
 
+# Stops and removes the containers, and keeps the data volume. The reset that
+# also discards it is `docker compose down -v` - needed whenever the initdb
+# scripts change, because the postgres image runs them only against an empty
+# data directory.
 down:
-	@echo "docker compose arrives in Phase 3; there is nothing to stop yet."
+	docker compose down
