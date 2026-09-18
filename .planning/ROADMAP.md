@@ -27,7 +27,7 @@ evidence rather than reconstructed at the end.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Quality Gates** - Tooling, layer skeleton, enforced boundaries and CI exist before any application code (completed 2026-09-18)
-- [ ] **Phase 2: Domain & Error Contract** - Framework-free entities, ports and the single RFC 9457 error contract
+- [x] **Phase 2: Domain & Error Contract** - Framework-free entities, ports and the single RFC 9457 error contract (completed 2026-09-18)
 - [ ] **Phase 3: Persistence & Runnable Stack** - PostgreSQL, Alembic, UnitOfWork and a one-command `docker compose up`
 - [ ] **Phase 4: Task Lists & Tasks** - The full brief 1.a vertical slice: CRUD, status changes, filters, completion percentage
 - [ ] **Phase 5: Auth, Assignment & Notifications** - JWT login, ownership rules, task assignment and the simulated invitation email
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
-| 2. Domain & Error Contract | 7/7 | In Progress | - |
+| 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
