@@ -137,7 +137,46 @@ Plans:
   4. The use case owns the transaction: a UnitOfWork commits exactly once on success and rolls back on a raised `DomainError`, and no `.commit()` call exists anywhere under `infrastructure/repositories/`.
   5. Integration tests run against real PostgreSQL with per-test isolation, and the full gate (lint, typecheck, architecture, tests) is green.
 
-**Plans**: TBD
+**Plans**: 11 plans (9 waves)
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — ORM base, D-12 naming convention, the three row classes, and the case-sensitivity reconciliation
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — Alembic wiring, the 0001 baseline migration, the compose db service and the initdb script
+- [ ] 03-03-PLAN.md — TEST_DATABASE_URL on Settings and .env.example, the URL derivation, and SystemClock
+- [ ] 03-04-PLAN.md — Explicit ORM/entity mappers and the IntegrityError inspection (WR-05 settled)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-05-PLAN.md — The integration fixtures (D-01..D-04) plus the migration, schema and constraint proofs
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-06-PLAN.md — The task-list and user adapters and the SC-4 no-commit gate
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 03-07-PLAN.md — The task adapter: CRUD, SQL filters and the COUNT(*) FILTER aggregate
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 03-08-PLAN.md — Engine factory, SqlAlchemyUnitOfWork and the four transaction proofs
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 03-09-PLAN.md — __version__, the FastAPI dependencies, GET /health and the wired composition root
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 03-10-PLAN.md — Container entrypoint, Dockerfile COPY/ENTRYPOINT/HEALTHCHECK, compose api+test, Makefile
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 03-11-PLAN.md — Phase 3 ADRs, the AI_WORKFLOW entry and the full phase gate
 
 ### Phase 4: Task Lists & Tasks
 
@@ -209,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
-| 3. Persistence & Runnable Stack | 0/TBD | Not started | - |
+| 3. Persistence & Runnable Stack | 0/11 | Planned | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
