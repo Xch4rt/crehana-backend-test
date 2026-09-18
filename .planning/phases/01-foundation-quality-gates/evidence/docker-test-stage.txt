@@ -1,0 +1,140 @@
+Evidence: the Docker `test` stage was observed failing before it was shipped green
+Plan 01-05, Task 1 — captured 2026-09-18 on darwin/arm64, Docker Engine 29.2.0
+
+WHY THIS FILE EXISTS
+--------------------
+The research document publishes a three-stage Dockerfile and states it was built and
+run. Copied verbatim, its `test` stage does NOT pass this repository's suite: the stage
+copies `pytest.ini`, `.flake8`, `.importlinter` and `tests/`, but plan 01-02 added a unit
+test that reads `.env.example` from the repository root to assert that the file documents
+every declared settings field and nothing else. The research Dockerfile predates that test.
+
+This is exactly the failure shape this phase exists to eliminate: a container gate that
+looks complete, builds successfully, and reports "coverage gate reached" while one test
+is red. `docker run` exits non-zero, so `make docker-test` would have failed for an
+evaluator on the first try.
+
+
+SCENARIO A — the research Dockerfile verbatim (test stage without .env.example)
+-------------------------------------------------------------------------------
+$ docker build --target test -t taskmanager-test .
+... build succeeds ...
+
+$ docker run --rm taskmanager-test
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/app/.env.example'
+
+/usr/local/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.15-final-0 _______________
+TOTAL                                                  19      0      0      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+=========================== short test summary info ============================
+FAILED tests/unit/test_settings.py::test_env_example_documents_every_field - ...
+========================= 1 failed, 7 passed in 0.58s ==========================
+
+Note the two lines above the summary: coverage was 100% and the threshold message
+printed anyway. A reader skimming the tail of this log would conclude the gate passed.
+
+
+THE FIX
+-------
+One token added to the `test` stage's configuration COPY:
+
+    COPY pytest.ini .flake8 .importlinter .env.example ./
+
+`.env.example` is a tracked placeholder file containing no credential. The real `.env`
+stays excluded from the build context by `.dockerignore`, and neither file exists in the
+`runtime` stage, which copies only `/opt/venv`.
+
+
+SCENARIO B — as shipped
+-----------------------
+$ docker run --rm taskmanager-test
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /app
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, asyncio-1.4.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 8 items
+
+tests/architecture/test_layer_boundaries.py ..                           [ 25%]
+tests/unit/test_app_factory.py .                                         [ 37%]
+tests/unit/test_settings.py .....                                        [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.15-final-0 _______________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/__init__.py                 0      0      0      0   100%
+src/taskmanager/domain/__init__.py                      0      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py       0      0      0      0   100%
+src/taskmanager/infrastructure/config/settings.py      14      0      0      0   100%
+src/taskmanager/main.py                                 5      0      0      0   100%
+src/taskmanager/presentation/__init__.py                0      0      0      0   100%
+-----------------------------------------------------------------------------------------------
+TOTAL                                                  19      0      0      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================== 8 passed in 0.65s ===============================
+
+$ echo $?
+0
+
+$ make docker-test >/dev/null 2>&1; echo $?
+0
+
+
+RUNTIME STAGE OBSERVATIONS (same build, DOCK-01)
+------------------------------------------------
+$ docker run --rm taskmanager whoami
+app
+
+$ docker run --rm taskmanager python --version
+Python 3.13.15
+
+$ docker run --rm taskmanager ls -a /app
+.
+..
+
+$ docker run --rm taskmanager sh -c 'ls /opt/venv/lib/python3.13/site-packages | grep -i taskmanager'
+taskmanager
+taskmanager-0.1.0.dist-info
+
+$ docker image ls taskmanager --format '{{.Size}}'
+368MB
+
+$ docker history taskmanager | grep -ci secret
+0
+
+368 MB, not the 285 MB the research measured. The difference is the platform: this build
+is linux/arm64 with a BuildKit attestation manifest attached, and `docker image ls`
+reports the uncompressed size of the multi-manifest entry. Well under the 500 MB ceiling
+either way; the number is recorded rather than the research figure repeated.
+
+The runtime CMD was also exercised end to end, because "the image builds" and "the image
+serves" are different claims:
+
+$ docker run --rm -d -p 18000:8000 -e JWT_SECRET=... -e DATABASE_URL=... taskmanager
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18000/openapi.json
+200
+
+Both settings with no default were supplied through the environment at run time. Nothing
+is baked into the image.
