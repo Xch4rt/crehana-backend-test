@@ -61,6 +61,43 @@ What is already true of Phase 1:
 - Gate wiring: `pytest.ini` coverage settings, the `.importlinter` contracts and their pytest
   wrapper, `.pre-commit-config.yaml`, the `Makefile`, and the GitHub Actions workflow.
 
+What is already true of Phase 2:
+
+**Decided by the human**
+
+- The task transition matrix, and that a request to move a task to the status it already holds
+  is an idempotent no-op rather than a 409 (`02-CONTEXT.md` D-01 and D-02; the rule lives in
+  `Task.change_status` and nowhere else).
+- That `completed_at` is set on entering `completed` and cleared on leaving it (D-03) — which
+  is why every mutator takes `now` as an argument and the domain reads no clock (D-13).
+- The RFC 9457 member set, its order, and the stable URN `type` scheme
+  `urn:taskmanager:problem:{code}` (D-05, D-06), asserted by an exact list comparison in
+  `tests/api/test_error_contract.py` rather than described in prose.
+- That an unexpected error returns one fixed body in every environment, with no branch on a
+  debug flag (D-08). The handler cannot even see the settings object, because `presentation`
+  does not import `infrastructure` — a layering rule doing security work.
+- That application command and result DTOs are frozen dataclasses rather than Pydantic models
+  (`DECISION_LOG.md` ADR-020). This decision contradicted five existing artifacts; the
+  incident log below records how that was resolved.
+- That a domain `ValidationError` maps to 422 and not 400 (ADR-021), so a rule the entity
+  enforces and a rule the request schema enforces answer with the same status.
+- That `CompletionStats` ships in this phase even though the SQL aggregate behind it is Phase
+  3's work, so `TaskRepository.completion_stats` has a real return type instead of a
+  placeholder (`src/taskmanager/domain/value_objects/completion.py`).
+
+**Delegated to AI**
+
+- Executing candidate `DomainError` base shapes against this repository's real `.flake8`, and
+  against a real `pickle`/`copy` round trip, before one was adopted — four shapes, one
+  survivor (`.planning/phases/02-domain-error-contract/02-RESEARCH.md` §Pattern 6).
+- Discovering that mypy strict rejects the natural exception-handler signature, because
+  Starlette's handler type is invariant in its exception parameter; and that Starlette's
+  `ServerErrorMiddleware` always re-raises after a handler registered for bare `Exception`,
+  which is why exactly one test in the suite builds a tolerant HTTP client.
+- Writing the entities, the twelve-class error hierarchy, the eight ports, the four exception
+  handlers, and the 132 tests that specify them (the suite went from 8 to 140).
+- The AST import scanner in `tests/architecture/test_domain_is_stdlib_only.py`.
+
 _Phase 7 completes this section with the per-claim commit/file/test references._
 
 ---
@@ -90,6 +127,14 @@ this repository; each one is a file an evaluator can open.
   indistinguishable from a no-op. The coverage gate and the architecture contract were each
   driven red with a deliberate violation, observed failing, and driven green again by removing
   it — with the output captured.
+- **An AST test where an enumerated contract cannot reach.**
+  `tests/architecture/test_domain_is_stdlib_only.py` parses every module under
+  `src/taskmanager/domain/` with `ast` and asserts that each import root is either in
+  `sys.stdlib_module_names` or is `taskmanager` itself. `.importlinter`'s `forbidden` contract
+  can only prove that the nine *named* distributions are absent, and `forbidden_modules = *`
+  forbids `dataclasses`, `datetime` and `enum` along with everything else. The test was
+  observed red on a planted import that `lint-imports` reported as KEPT in the same tree —
+  the entry in the log below. Both checks are kept, for different jobs (ADR-022).
 
 ---
 
@@ -267,6 +312,251 @@ the always-green invocation of import-linter is on record with its exit codes.
 
 **What changed.** Driving each new gate red once, and committing the capture, is now the
 standard for this project rather than an exercise done for these two.
+
+### 2026-09-17 — Parallel execution was switched off, because the quality gates only exist on the developer host
+
+**What happened.** The planning tooling can execute independent plans concurrently, each in its
+own git worktree. This repository's pre-commit hooks invoke `.venv/bin/black`,
+`.venv/bin/flake8` and `.venv/bin/mypy` by qualified path — a Phase 1 decision, taken because
+the bare entries the research recommended died with "Executable not found" under pre-commit's
+minimal PATH
+(`.planning/phases/01-foundation-quality-gates/evidence/pre-commit-venv-entry.txt`). A fresh
+worktree has no `.venv`. Every commit made inside one would therefore have failed its hooks, or
+been pushed through with `--no-verify`, which `CLAUDE.md` forbids by name.
+
+**How it was caught.** By reading the consequence Phase 1 had already written down — ADR-015
+records that the hook file is developer-host-only — before switching the feature on, rather
+than after the first commit that skipped its gates.
+
+**Consequence.** Phase 2 ran sequentially and took longer than it needed to. That is the trade,
+and it is the right way round: a faster pipeline that routes around the gates is worth less
+than a slower one that does not.
+
+**What changed.** Worktree isolation was disabled in `.planning/config.json` (commit
+`c1c1cae`), with the reason in the commit subject rather than in someone's memory.
+
+### 2026-09-18 — Test-first is real in this repository, but the red step cannot be a commit
+
+**What happened.** Every code plan in Phase 2 is marked test-first, and in each one the tests
+were written and run against a tree where the module they import did not exist yet. None of
+those red states is a commit. The `mypy (strict)` pre-commit hook rejects a test file importing
+a module that does not exist, so a red commit is reachable only through `--no-verify`, which
+`CLAUDE.md` forbids. Phase 1 could commit a red test at plan 01-02 only because the hooks did
+not exist until plan 01-04.
+
+**How it was caught.** At the first attempt, in plan 02-01. The hook refused the commit.
+
+**Consequence.** `git log` alone cannot prove the tests came first in Phase 2, and in two plans
+the `test` commit lands *after* the `feat` commit it specifies, which reads backwards. That is
+a genuine cost of keeping the gate absolute.
+
+**What changed.** The red run is performed for real and its output committed verbatim beside
+the green code — five files now, `evidence/02-0N-tdd-red.txt`. Each plan summary states the
+real ordering plainly in a "TDD Gate Compliance" section instead of implying a sequence the
+hooks would not allow. The compromise is recorded as a compromise; the alternative was to
+weaken a gate so that a commit graph would look tidier.
+
+### 2026-09-18 — A test asserted an exception type that differs between this project's two interpreters
+
+**What happened.** Plan 02-01 specified `pytest.raises(AttributeError)` for assigning an
+undeclared attribute to a `@dataclass(frozen=True, slots=True)` value object. It failed on the
+developer host, CPython 3.14.3, with `TypeError: super(type, obj): obj (instance of
+CompletionStats) is not an instance or subtype of type`. A probe on `python:3.13-slim-trixie` —
+the Docker and CI runtime — raised `FrozenInstanceError`, an `AttributeError` subclass, for the
+same assignment.
+
+**How it was caught.** By running the test. The direction is what makes it worth recording: the
+usual failure is "green on my machine, red in CI", and this was the inverse — the assertion
+would have been green in Docker and in CI, and red only on the host.
+
+**Consequence.** Had the host also been 3.13, this test would have shipped asserting an
+implementation detail of one interpreter, and Phase 6 would have found it on some future
+upgrade instead.
+
+**What changed.** The test now asserts the portable claim: the assignment is refused, the
+attribute still does not exist, the instance has no `__dict__`, and `__slots__` is exactly the
+declared fields. Both interpreters and both exception types are named in a comment so the
+tuple does not read as hedging, and the probe is captured in
+`evidence/02-01-frozen-slots-setattr.txt`. Every plan in this phase since then runs
+`make docker-test` on the 3.13 image as a matter of course, not only when something looks
+suspicious.
+
+### 2026-09-18 — The project's own research prescribed an exception base class the linter rejects, and the alternative it reached for is a false pass
+
+**What happened.** `.planning/research/ARCHITECTURE.md` Pattern 6 specifies
+`DomainError.__init__(self, message, **details)`. flake8-bugbear rejects that signature:
+
+```
+B042 Exception class with `__init__` should pass all args to `super().__init__()` to work in edge cases of `pickle` and `copy.copy()`. It should also not take any kwargs.
+```
+
+Two further obvious shapes fail the same check, and the one that passes it makes `str(exc)`
+render as `"('A task cannot move…', {'from': …})"` — which would put the structured details
+dict into every log line built from `str(exc)`.
+
+The subtle part came next. A leaf subclass that takes domain objects and forwards derived
+values — `InvalidStatusTransitionError(current, requested)` calling `super().__init__(f"…",
+{"from": current.value, "to": requested.value})` — **passes** B042 and genuinely breaks
+`pickle` and `copy.copy`, because `Exception.__reduce__` returns `(cls, self.args)` and
+`self.args` holds the base's `(message, details)`, so the rebuild calls a two-`TaskStatus`
+signature with a string:
+
+```
+AttributeError: 'str' object has no attribute 'value'
+```
+
+Then, during execution, B042 fired four more times in a case the research had never exercised.
+`bugbear.check_for_b042` counts *positional* arguments against declared parameters, so every
+single-parameter leaf that forwards a message **and** a details dict trips it, while the
+two-parameter leaf the research had verified does not.
+
+**How it was caught.** The base-class part by executing four candidate shapes against the real
+`.flake8` and a real pickle round trip before adopting one. The leaf-arity part by `make lint`
+failing during plan 02-02, after which the checker's own source was read rather than guessed at
+— both the four findings and the source are in `evidence/02-02-b042-leaf-arity.txt`.
+
+**Consequence.** Written as prescribed, the module would not have passed `make lint` at all —
+loud, and cheap. Written the B042-clean way instead, it would have passed every gate this
+project has and broken the first time anything pickled or copied a domain error, which is the
+expensive version.
+
+**What changed.** One `__reduce__` on the base, delegating to a module-level `_restore`, fixes
+every subclass at once; an explicit `__str__` keeps the details dict out of log lines; every
+single-parameter leaf passes `details` as a keyword so the counts agree. No suppression comment
+was used anywhere, so the check stays live, and
+`test_domain_error_survives_pickle_and_copy` asserts the round trip for all thirteen classes.
+
+### 2026-09-18 — A verification command that passed was measuring one file
+
+**What happened.** Plan 02-04's own verification step ran
+`coverage report --include='*/taskmanager/presentation/*' --include='*/taskmanager/main.py'
+--fail-under=100`. coverage.py treats the second `--include` as a *replacement* for the first,
+so the command measured `main.py` alone — 8 statements — and would have exited 0 with the four
+new exception handlers entirely uncovered.
+
+**How it was caught.** By reading what the report printed rather than only its exit code. It
+passed; the file list underneath it was one line long.
+
+**Consequence.** A green gate that proved almost nothing, in the step whose entire purpose was
+to prove the new module was covered.
+
+**What changed.** The comma-separated single-flag form was run as well — 50 statements, 4
+branches, 0 missed — and both captures are in `evidence/02-04-tdd-red.txt`. The rule
+generalized: a verification command that passes is still read for what it actually measured.
+
+### 2026-09-18 — mypy checks a mutable Protocol member invariantly, and the phase research had not recorded it
+
+**What happened.** The phase research verified that an in-memory fake can satisfy the
+`UnitOfWork` port, but not the constraint on how the fake's attributes must be annotated.
+Written the obvious way, mypy strict refused the conformance binding: `Incompatible types in
+assignment ... tasks: expected "TaskRepository", got "FakeTaskRepository"`. A protocol
+*variable* member is checked invariantly, because the protocol permits assignment to it; only
+method members and read-only properties are covariant.
+
+**How it was caught.** `mypy src tests`, at plan 02-05's verification step.
+
+**Consequence.** Nothing shipped wrong, and the cost was minutes. It is recorded because Phase
+3's real `SqlAlchemyUnitOfWork` will meet the identical rule, and because "verified working"
+in a research document does not mean "every constraint on it was written down".
+
+**What changed.** The fake binds each repository twice — once typed as the port, which is what
+makes it conform, and once under its concrete type, which is what tests assert on — pointing at
+the same object, with the invariance rule in the class docstring so the duplication does not
+read as an accident. Plan 02-05's summary hands the constraint forward to Phase 3.
+
+### 2026-09-18 — A roadmap success criterion claimed something no gate could prove
+
+**What happened.** Phase 2's success criterion 1 read "the import-linter contract proves the
+`domain` package imports no third-party library". It cannot. A `forbidden` contract proves only
+that the modules it *enumerates* are absent, and this one enumerates nine. The wildcard escape
+hatch is not an answer either: `forbidden_modules = *` was executed during research and
+reported `dataclasses`, `datetime` and `enum` as violations, because a graph built with
+`include_external_packages = True` carries stdlib modules as first-class nodes.
+
+**How it was caught.** By demonstration rather than argument. `import greenlet` — a real,
+already-installed package (3.5.6, a transitive of `SQLAlchemy[asyncio]`) that is simply not one
+of the nine — was planted in a domain module. The new AST test failed, naming
+`('_violation.py', 'greenlet')`. In the same tree, `lint-imports` reported
+(`.planning/phases/02-domain-error-contract/evidence/domain-stdlib-red-green.txt`, RUN 2):
+
+```
+Analyzed 50 files, 80 dependencies.
+-----------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+EXIT=0
+```
+
+The file counts are the detail that closes the argument: 48 files / 79 dependencies on the
+clean tree, 50 / 80 here. grimp resolved the import perfectly and added greenlet to the graph
+as a node. The contract simply had nothing to say about it.
+
+**Consequence.** A phase would have been signed off against a criterion whose proof did not
+exist — the same failure mode as the Phase 1 entry above, one level up: there the test could
+never fail, here the claim was never testable by the thing it named.
+
+**What changed.** `tests/architecture/test_domain_is_stdlib_only.py` checks every import root
+under `src/taskmanager/domain/` against `sys.stdlib_module_names`, guarded by a companion test
+asserting the scan really walked the tree — which was itself watched failing, by raising its
+minimum from 10 to 99. The enumerated contract is kept rather than replaced, because its
+failure message names the offending module, the package and the line number, which the generic
+test cannot (ADR-022). And the criterion's wording was amended to name the test instead of the
+contract, in the same plan that wrote this entry.
+
+### 2026-09-18 — An evidence file described an observation that had not been made
+
+**What happened.** While `evidence/domain-stdlib-red-green.txt` was being written, its appendix
+on the test's empty-scan failure mode was drafted with a *plausible* pytest capture — an
+abbreviated traceback and a `1 failed` line — rather than a real one. Nothing about it looked
+wrong.
+
+**How it was caught.** Before the commit, against the rule these files already carry: every
+line of an evidence capture is verbatim output of a command that was actually run. The draft
+was checked against that rule and failed it.
+
+**Consequence.** In a document whose entire value is that it was not composed by hand, a
+reconstructed capture is the worst available defect: indistinguishable from the real thing to a
+reader, and false to anyone who re-runs the command. It would also have sat inside the exact
+artifact this project points at when it claims its documentation is verified rather than
+asserted.
+
+**What changed.** The observation was actually made — `MINIMUM_DOMAIN_MODULES` was raised to
+99, the guard test run, and the drafted block replaced with the real output, which differs in
+several details including the docstring echo, the `assert 11 >= 99` values, the enumerated
+`scanned` set, the line number and `1 failed, 3 deselected in 0.05s`. The constant was restored
+from a backup in the same command and re-checked by grep.
+
+### 2026-09-18 — Five artifacts said the application DTOs are Pydantic models; the code says frozen dataclasses
+
+**What happened.** `REQUIREMENTS.md` ARC-05, `DECISION_LOG.md` ADR-004, the `.importlinter`
+comment above the application contract, `ROADMAP.md` Phase 4 success criterion 5, and the
+`CLAUDE.md` Project Rules line all stated that Pydantic types the application command and
+result DTOs. The newest user decision said the opposite — frozen, slotted dataclasses, with the
+application layer free of Pydantic — and that is what Phase 2 shipped. ARC-05 in particular had
+become unsatisfiable as literally worded: Phase 4 would have been verified against a sentence
+its own correct code contradicts.
+
+**How it was caught.** By the phase research being asked for a conflicts table rather than a
+merged narrative — the same mechanism that caught the ten research conflicts in the entry
+above. Five sources were listed side by side with what each one says, and the contradiction was
+visible in the table.
+
+**Consequence.** Left alone, exactly one of two bad things happens: a correct implementation is
+marked red against stale text, or the requirement is quietly reinterpreted at verification time
+and stops meaning anything.
+
+**What changed.** The decision was made by the human and recorded as ADR-020, *appended*.
+ADR-004 was not edited — this log is append-only, and ADR-020 refines it by id, narrowing what
+counts as a boundary from "HTTP schemas, application DTOs and settings" to "HTTP schemas and
+settings" while leaving ADR-004's actual claim intact. The four stale texts were then amended
+in one commit, each with a grep asserting the new wording is present and the old wording is
+gone, so a partial reconciliation fails the plan. `pydantic` was deliberately **not** added to
+the application contract's `forbidden_modules`: enforcement stays permissive by decision, and
+the `.importlinter` comment now says so rather than claiming something untrue.
 
 ---
 
