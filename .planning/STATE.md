@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-18T22:01:09.509Z"
-last_activity: 2026-09-18 -- Phase 03 plan 02 complete (Alembic wiring, compose db service, 0001 baseline migration)
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-18T22:11:41.628Z"
+last_activity: 2026-09-18 -- Phase 03 plan 03 complete (TEST_DATABASE_URL on Settings and .env.example, the make_url derivation, SystemClock)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 17
-  percent: 65
+  completed_plans: 18
+  percent: 69
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 3 of 11
+Plan: 4 of 11
 Status: Ready to execute
-Last activity: 2026-09-18 -- Phase 03 plan 02 complete (Alembic wiring, compose db service, 0001 baseline migration)
+Last activity: 2026-09-18 -- Phase 03 plan 03 complete (TEST_DATABASE_URL on Settings and .env.example, the make_url derivation, SystemClock)
 
-Progress: [███████░░░] 65%
+Progress: [███████░░░] 69%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [███████░░░] 65%
 | Phase 02 P07 | 19min | 2 tasks | 6 files |
 | Phase 03 P01 | 16min | 3 tasks | 9 files |
 | Phase 03 P02 | 24min | 3 tasks | 8 files |
+| Phase 03 P03 | 6min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,10 @@ Recent decisions affecting current work:
 - [Phase 03-02]: The baseline revision keeps literal constraint names instead of importing constraints.py - a revision is a frozen record, and the agreement is already checked in two hops (test_models.py, then alembic check)
 - [Phase 03-02]: Autogenerate DID render the three CHECK constraints: Pitfall 8's blindness applies to comparing an existing table, not to adding one - but alembic check still cannot prove they survive, so DB-04 rests on 03-05's insert-and-refuse tests
 - [Phase 03-02]: sa.literal_column('lower(email)') in the migration against text('lower(email)') in the model is drift-free, because alembic check compares the reflected database to the model and never to the revision file
+- [Phase 03-03]: TEST_DATABASE_URL is a declared optional Settings field AND a .env.example key - RESEARCH Pitfall 6 option (a); documenting it in only one of the two would make cp .env.example .env fail at boot under extra=forbid
+- [Phase 03-03]: The test DSN is derived with make_url(url).set(database=...).render_as_string(hide_password=False), never a substring substitution - the compose credential pair taskmanager:taskmanager puts the word in the user and the password too
+- [Phase 03-03]: .env.example documents the compose host as a COMMENTED DATABASE_URL line - a second live assignment would survive the parity test (it collects key names) while silently changing which host pydantic reads (D-15)
+- [Phase 03-03]: SystemClock is the runtime Clock adapter in infrastructure, returning datetime.now(UTC); conformance is structural under mypy strict, with no base class and no ABC
 
 ### Pending Todos
 
@@ -184,6 +189,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T22:01:09.503Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-18T22:09:51.683Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None

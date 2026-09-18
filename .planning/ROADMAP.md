@@ -147,7 +147,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 03-02-PLAN.md — Alembic wiring, the 0001 baseline migration, the compose db service and the initdb script
-- [ ] 03-03-PLAN.md — TEST_DATABASE_URL on Settings and .env.example, the URL derivation, and SystemClock
+- [x] 03-03-PLAN.md — TEST_DATABASE_URL on Settings and .env.example, the URL derivation, and SystemClock
 - [ ] 03-04-PLAN.md — Explicit ORM/entity mappers and the IntegrityError inspection (WR-05 settled)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -248,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
-| 3. Persistence & Runnable Stack | 2/11 | In Progress | - |
+| 3. Persistence & Runnable Stack | 3/11 | In Progress | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
