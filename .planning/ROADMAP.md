@@ -323,7 +323,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-03-PLAN.md — `scripts/break-check.sh`, `make break-check`, and the incident entry naming what two breaks did not catch
+- [x] 06-03-PLAN.md — `scripts/break-check.sh`, `make break-check`, and the incident entry naming what two breaks did not catch
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -357,7 +357,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
-| 6. Test Hardening & Coverage | 2/4 | In progress | - |
+| 6. Test Hardening & Coverage | 3/4 | In progress | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
 ## Standing Rules

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — waves 1-2 (06-01, 06-02) complete
-last_updated: 2026-09-19T21:40:00.000Z
-last_activity: 2026-09-19 -- 06-02 complete: the assertion-quality gate (both halves) planted and driven red nine ways, 29 mutating tests swept, ten exemptions registered; 1066 passed, 100% coverage
+stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — waves 1-3 (06-01, 06-02, 06-03) complete
+last_updated: 2026-09-19T22:10:00.000Z
+last_activity: 2026-09-19 -- 06-03 complete: make break-check breaks src/ five ways and proves all five turn the suite red in ~13s, its three safety properties each falsified once, and the episode with both original survivals recorded in AI_WORKFLOW.md; 1069 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 59
-  completed_plans: 57
-  percent: 97
+  completed_plans: 58
+  percent: 98
 ---
 
 # Project State
@@ -27,25 +27,25 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: 3 of 4 (06-01, 06-02 complete)
+Plan: 4 of 4 (06-01, 06-02, 06-03 complete)
 Status: Executing Phase 06
-Last activity: 2026-09-19 -- 06-02 complete: a test that asserts only a status code, or mutates
-without reading the change back, now fails the build; 29 mutating tests swept and ten exemptions
-registered, each of which fails the moment it stops being necessary
+Last activity: 2026-09-19 -- 06-03 complete: roadmap SC-4 is now one command - five deliberate
+defects, all five red, src/ restored, and AI_WORKFLOW.md records the two breaks that originally
+were not caught, including the one that had token expiry reported as enforced by nothing
 
-Progress: [██████████] 97%
+Progress: [██████████] 98%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phase 7 is not yet planned, so 57/59 means
-"57 plans executed, the two remaining Phase 6 plans written and waiting", not a share of the
+`total_plans` counts planned plans only - phase 7 is not yet planned, so 58/59 means
+"58 plans executed, the last Phase 6 plan written and waiting", not a share of the
 milestone.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 57
+- Total plans completed: 58
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -59,7 +59,7 @@ milestone.
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
-| 06 | 2 | - | - |
+| 06 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -124,6 +124,7 @@ milestone.
 | Phase 05 P17 | 25min | 5 tasks | 18 files |
 | Phase 06 P01 | 15min | 5 tasks | 7 files |
 | Phase 06 P02 | 30min | 4 tasks | 7 files |
+| Phase 06 P03 | 22min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -826,6 +827,12 @@ Recent decisions affecting current work:
 - [Phase 06-02]: REQUIRED_NO_REREAD is an equality in both directions, and carries a fourth gate beyond the plan's three: an exempted test must still be an offender with its marker stripped, so an exemption that stops being needed fails until it is removed
 - [Phase 06-02]: Five login tests stay exempt rather than swept even though three of them register first - the register is setup proved by the dedicated re-read test, and adding a directory GET would satisfy a tool rather than add a claim
 - [Phase 06-02]: STATE.md and ROADMAP.md edited by hand again, for the reason 05-16, 05-17 and 06-01 record: the gsd-sdk state handlers reset the percent, inject blank lines between decision bullets and miscount totals
+- [Phase 06-03]: break-check.sh's trap restores exactly the files it has mutated (a MUTATED accumulator), NOT the `git checkout -- src/` the plan and 06-RESEARCH specify - a blanket checkout can destroy uncommitted work the script never touched, and 06-02 produced a live instance of that; the dirty-tree refusal makes the blanket form usually harmless, which is not the same as safe
+- [Phase 06-03]: BREAK_CHECK_PYTEST is the script's one seam and the header says it exists for tests/unit/test_break_check.py alone: a throwaway repository has no .venv, and running the real suite there would make a unit test take 13s and need PostgreSQL
+- [Phase 06-03]: the trap test's stub interrupts its own caller with `kill -TERM "$PPID"` rather than the test polling for the mutation window - a poll that misses the window still sees a non-zero exit and a clean tree from the next break's precondition, so it would pass for the wrong reason
+- [Phase 06-03]: the mutated path the unit test plants is read out of the script with a regex, not restated, so a reordered or repointed break table cannot leave the tests exercising a path the script no longer touches
+- [Phase 06-03]: the per-break counts are lower than the by-hand baseline for breaks 1-3 (7/5/30 against 17/6/33, a named selection rather than the whole suite) and HIGHER for 4 and 5 (5 and 2 against 3 and 1), which is 06-01's two D-14 fixes showing up; every break now reddens at least one test that is not a fakes-based road pin
+- [Phase 06-03]: STATE.md and ROADMAP.md edited by hand again, the fourth consecutive plan to record the same gsd-sdk handler regressions
 
 ### Pending Todos
 
@@ -863,6 +870,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T21:40:00.000Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: .planning/phases/06-test-hardening-coverage/06-03-PLAN.md
+Last session: 2026-09-19T22:10:00.000Z
+Stopped at: Completed 06-03-PLAN.md
+Resume file: .planning/phases/06-test-hardening-coverage/06-04-PLAN.md
