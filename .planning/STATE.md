@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: planning
 stopped_at: Completed 04-12-PLAN.md
-last_updated: "2026-09-19T07:12:54.542Z"
+last_updated: "2026-09-19T07:27:59.681Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
@@ -22,13 +22,13 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 04 — task-lists-tasks
+**Current focus:** Phase 5 — auth, assignment & notifications
 
 ## Current Position
 
-Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 12 of 12
-Status: Phase complete — ready for verification
+Phase: 5
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-09-19
 
 Progress: [██████████] 100%
@@ -37,7 +37,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 37
+- Total plans completed: 49
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -48,6 +48,7 @@ Progress: [██████████] 100%
 | 01 | 8 | - | - |
 | 02 | 7 | - | - |
 | 03 | 11 | - | - |
+| 04 | 12 | - | - |
 
 **Recent Trend:**
 
@@ -342,6 +343,7 @@ None yet.
   would undermine the project's own thesis.
 
 - Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same 599 tests - host 100.00% over 1155 statements, container 99.20% over 1267. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image) and is pre-existing, visible in Phase 3 at 730 vs 772. The eleven missed lines are the trailing statements of the 04-08 route handlers and are proven executed by the labelled probe in `.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to the same coverage measurement rather than argue the number down; no pragma and no omit.
+- Phase 4 review CR-01 (04-REVIEW.md): write paths read-validate-write without a row lock or version column; concurrent writes reproduced a forbidden completed->pending transition and a lost update. Unowned by any roadmap phase - decide: fix via /gsd-code-review 4 --fix, fold into Phase 6, or document as a known limitation. Also WR-01 (padded own-name false 409), WR-02/WR-03 (due_date overflow and NUL -> 500).
 
 ## Deferred Items
 
