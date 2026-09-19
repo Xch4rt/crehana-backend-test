@@ -38,7 +38,7 @@ run that proved nothing.
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -65,6 +65,7 @@ from taskmanager.infrastructure.db.mappers import (
     user_to_row,
 )
 from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from taskmanager.infrastructure.security.resources import SecurityResources
 from taskmanager.main import create_app
 from taskmanager.presentation.api.actor import get_current_actor
 from taskmanager.presentation.api.dependencies import get_uow
@@ -379,6 +380,80 @@ async def api_client(
         yield client, app
 
 
+@pytest.fixture
+async def authenticated_client(
+    session_factory: Callable[[], AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncIterator[tuple[AsyncClient, FastAPI]]:
+    """The same application as `api_client`, with authentication left switched on.
+
+    Everything here is `api_client` verbatim - the monkeypatched environment,
+    the fictional DSN, the factory call, the `get_uow` override over the
+    connection-bound session factory, the `(client, app)` yield - with exactly
+    one line removed. The removed line is the actor override, and removing it
+    is the entire purpose of this fixture (D-20).
+
+    **Why two fixtures rather than one.** `api_client` supplies the caller
+    explicitly, which is what keeps the ~120 Phase 4 tests about task lists and
+    tasks rather than about tokens, and what keeps `acting_as` working verbatim
+    as a way of impersonating a stranger. The price is that a request through
+    it never reaches the decode at all, so no assertion made through it says
+    anything about authentication.
+
+    **This is therefore the only harness through which three things may be
+    measured**: the 401 legs of every authenticated route, the anonymous column
+    of D-04's permission matrix, and the statement counts. A count taken
+    through the other fixture would still read D-11's *previous* numbers,
+    because the confirmation read that decision added happens inside the very
+    dependency that override replaces - a green test asserting the old count
+    would hide D-11 entirely, which is the outcome D-20 names as unacceptable.
+
+    **Its price is paid by every test that uses it**: the caller's `users` row
+    has to be seeded before the first request, because the real dependency
+    confirms the row exists on *every* request. That is not a setup tax to be
+    engineered away - it is precisely the property under test (T-5-15), and a
+    fixture that pre-seeded a caller would make the unknown-subject case
+    unreachable.
+
+    What it does not do is mint a token for you. `bearer_header` below does
+    that, and a test that wants an anonymous request simply sends no header.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+    app.dependency_overrides[get_uow] = lambda: SqlAlchemyUnitOfWork(session_factory)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, app
+
+
+async def bearer_header(app: FastAPI, user_id: UUID) -> str:
+    """An `Authorization` value this very application will accept.
+
+    The token is minted through the application's **own** token service, read
+    off the container the composition root put on `app.state`. A second service
+    built here would need the secret, the algorithm and the lifetime restated
+    in a test module, and the three would agree with the application only until
+    one of them was edited - at which point every test in the phase would fail
+    with an indistinguishable 401 and nothing to point at. Reading the
+    application's object cannot drift, and it exercises the wiring plan 05-10
+    added as a side effect.
+
+    The narrowing is the one `dependencies.py` explains in full:
+    `State.__getattr__` is annotated to return `Any`, so the container has to be
+    named once for the type checker to have anything left to check. It is named
+    here rather than per call site, for the same reason that module gives.
+
+    Deliberately not a fixture. A fixture would have to decide *whose* token it
+    was, and the tests that matter most here mint one for a subject that was
+    never seeded, or for a second user in the same test.
+    """
+    security = cast(SecurityResources, app.state.security)
+    return f"Bearer {await security.token_service.issue_access_token(user_id)}"
+
+
 @contextmanager
 def acting_as(app: FastAPI, user_id: UUID) -> Iterator[None]:
     """Run the block as a different caller, and put the seam back afterwards.
@@ -397,6 +472,14 @@ def acting_as(app: FastAPI, user_id: UUID) -> Iterator[None]:
     real work to do now - exiting puts the fixture's own default back, where
     before there was nothing to put back and the `pop` branch was the only one
     a test ever took.
+
+    **It impersonates; it does not authenticate.** That is the right trade for
+    a test asking who owns a task list, and the wrong one for a test asking
+    whether a credential is accepted: this replaces the very dependency such a
+    test exists to exercise. Combining it with `authenticated_client` is
+    therefore a contradiction rather than a convenience - a token would be
+    minted, sent, and then ignored in favour of the override. Those tests mint
+    a second token with `bearer_header` instead, which is what a client does.
     """
     previous = app.dependency_overrides.get(get_current_actor)
     app.dependency_overrides[get_current_actor] = lambda: user_id
