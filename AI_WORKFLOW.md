@@ -1163,6 +1163,44 @@ plausible and the checks that would have exposed the alternative, is the honest 
 deliberate-break spot check (TEST-05) is where this claim gets tested properly, by inverting the
 completion-percentage formula and requiring the suite to go red.
 
+### 2026-09-19 — The host and the container disagree about coverage, and the container is wrong
+
+**What happened.** The Phase 4 gate runs the same suite twice: `make test` on the developer host
+(Python 3.14.3) and `make docker-test` in the image (Python 3.13.15). Both report `599 passed`.
+The host reports `1155` statements, `0` missed, `100.00%`. The container reports `1267` statements,
+`11` missed, `99.20%`.
+
+**How it was caught.** By reading both coverage tables instead of both exit codes. Both runs pass
+the 75% gate, so nothing failed and nothing would have drawn attention to the difference.
+
+**Consequence, in two parts.** The *statement-count* difference is expected and pre-existing:
+Python 3.14 evaluates annotations lazily (PEP 649), so a Pydantic model's field annotations are
+not executable statements on the host and are in the container. The Phase 3 capture shows the same
+suite at `730` statements on the host and `772` in the container, both at 100.00%.
+
+The *eleven missed lines* are new, and they are all the trailing statements of the route handlers
+plan 04-08 added — the lines after the `await <use case>.execute(...)` in each handler.
+
+**How the obvious conclusion was ruled out.** "Eleven uncovered lines in the newest code" reads
+like eleven untested lines. It was checked rather than assumed: one test was run on its own in the
+container —
+`test_create_returns_201_with_a_location_header_and_the_full_representation`, which asserts
+`response.headers["Location"]` and then follows the URL it carries. `routers/task_lists.py` lines
+136-138 are the only code in the project that sets that header. The test **passes**, and coverage
+reports 136-139 as missed in the same run. A line whose effect is asserted by a passing test was
+executed, so this is a measurement artifact of coverage under the container's interpreter, not
+dead code.
+
+**What changed: nothing, deliberately.** A `# pragma: no cover` is forbidden by `CLAUDE.md` and
+would have converted a measurement artifact into a permanent exemption; "fixing" the number by
+removing an assertion would be worse than the artifact. Both transcripts and the one-test probe —
+labelled as an addendum, because it was run *after* the uninterrupted sequence rather than inside
+it — are in
+`.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`. It is handed to **Phase 6**,
+which owns TEST-03 and therefore owns the honesty of the coverage number: the right move there is
+to identify the coverage-core behaviour and pin the two runs to the same measurement, not to argue
+the number down.
+
 ---
 
 This log is appended to at the end of every subsequent phase.
