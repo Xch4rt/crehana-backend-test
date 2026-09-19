@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-09-19T04:53:45.565Z"
-last_activity: 2026-09-19 -- Phase 4 planning complete
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-09-19T05:03:27.803Z"
+last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 26
+  completed_plans: 27
   percent: 43
 ---
 
@@ -22,16 +22,16 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 4 — task lists & tasks
+**Current focus:** Phase 04 — task-lists-tasks
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: 04 (task-lists-tasks) — EXECUTING
+Plan: 2 of 12
 Status: Ready to execute
-Last activity: 2026-09-19 -- Phase 4 planning complete
+Last activity: 2026-09-19
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -81,6 +81,7 @@ Progress: [██████████] 100%
 | Phase 03 P09 | 16min | 3 tasks | 11 files |
 | Phase 03 P10 | 19min | 3 tasks | 5 files |
 | Phase 03 P11 | 22min | 3 tasks | 5 files |
+| Phase 04 P01 | 10min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -234,6 +235,11 @@ Recent decisions affecting current work:
 - [Phase 03-11]: The gate capture was written to a scratch path and copied in afterwards, because writing it into .planning/ first would have made STEP 1's `git status --porcelain` non-empty - the one line in the transcript that has to be blank
 - [Phase 03-11]: All eight requirement ticks taken (DB-01..DB-05, ARC-08, DOCK-02, DOCK-03), each re-verified against a named test or a named line of the gate capture rather than against a plan header - the 02-07 precedent, after ten consecutive plans deferred them
 - [Phase 03-11]: Roadmap SC-4's wording says `infrastructure/repositories/` while the shipped path is `infrastructure/db/repositories/`; the claim is true of the real path and the gate scans the real path, and the discrepancy is recorded rather than silently reinterpreted
+- [Phase 04-01]: test_get_settings_is_cached had been red on the developer host since 03-03 added TEST_DATABASE_URL to .env; fixed by monkeypatch.chdir(tmp_path) - the test's ISOLATION, never its assertion, since _env_file=None on the get_settings() path stops testing the function as production calls it
+- [Phase 04-01]: Task.reprioritise carries no value guard - TaskPriority is a StrEnum and the enum-typed boundary field refuses non-members, so a defensive check would be an unreachable branch the no-pragma coverage rule could not excuse
+- [Phase 04-01]: Task.DEFAULT_PRIORITY is the single copy of TASK-01's medium and Task.create reads it; a test binds inspect.signature(Task.create) to the ClassVar so 04-07's schema default cannot drift from the entity's
+- [Phase 04-01]: the Unset sentinel is a single-member enum confined to application/dto/ - the docstring records the measured cost of the rejected Pydantic variant (a _Unset component in /openapi.json, the explicit-null error split across body.title.str and body.title.enum[_Unset]), and the narrowing was proven by deleting the guard and observing mypy report return-value
+- [Phase 04-01]: requirement ticks LIST-04/TASK-01/TASK-03/TASK-08 deliberately NOT taken - 04-12 is the last claimant of all four and this plan ships only their domain-side preconditions, no endpoint
 
 ### Pending Todos
 
@@ -267,6 +273,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T03:37:22.136Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-task-lists-tasks/04-CONTEXT.md
+Last session: 2026-09-19T05:03:27.795Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
