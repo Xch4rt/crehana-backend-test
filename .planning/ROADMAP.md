@@ -309,7 +309,25 @@ Plans:
   4. A deliberate-break spot check — inverting the completion-percentage formula — turns the suite red, and the episode is recorded in `AI_WORKFLOW.md`.
   5. `--cov-fail-under=75` passes locally and in CI with coverage measured over `src/taskmanager` only, with tests excluded from the denominator.
 
-**Plans**: TBD
+**Plans**: 4 plans (4 waves)
+
+Plans:
+
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — The four totality gates, the transition complement, and the two tests that passed for the wrong reason
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-02-PLAN.md — The assertion-quality gate, the re-read sweep, and the no_reread exemption that has to justify itself
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 06-03-PLAN.md — `scripts/break-check.sh`, `make break-check`, and the incident entry naming what two breaks did not catch
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 06-04-PLAN.md — The coverage configuration pin, the marker partition, `make test-unit`, the ADRs and the five requirement ticks
 
 ### Phase 7: Documentation & Delivery
 
