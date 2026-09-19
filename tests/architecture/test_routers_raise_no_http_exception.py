@@ -121,6 +121,7 @@ REQUIRED_SCANNED_MODULES: Final[frozenset[str]] = frozenset(
         "routers/auth.py",
         "routers/task_lists.py",
         "routers/tasks.py",
+        "routers/users.py",
         "schemas/auth.py",
         "schemas/task_lists.py",
         "schemas/tasks.py",
