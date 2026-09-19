@@ -378,6 +378,47 @@ async def test_list_for_owner_returns_only_that_owners_lists_in_creation_order(
     assert await repository.list_for_owner(MISSING_OWNER_ID) == []
 
 
+async def test_list_for_owner_breaks_a_tie_on_created_at_with_the_id(
+    session: AsyncSession,
+) -> None:
+    """WR-03: the ordering has to be total, not merely present.
+
+    Three lists share one instant to the microsecond, which is not a contrived
+    fixture: D-13 has the use case read the clock once per request, so a Phase 4
+    operation that creates more than one list writes them all under the same
+    `created_at`. With `ORDER BY created_at` alone PostgreSQL may return those
+    rows in any order it finds convenient, and it is free to choose a different
+    one on the next run - so an assertion about the first element would be
+    flaky rather than wrong, which is the harder kind to notice.
+
+    The names and the insertion order are both chosen to disagree with the
+    asserted order, and that took a second attempt: with names that sorted the
+    same way the identifiers do, PostgreSQL answered from the
+    `uq_task_lists_owner_id_name` index and the test passed against the very
+    query it was written to reject. Here neither alphabetical order
+    (Alpha, Mike, Zulu) nor insertion order (Alpha, Mike, Zulu) matches the
+    expected one, so only an explicit tie-break on `id` can produce it.
+    """
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+
+    await repository.add(
+        a_task_list(task_list_id=OTHER_LIST_ID, name="Alpha", created_at=NOW)
+    )
+    await repository.add(
+        a_task_list(task_list_id=THIRD_LIST_ID, name="Mike", created_at=NOW)
+    )
+    await repository.add(a_task_list(task_list_id=LIST_ID, name="Zulu", created_at=NOW))
+
+    stored = await repository.list_for_owner(OWNER_ID)
+
+    assert [task_list.id for task_list in stored] == [
+        LIST_ID,
+        OTHER_LIST_ID,
+        THIRD_LIST_ID,
+    ]
+
+
 async def test_exists_with_name_is_case_sensitive_and_owner_scoped(
     session: AsyncSession,
 ) -> None:

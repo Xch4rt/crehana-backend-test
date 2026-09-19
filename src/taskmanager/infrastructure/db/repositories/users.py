@@ -79,9 +79,15 @@ class SqlAlchemyUserRepository:
         The ordering is the same determinism argument `list_for_owner` makes: an
         unordered `SELECT` may come back in any order the server finds
         convenient, and an assertion about the first element of a response would
-        then pass on one run and fail on the next.
+        then pass on one run and fail on the next. `id` is the tie-break for the
+        same reason it is one there (review fix WR-03): `created_at` alone is
+        not a total order, so two accounts written under one clock reading -
+        a seed script, a fixture, a future bulk import - would be free to swap
+        places between runs.
         """
-        rows = await self._session.scalars(select(UserRow).order_by(UserRow.created_at))
+        rows = await self._session.scalars(
+            select(UserRow).order_by(UserRow.created_at, UserRow.id)
+        )
         return [user_to_entity(row) for row in rows]
 
     def _refused(self, error: IntegrityError) -> NoReturn:

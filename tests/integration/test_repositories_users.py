@@ -253,3 +253,25 @@ async def test_list_all_returns_every_user_in_creation_order(
     stored = await repository.list_all()
 
     assert [user.email for user in stored] == [OTHER_EMAIL, EMAIL]
+
+
+async def test_list_all_breaks_a_tie_on_created_at_with_the_id(
+    session: AsyncSession,
+) -> None:
+    """WR-03: `created_at` alone is not a total order, so `id` follows it.
+
+    Two accounts written under one clock reading - a seed script, a fixture, a
+    future bulk import - would otherwise be free to swap places between runs,
+    and a first-element assertion above this repository would be flaky rather
+    than wrong. They are inserted in descending id order, so returning them in
+    insertion order fails here.
+    """
+    repository = SqlAlchemyUserRepository(session)
+    await repository.add(
+        a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL, created_at=NOW)
+    )
+    await repository.add(a_user(user_id=USER_ID, email=EMAIL, created_at=NOW))
+
+    stored = await repository.list_all()
+
+    assert [user.id for user in stored] == [USER_ID, OTHER_USER_ID]

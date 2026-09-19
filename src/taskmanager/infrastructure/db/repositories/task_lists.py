@@ -124,11 +124,20 @@ class SqlAlchemyTaskListRepository:
         fail on the next. The owner filter is in SQL rather than in a
         comprehension over a full read, so no caller can accidentally perform an
         unscoped one (ADR-008).
+
+        `id` is the tie-break, and it is what makes the ordering *total*
+        (review fix WR-03). `created_at` alone is not: D-13 has the use case
+        read the clock once per request, so two lists created in one call carry
+        the same instant to the microsecond, and PostgreSQL is then free to
+        return them either way round - by index order, by physical order, by
+        whatever the plan happened to be - and to choose differently on the next
+        run. The same pair appears in
+        `SqlAlchemyTaskRepository.list_for_task_list` for the same reason.
         """
         statement = (
             select(TaskListRow)
             .where(TaskListRow.owner_id == owner_id)
-            .order_by(TaskListRow.created_at)
+            .order_by(TaskListRow.created_at, TaskListRow.id)
         )
         rows = await self._session.scalars(statement)
         return [task_list_to_entity(row) for row in rows]
