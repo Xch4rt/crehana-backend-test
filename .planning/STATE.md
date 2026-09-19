@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-09-PLAN.md
-last_updated: "2026-09-19T16:50:41.712Z"
-last_activity: 2026-09-19 -- Phase 05 plan 09 complete
+stopped_at: Completed 05-11-PLAN.md
+last_updated: "2026-09-19T17:08:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 plan 11 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 48
-  percent: 89
+  completed_plans: 49
+  percent: 91
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 11 of 16
-Status: Executing Phase 05 (plans 01-10 complete; 05-11 next)
-Last activity: 2026-09-19 -- Phase 05 plan 09 complete
+Plan: 12 of 16
+Status: Executing Phase 05 (plans 01-11 complete; 05-12 next)
+Last activity: 2026-09-19 -- Phase 05 plan 11 complete
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ Progress: [█████████░] 89%
 | Phase 05 P08 | 13min | 3 tasks | 13 files |
 | Phase 05 P10 | 14min | 3 tasks | 10 files |
 | Phase 05 P09 | 21min | 3 tasks | 7 files |
+| Phase 05 P11 | 24min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -564,6 +565,34 @@ Recent decisions affecting current work:
   taken - 05-16 is the last claimant, the twelfth consecutive plan in this phase to make the same
   call: a schema with no route above it proves no requirement
 
+- [Phase 05-11]: the access token's lifetime joined SecurityResources as a third member, because the
+  plan required a provider and none existed - expires_in must describe the lifetime the token was
+  actually signed with, and both now come from one builder call rather than from two reads of the
+  same setting; dependencies.py still reads no configuration per request (grep -c get_settings
+  prints 0), which is the RC-3 property the container exists to keep
+- [Phase 05-11]: GET /auth/me publishes a 404 the plan's enumeration (200/401/500) omitted -
+  profile.py documents that leg as reachable by a deletion landing between the token check and the
+  read, and this package's own rule is that every route declares its full refusal set; an
+  undeclared but reachable refusal is the dishonesty the rule exists to prevent
+- [Phase 05-11]: login is the one handler in the project that builds its own command - 05-09
+  deliberately declared no login schema because the fields arrive through the OAuth2 form object,
+  so the rename from the form's username to the command's email happens at that single call site
+  and is commented as the exception it is
+- [Phase 05-11]: Task 3's red step is a FALSIFICATION rather than a failing-first test - the task's
+  only artifact is a test and everything it asserts was built by tasks 1 and 2, so a throwaway
+  route with no caller parameter was planted, the partition named it by path and the count test
+  read 12 == 16 - 3 (evidence/05-11-open-route-falsification.txt carries both runs)
+- [Phase 05-11]: configure_logging() is create_app's FIRST statement, before the settings are
+  resolved, and the lifespan was rejected in a comment naming both reasons - the HTTP harness never
+  enters the lifespan (ADR-056), so the call would be untested by every test that speaks HTTP, and
+  D-06 keeps the startup half empty
+- [Phase 05-11]: coverage fell from 100.00% to 99.59% and was left there - the seven uncovered
+  statements are the three handler bodies, nothing drives them over HTTP until 05-13, and no pragma
+  and no omit entry was added; 05-13 owes the return to 100%
+- [Phase 05-11]: requirement ticks AUTH-01/AUTH-02/AUTH-05 deliberately NOT taken - 05-16 is the
+  last claimant, the thirteenth consecutive plan in this phase to make the same call: the routes
+  exist here, but their behaviour is asserted over HTTP by 05-13
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -598,6 +627,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T16:50:41.712Z
-Stopped at: Completed 05-09-PLAN.md
+Last session: 2026-09-19T17:08:00.000Z
+Stopped at: Completed 05-11-PLAN.md
 Resume file: None

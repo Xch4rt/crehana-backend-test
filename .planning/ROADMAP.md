@@ -270,7 +270,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 05-11-PLAN.md — routers/auth.py, configure_logging in the composition root, and the Authorize-button contract
+- [x] 05-11-PLAN.md — routers/auth.py, configure_logging in the composition root, and the Authorize-button contract
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 10/16 | In Progress | - |
+| 5. Auth, Assignment & Notifications | 11/16 | In Progress | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
