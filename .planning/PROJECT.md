@@ -68,17 +68,29 @@ and the STATE.md blocker).
 - [x] Strong typing with Pydantic — every HTTP boundary has request and response models
       (`extra="forbid"`); application DTOs are frozen dataclasses per ADR-020
 
+Validated in Phase 5: Auth, Assignment & Notifications (2026-09-19) — all twelve AUTH/ASGN/NOTF
+requirements verified against the live stack, 1019 tests, 100% host coverage, nineteen
+operations. The first verification found a gap (the published `.env.example` placeholder was
+accepted as the JWT signing key, and a token was forged against the running container); plan
+05-17 closed it with `make env` plus a boot-time refusal (ADR-084) and closed four review
+warnings; re-verification passed 6/6. Four info-level review items remain open (see
+05-REVIEW.md), and ADR-066/ADR-067 record two conceded security properties.
+- [x] Login and authentication with JWT protecting endpoints — register, OAuth2 password
+      login, `/auth/me`; every route is either one of three named open ones or requires the
+      bearer scheme; 404 for what the caller cannot see, 403 for what they may not do
+- [x] Task assignment: assign a responsible user to each task — owner-only assign/unassign,
+      the assignee may read a task and change its status, `GET /users` and
+      `GET /tasks/assigned-to-me` make ids and work discoverable
+- [x] Fake notification: simulated email invitation to users (no real sending) — sent through
+      the `EmailNotifier` port after the commit as one JSON log line; a failing notifier never
+      undoes the assignment
+
 ### Active
 
 **Mandatory — stack (PDF "Requisitos")**
 - [ ] Python + FastAPI
 - [ ] Tests with pytest
 - [ ] flake8 as linter, black as formatter
-
-**Bonus — use cases (PDF 1.b), all in scope**
-- [ ] Login and authentication with JWT protecting endpoints
-- [ ] Task assignment: assign a responsible user to each task
-- [ ] Fake notification: simulated email invitation to users (no real sending)
 
 **Mandatory — project structure (PDF 2)**
 - [ ] Clean layered structure: Domain, Application/UseCases, Infrastructure
@@ -180,4 +192,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-19 after Phase 4 (Task Lists & Tasks) completion*
+*Last updated: 2026-09-19 after Phase 5 (Auth, Assignment & Notifications) completion*
