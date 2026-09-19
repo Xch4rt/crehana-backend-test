@@ -1,0 +1,36 @@
+Port-change RED capture - Phase 4, plan 04-02, between Task 1 and Task 2
+Date: 2026-09-18
+Host: macOS arm64, CPython 3.14.3 in .venv, mypy 2.3.1, pytest 9.1.1
+
+Command:
+  .venv/bin/mypy src tests ; echo $?
+
+What this proves: adding `list_for_owner_with_stats` to the `TaskListRepository`
+Protocol breaks every implementation of that port at once, statically. Nothing
+here is a runtime failure - `make typecheck` is the gate, and the two conformance
+modules 02-05 and 03-08 wrote are what make the breakage *visible* at the
+assignment line rather than at a call site in a later phase.
+
+The state below is the tree with Task 1 applied (the port, the in-memory fake and
+the two unit-test modules) and Task 2 not yet applied (the SQLAlchemy adapter).
+Only the SQLAlchemy side is red, which is the expected shape: the fake was
+updated in the same edit as the port, per 04-PATTERNS section 4.
+
+Why this is a capture and not a commit: CLAUDE.md requires `make typecheck` green
+before every commit and pre-commit enforces it, with `--no-verify` forbidden. So
+the red step is observed and recorded here, and Task 1 and Task 2 ship as one
+commit - the same compromise plan 02-01 recorded for its TDD RED step
+(evidence/02-01-tdd-red.txt).
+
+================================================================================
+RED - mypy with the port method added and the adapter not yet written
+================================================================================
+
+src/taskmanager/infrastructure/db/unit_of_work.py:115: error: Incompatible types in assignment (expression has type "SqlAlchemyTaskListRepository", variable has type "TaskListRepository")  [assignment]
+src/taskmanager/infrastructure/db/unit_of_work.py:115: note: "SqlAlchemyTaskListRepository" is missing following "TaskListRepository" protocol member:
+src/taskmanager/infrastructure/db/unit_of_work.py:115: note:     list_for_owner_with_stats
+tests/unit/infrastructure/test_adapter_ports.py:68: error: Incompatible types in assignment (expression has type "SqlAlchemyTaskListRepository", variable has type "TaskListRepository")  [assignment]
+tests/unit/infrastructure/test_adapter_ports.py:68: note: "SqlAlchemyTaskListRepository" is missing following "TaskListRepository" protocol member:
+tests/unit/infrastructure/test_adapter_ports.py:68: note:     list_for_owner_with_stats
+Found 2 errors in 2 files (checked 101 source files)
+exit: 1

@@ -1,40 +1,82 @@
-"""One behaviour of the in-memory double, pinned to a database rule.
+"""Behaviours of the in-memory doubles, each pinned to a rule the database keeps.
 
-`FakeTaskListRepository.exists_with_name` is what every Phase 4 use-case test
-will run LIST-06's duplicate-name pre-check against, and the only thing that
-makes those tests meaningful is that the fake refuses exactly what
-`uq_task_lists_owner_id_name` refuses. It drifted once already: the fake folded
-case while D-12 specifies a plain `UNIQUE (owner_id, name)`, so a use case could
-have been proven correct against a constraint PostgreSQL will never enforce.
+A fake is only worth testing where it can *disagree* with the adapter it stands
+in for, and two places in `FakeTaskListRepository` can.
 
-The rejected alternative is trusting the integration tests to catch it. They
-would - eventually, in a later phase, as a confusing 500 from a duplicate insert
-the use case believed it had already excluded. This file fails instead, in
+`exists_with_name` is what every Phase 4 use-case test will run LIST-06's
+duplicate-name pre-check against, and the only thing that makes those tests
+meaningful is that the fake refuses exactly what `uq_task_lists_owner_id_name`
+refuses. It drifted once already: the fake folded case while D-12 specifies a
+plain `UNIQUE (owner_id, name)`, so a use case could have been proven correct
+against a constraint PostgreSQL will never enforce.
+
+`list_for_owner_with_stats` is LIST-03's whole collection with its counters, and
+the fake has two ways to be wrong about it. It can count something other than
+what the task repository stores - then a use case that computed the percentage
+itself would pass - and it can return the lists in insertion order, which is the
+divergence 04-PATTERNS §11 names: `list_for_owner` had no ordering at all while
+the adapter has always sorted by `(created_at, id)`, so a D-13 assertion about
+the first element would pass in a unit test and fail over HTTP.
+
+The rejected alternative in both cases is trusting the integration tests to catch
+it. They would - eventually, in a later phase, as a confusing 500 from a
+duplicate insert, or as a flaky ordering assertion. This file fails instead, in
 milliseconds, at the line that would have to change.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
-from tests.unit.application.fakes import FakeTaskListRepository
+from taskmanager.domain.value_objects.task_status import TaskStatus
+from tests.unit.application.fakes import FakeTaskListRepository, FakeTaskRepository
 
 # Fixed literals, never uuid4()/now(): an assertion about a lookup key must be
 # reproducible from the source alone.
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+EARLIER = NOW - timedelta(days=1)
 OWNER_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_OWNER_ID = UUID("33333333-3333-4333-8333-333333333333")
 TASK_LIST_ID = UUID("22222222-2222-4222-8222-222222222222")
+OTHER_LIST_ID = UUID("44444444-4444-4444-8444-444444444444")
+THIRD_LIST_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 
-def _stored_list(*, owner_id: UUID, name: str) -> TaskList:
+def _stored_list(
+    *,
+    owner_id: UUID,
+    name: str,
+    task_list_id: UUID = TASK_LIST_ID,
+    created_at: datetime = NOW,
+) -> TaskList:
     """A list as the repository would hold it, built through the entity."""
     return TaskList.create(
-        task_list_id=TASK_LIST_ID,
+        task_list_id=task_list_id,
         owner_id=owner_id,
         name=name,
-        now=NOW,
+        now=created_at,
     )
+
+
+async def _given_tasks(
+    tasks: FakeTaskRepository,
+    *,
+    task_list_id: UUID,
+    total: int,
+    completed: int,
+) -> None:
+    """`total` tasks in one list, `completed` of them marked done."""
+    for index in range(total):
+        task = Task.create(
+            task_id=UUID(f"{task_list_id.hex[:8]}-6666-4666-8666-{index:012d}"),
+            task_list_id=task_list_id,
+            title=f"Task {index}",
+            now=NOW,
+        )
+        if index < completed:
+            task.change_status(TaskStatus.COMPLETED, now=NOW)
+        await tasks.add(task)
 
 
 async def test_exists_with_name_matches_the_case_sensitive_unique_constraint() -> None:
@@ -62,3 +104,118 @@ async def test_exists_with_name_is_scoped_to_one_owner() -> None:
     await repository.add(_stored_list(owner_id=OWNER_ID, name="Groceries"))
 
     assert await repository.exists_with_name(OTHER_OWNER_ID, "Groceries") is False
+
+
+async def test_listing_with_stats_returns_one_entry_per_list_of_the_owner() -> None:
+    """LIST-03's shape: the whole collection, each entry carrying its counters.
+
+    The two lists get different mixes on purpose. A fake that returned the same
+    `CompletionStats` for every entry - or one built from the first list it
+    found - would satisfy an assertion about the length and about the entities,
+    and only the differing counters catch it.
+    """
+    tasks = FakeTaskRepository()
+    repository = FakeTaskListRepository(tasks)
+    await repository.add(_stored_list(owner_id=OWNER_ID, name="Groceries"))
+    await repository.add(
+        _stored_list(owner_id=OWNER_ID, name="Chores", task_list_id=OTHER_LIST_ID)
+    )
+    await _given_tasks(tasks, task_list_id=TASK_LIST_ID, total=4, completed=1)
+    await _given_tasks(tasks, task_list_id=OTHER_LIST_ID, total=2, completed=2)
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert [
+        (entry[0].name, entry[1].total, entry[1].completed) for entry in entries
+    ] == [
+        ("Groceries", 4, 1),
+        ("Chores", 2, 2),
+    ]
+    assert [entry[1].percentage for entry in entries] == [25.0, 100.0]
+
+
+async def test_listing_with_stats_reports_zero_for_a_list_with_no_tasks() -> None:
+    """An empty list is an ordinary list, and reports 0.0 rather than raising.
+
+    This is the in-memory half of the `count(*)`-versus-`count(tasks.id)` trap
+    the adapter's LEFT OUTER JOIN carries: there, a list with no tasks would
+    otherwise report one phantom task. A fake that counted the same way - or
+    that skipped a list with no tasks entirely - disagrees here.
+    """
+    tasks = FakeTaskRepository()
+    repository = FakeTaskListRepository(tasks)
+    await repository.add(_stored_list(owner_id=OWNER_ID, name="Empty"))
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert len(entries) == 1
+    _, stats = entries[0]
+    assert stats.total == 0
+    assert stats.completed == 0
+    assert stats.percentage == 0.0
+
+
+async def test_listing_with_stats_never_returns_another_owners_list() -> None:
+    """The owner is the only scope, exactly as the adapter's `WHERE` is (T-4-06).
+
+    The other owner's list is given tasks too, so an implementation that counted
+    across the whole task store rather than per list would also be caught here.
+    """
+    tasks = FakeTaskRepository()
+    repository = FakeTaskListRepository(tasks)
+    await repository.add(_stored_list(owner_id=OWNER_ID, name="Mine"))
+    await repository.add(
+        _stored_list(owner_id=OTHER_OWNER_ID, name="Theirs", task_list_id=OTHER_LIST_ID)
+    )
+    await _given_tasks(tasks, task_list_id=TASK_LIST_ID, total=1, completed=0)
+    await _given_tasks(tasks, task_list_id=OTHER_LIST_ID, total=3, completed=3)
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert [entry[0].name for entry in entries] == ["Mine"]
+    assert entries[0][1].total == 1
+
+
+async def test_listing_with_stats_is_ordered_by_created_at_then_id() -> None:
+    """D-13's total order, in the fake as in the adapter (04-PATTERNS §11).
+
+    Two of the three lists share an instant to the microsecond, which is not
+    contrived: the clock is read once per request, so a call that creates more
+    than one list stamps them all identically. The insertion order below
+    disagrees with the expected order on both axes, so neither `dict` ordering
+    nor a sort on `created_at` alone can produce it - only the `id` tie-break.
+    """
+    repository = FakeTaskListRepository()
+    await repository.add(
+        _stored_list(
+            owner_id=OWNER_ID,
+            name="Tied, higher id",
+            task_list_id=THIRD_LIST_ID,
+            created_at=NOW,
+        )
+    )
+    await repository.add(
+        _stored_list(
+            owner_id=OWNER_ID,
+            name="Oldest",
+            task_list_id=OTHER_LIST_ID,
+            created_at=EARLIER,
+        )
+    )
+    await repository.add(
+        _stored_list(
+            owner_id=OWNER_ID,
+            name="Tied, lower id",
+            task_list_id=TASK_LIST_ID,
+            created_at=NOW,
+        )
+    )
+
+    with_stats = await repository.list_for_owner_with_stats(OWNER_ID)
+    plain = await repository.list_for_owner(OWNER_ID)
+
+    expected = [OTHER_LIST_ID, TASK_LIST_ID, THIRD_LIST_ID]
+    assert [entry[0].id for entry in with_stats] == expected
+    # Asserted of both methods in one test, because the point is that they
+    # agree: the endpoint reads one of them and a Phase 4 use case the other.
+    assert [task_list.id for task_list in plain] == expected

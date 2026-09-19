@@ -26,11 +26,15 @@ nothing here cleans up after itself.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Final
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Dialect
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
 from taskmanager.domain.exceptions import (
@@ -38,11 +42,13 @@ from taskmanager.domain.exceptions import (
     TaskListNotFoundError,
     UserNotFoundError,
 )
+from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.constraints import UQ_TASK_LISTS_OWNER_ID_NAME
-from taskmanager.infrastructure.db.mappers import user_to_row
+from taskmanager.infrastructure.db.mappers import task_to_row, user_to_row
 from taskmanager.infrastructure.db.models import TaskListRow
 from taskmanager.infrastructure.db.repositories.task_lists import (
     SqlAlchemyTaskListRepository,
+    lists_with_stats_statement,
 )
 
 pytestmark = pytest.mark.integration
@@ -66,6 +72,12 @@ LATER = datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 OWNER_EMAIL = "owner@example.test"
 OTHER_OWNER_EMAIL = "other@example.test"
+
+# Resolved through a typed `create_engine`, never `postgresql.dialect()`: mypy
+# strict reports the latter as `no-untyped-call`. The engine connects lazily, so
+# nothing below it opens a socket - the same idiom `test_repositories_tasks.py`
+# and `test_schema.py` use, and the reason the compiled-SQL test needs no server.
+DIALECT: Final[Dialect] = create_engine("postgresql+psycopg://").dialect
 
 
 def refused(session: AsyncSession) -> AsyncSessionTransaction:
@@ -439,3 +451,207 @@ async def test_exists_with_name_is_case_sensitive_and_owner_scoped(
     assert await repository.exists_with_name(OWNER_ID, "groceries") is False
     assert await repository.exists_with_name(OWNER_ID, "Chores") is False
     assert await repository.exists_with_name(OTHER_OWNER_ID, "Groceries") is False
+
+
+async def given_tasks_in(
+    session: AsyncSession,
+    *,
+    task_list_id: uuid.UUID,
+    total: int,
+    completed: int,
+) -> None:
+    """`total` tasks in one list, `completed` of them already done.
+
+    Written through the mapper and the session rather than through the task
+    adapter, for the reason `given_an_owner` gives: this module tests one
+    adapter, and a failure in the other one should not be able to make these
+    tests red. The tasks exist only so the grouped statement has something to
+    count.
+    """
+    for index in range(total):
+        # Built through the entity rather than by filling the dataclass in:
+        # `change_status` is what stamps `completed_at`, and the three CHECK
+        # constraints on `tasks` refuse a row whose status and stamp disagree.
+        # Derived from the list's own last four hex digits, never from its first
+        # eight: every identifier in this module shares the prefix
+        # `00000000-0000-4000-8000-`, so a prefix-based derivation gives two
+        # different lists the same task ids and `pk_tasks` refuses the second.
+        task = Task.create(
+            task_id=uuid.UUID(
+                f"00000000-0000-4000-9000-{task_list_id.hex[-4:]}{index:08d}"
+            ),
+            task_list_id=task_list_id,
+            title=f"Task {index}",
+            now=NOW,
+        )
+        if index < completed:
+            task.change_status(TaskStatus.COMPLETED, now=NOW)
+        session.add(task_to_row(task))
+    await session.flush()
+
+
+async def test_listing_with_stats_returns_one_entry_per_list_of_the_owner(
+    session: AsyncSession,
+) -> None:
+    """LIST-03: the whole collection, each entry carrying its own counters.
+
+    The two lists get different mixes on purpose. A join that leaked rows across
+    groups - or a `GROUP BY` that lost one - would still produce two entries with
+    plausible entities, and only counters that differ from each other catch it.
+    The entities are asserted to be domain objects as well, because a grouped
+    `SELECT` returns a `Row` and it is `task_list_to_entity` that must unpack it.
+    """
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(a_task_list(name="Groceries", created_at=EARLIER))
+    await repository.add(
+        a_task_list(task_list_id=OTHER_LIST_ID, name="Chores", created_at=LATER)
+    )
+    await given_tasks_in(session, task_list_id=LIST_ID, total=4, completed=1)
+    await given_tasks_in(session, task_list_id=OTHER_LIST_ID, total=2, completed=2)
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert [
+        (task_list.name, stats.total, stats.completed) for task_list, stats in entries
+    ] == [("Groceries", 4, 1), ("Chores", 2, 2)]
+    assert all(isinstance(task_list, TaskList) for task_list, _ in entries)
+    assert not any(isinstance(task_list, TaskListRow) for task_list, _ in entries)
+    assert [stats.percentage for _, stats in entries] == [25.0, 100.0]
+
+
+async def test_listing_with_stats_reports_zero_for_a_list_with_no_tasks(
+    session: AsyncSession,
+) -> None:
+    """The `count(*)` trap, made into a test rather than left as a comment.
+
+    A LEFT OUTER JOIN produces one null-extended row for a list with no tasks.
+    `count(*)` counts it, so the list would report a total of 1 and a percentage
+    over a task that does not exist; `count(tasks.id)` skips the NULL. This is
+    also the only assertion that distinguishes the outer join from an inner one -
+    an inner join would drop the empty list from the response entirely, which is
+    the other way LIST-03 can be got wrong.
+    """
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(a_task_list(name="Empty"))
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert len(entries) == 1
+    _, stats = entries[0]
+    assert stats.total == 0
+    assert stats.completed == 0
+    assert stats.percentage == 0.0
+
+
+async def test_listing_with_stats_never_returns_another_owners_list(
+    session: AsyncSession,
+) -> None:
+    """The owner filter is the only scope, and it is in SQL (T-4-06, ADR-008).
+
+    The other owner's list is given tasks too, so a join that counted across the
+    whole `tasks` table rather than per group would be caught here as well as by
+    the counters above.
+    """
+    await given_an_owner(session)
+    await given_an_owner(session, user_id=OTHER_OWNER_ID, email=OTHER_OWNER_EMAIL)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(a_task_list(name="Mine"))
+    await repository.add(
+        a_task_list(
+            task_list_id=OTHER_LIST_ID, owner_id=OTHER_OWNER_ID, name="Somebody else's"
+        )
+    )
+    await given_tasks_in(session, task_list_id=LIST_ID, total=1, completed=0)
+    await given_tasks_in(session, task_list_id=OTHER_LIST_ID, total=3, completed=3)
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert [task_list.name for task_list, _ in entries] == ["Mine"]
+    assert entries[0][1].total == 1
+    assert await repository.list_for_owner_with_stats(MISSING_OWNER_ID) == []
+
+
+async def test_listing_with_stats_orders_by_created_at_then_id(
+    session: AsyncSession,
+) -> None:
+    """D-13 again, and it has to be asserted of *this* statement separately.
+
+    `list_for_owner`'s ordering test proves nothing about the grouped query: the
+    two are different statements with different `ORDER BY` clauses, and a
+    `GROUP BY` is exactly the kind of change that invites an implementation to
+    trust the grouping order. Two of the three lists share an instant to the
+    microsecond - the clock is read once per request, so that is the ordinary
+    case rather than a contrived one - and neither alphabetical nor insertion
+    order matches the expected result, so only the `id` tie-break produces it.
+    """
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(
+        a_task_list(task_list_id=THIRD_LIST_ID, name="Alpha", created_at=NOW)
+    )
+    await repository.add(
+        a_task_list(task_list_id=OTHER_LIST_ID, name="Mike", created_at=EARLIER)
+    )
+    await repository.add(a_task_list(task_list_id=LIST_ID, name="Zulu", created_at=NOW))
+
+    entries = await repository.list_for_owner_with_stats(OWNER_ID)
+
+    assert [task_list.id for task_list, _ in entries] == [
+        OTHER_LIST_ID,
+        LIST_ID,
+        THIRD_LIST_ID,
+    ]
+
+
+async def test_listing_with_stats_returns_counters_as_python_ints(
+    session: AsyncSession,
+) -> None:
+    """psycopg decodes `bigint` as `int`, asserted rather than assumed.
+
+    `CompletionStats` takes whatever the row carried, and the adapter converts
+    nothing - deliberately, for the reason `completion_stats` records. So the day
+    a driver or a dialect change hands back a `Decimal` instead, the percentage
+    would still look right and the response body would carry `"total": 4.0`. This
+    test is what notices.
+    """
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(a_task_list())
+    await given_tasks_in(session, task_list_id=LIST_ID, total=2, completed=1)
+
+    _, stats = (await repository.list_for_owner_with_stats(OWNER_ID))[0]
+
+    assert type(stats.total) is int
+    assert type(stats.completed) is int
+
+
+def test_listing_with_stats_is_a_single_statement() -> None:
+    """LIST-03's "no N+1" as a property of the SQL, not of a round-trip count.
+
+    Compiled rather than observed, exactly as `test_the_aggregate_is_a_single_
+    statement` in the sibling module is: counting queries on the wire needs an
+    event listener and still only describes the one call path the test happened
+    to take. The rendered statement is the claim - one `FROM task_lists`, a
+    `LEFT OUTER JOIN` onto `tasks`, and a `FILTER` doing the conditional half -
+    so a refactor into `list_for_owner` plus a `completion_stats` per row fails
+    here regardless of how it is invoked. Plan 04-10 adds the runtime statement
+    counter on top of this, over the endpoint.
+
+    `count(tasks.id)` is asserted and `count(*)` is asserted *absent*, because
+    the two render almost identically and differ only on the null-extended row an
+    empty list produces.
+    """
+    compiled = str(lists_with_stats_statement(OWNER_ID).compile(dialect=DIALECT))
+
+    assert "FILTER (WHERE" in compiled
+    assert "LEFT OUTER JOIN" in compiled
+    assert compiled.count("count(tasks.id)") == 2
+    assert "count(*)" not in compiled
+    assert compiled.count("FROM task_lists") == 1
+    # The filter value travels as a bound parameter, never as an inlined literal
+    # (T-3-17): the same discipline every statement in this package follows. The
+    # label is elided first, exactly as the sibling assertion does - `completed`
+    # is both the status this query filters on and the name it gives the counter.
+    assert TaskStatus.COMPLETED.value not in compiled.replace("AS completed", "")

@@ -54,6 +54,17 @@ def test_fake_task_list_repository_satisfies_the_task_list_repository_port() -> 
     assert repository is not None
 
 
+def test_the_task_list_repository_port_declares_the_stats_listing() -> None:
+    """LIST-03's capability is on the port itself, not only on an adapter.
+
+    The binding above already fails under mypy strict if the fake stops matching
+    the Protocol, but it would go on passing if the method were quietly dropped
+    from *both* sides. This asserts the declaration, so removing it from the port
+    is a failing test rather than a silently narrower contract.
+    """
+    assert "list_for_owner_with_stats" in TaskListRepository.__dict__
+
+
 def test_fake_user_repository_satisfies_the_user_repository_port() -> None:
     repository: UserRepository = FakeUserRepository()
     assert repository is not None

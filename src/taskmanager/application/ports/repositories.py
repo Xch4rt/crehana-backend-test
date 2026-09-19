@@ -66,6 +66,21 @@ class TaskListRepository(Protocol):
     async def delete(self, task_list_id: UUID) -> None: ...
     async def list_for_owner(self, owner_id: UUID) -> Sequence[TaskList]: ...
 
+    # LIST-03 puts the counters on *every* entry of the collection, so asking
+    # for them one list at a time - `list_for_owner` followed by a
+    # `completion_stats` per row - is the N+1 the requirement exists to forbid.
+    # This method is the whole collection and its statistics together, which the
+    # adapter answers with one grouped statement.
+    #
+    # A bare `tuple` rather than a new domain value object, and domain types
+    # rather than a row: the naming belongs on the application result DTO, which
+    # is the layer that has a word for "a list and how far through it we are",
+    # and CLAUDE.md's repositories rule forbids an ORM row crossing into
+    # `application` at all.
+    async def list_for_owner_with_stats(
+        self, owner_id: UUID
+    ) -> Sequence[tuple[TaskList, CompletionStats]]: ...
+
     # LIST-06: the entity cannot see its siblings, so the per-owner name
     # uniqueness pre-check lives in a use case and asks the repository here.
     # The unique index is still the authority; this only buys a clean 409.

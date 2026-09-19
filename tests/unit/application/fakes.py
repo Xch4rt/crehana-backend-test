@@ -93,7 +93,16 @@ class FakeTaskRepository:
 class FakeTaskListRepository:
     """Task lists in a dict, with the same mutation record as its sibling."""
 
-    def __init__(self) -> None:
+    def __init__(self, tasks: FakeTaskRepository | None = None) -> None:
+        # LIST-03's counters are about tasks, and a task-list repository has no
+        # tasks of its own. The adapter reaches them through a join; the fake is
+        # handed the sibling repository explicitly, and `FakeUnitOfWork` passes
+        # the one it already constructs so a use case sees the two agree. The
+        # rejected alternative is counting from a canned dict set by the test:
+        # that would make every LIST-03 assertion true by construction, which is
+        # exactly what `FakeTaskRepository.completion_stats` refuses to do.
+        # Defaulted so a test that only needs the list side still builds one.
+        self.tasks = tasks if tasks is not None else FakeTaskRepository()
         self.stored: dict[UUID, TaskList] = {}
         self.added: list[TaskList] = []
         self.updated: list[TaskList] = []
@@ -115,11 +124,39 @@ class FakeTaskListRepository:
         self.deleted.append(task_list_id)
 
     async def list_for_owner(self, owner_id: UUID) -> Sequence[TaskList]:
-        return [
+        # Ordered by `(created_at, id)`, exactly as the SQLAlchemy adapter's
+        # `ORDER BY` is. The fake used to return insertion order, and that is a
+        # divergence with teeth: a D-13 assertion about the first element would
+        # pass here and fail over HTTP, where PostgreSQL is free to answer in
+        # whatever order the plan produced. `created_at` alone is not a total
+        # order either - the clock is read once per request, so two lists made
+        # in one call share an instant - hence the `id` tie-break.
+        owned = [
             task_list
             for task_list in self.stored.values()
             if task_list.owner_id == owner_id
         ]
+        return sorted(owned, key=lambda entry: (entry.created_at, entry.id))
+
+    async def list_for_owner_with_stats(
+        self, owner_id: UUID
+    ) -> Sequence[tuple[TaskList, CompletionStats]]:
+        # Counted from what the task fake has stored, never canned, for the
+        # reason `FakeTaskRepository.completion_stats` gives: the fake has to be
+        # able to disagree with a wrong use case.
+        #
+        # The sort is repeated here rather than delegated to `list_for_owner`,
+        # and that mirrors the adapter, where `list_for_owner`'s `ORDER BY` and
+        # `lists_with_stats_statement`'s are two separate clauses. A delegation
+        # would make this method's ordering a consequence of the other one's,
+        # so the test below would keep passing if the grouped statement lost its
+        # `ORDER BY` entirely.
+        owned = [
+            (task_list, await self.tasks.completion_stats(task_list.id))
+            for task_list in self.stored.values()
+            if task_list.owner_id == owner_id
+        ]
+        return sorted(owned, key=lambda entry: (entry[0].created_at, entry[0].id))
 
     async def exists_with_name(self, owner_id: UUID, name: str) -> bool:
         # Case-SENSITIVE, matching `uq_task_lists_owner_id_name` - the plain
@@ -188,8 +225,14 @@ class FakeUnitOfWork:
         users: FakeUserRepository | None = None,
     ) -> None:
         self.task_repository = tasks if tasks is not None else FakeTaskRepository()
+        # The list repository is given the very task repository this unit of
+        # work exposes, so `list_for_owner_with_stats` counts the same tasks a
+        # use case added through `uow.tasks`. A caller that supplies its own
+        # `task_lists` fake has already made that wiring decision itself.
         self.task_list_repository = (
-            task_lists if task_lists is not None else FakeTaskListRepository()
+            task_lists
+            if task_lists is not None
+            else FakeTaskListRepository(self.task_repository)
         )
         self.user_repository = users if users is not None else FakeUserRepository()
         self.tasks: TaskRepository = self.task_repository

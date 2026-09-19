@@ -32,7 +32,7 @@ from collections.abc import Sequence
 from typing import NoReturn
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +42,8 @@ from taskmanager.domain.exceptions import (
     TaskListNotFoundError,
     UserNotFoundError,
 )
+from taskmanager.domain.value_objects.completion import CompletionStats
+from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.constraints import (
     FK_TASK_LISTS_OWNER_ID_USERS,
     UQ_TASK_LISTS_OWNER_ID_NAME,
@@ -52,7 +54,48 @@ from taskmanager.infrastructure.db.mappers import (
     task_list_to_entity,
     task_list_to_row,
 )
-from taskmanager.infrastructure.db.models import TaskListRow
+from taskmanager.infrastructure.db.models import TaskListRow, TaskRow
+
+
+def lists_with_stats_statement(owner_id: UUID) -> Select[tuple[TaskListRow, int, int]]:
+    """LIST-03 in one statement: every list of one owner, with its two counters.
+
+    A module-level function for the reason `completion_statement` in `tasks.py`
+    is one, and the argument is the whole point of the shape: the SQL it produces
+    can be compiled and asserted on with no server at all, so a later refactor
+    back into `list_for_owner` plus a `completion_stats` per row fails a test
+    rather than a code review. LIST-03 forbids that N+1 explicitly, and an
+    intention nothing checks is not a guarantee.
+
+    `count(tasks.id)`, never `count(*)`. A LEFT OUTER JOIN produces one
+    null-extended row for a list with no tasks, and `count(*)` counts that row:
+    the list would report a total of 1 over a task that does not exist, and a
+    percentage computed against it. `count(tasks.id)` skips the NULL and returns
+    0, which is what makes an empty list report 0.0.
+
+    `GROUP BY task_lists.id` alone is sufficient, and deliberately not the full
+    column list a reader may expect: `id` is the primary key, so PostgreSQL's
+    functional-dependency rule makes every other column of that table legal in
+    the select list without being grouped by.
+
+    The filter value is `TaskStatus.COMPLETED.value` and travels as a bound
+    parameter, like every other value in this package, and the ordering is
+    `list_for_owner`'s `(created_at, id)` - D-13's total order, for the reason
+    that method's docstring gives.
+    """
+    return (
+        select(
+            TaskListRow,
+            func.count(TaskRow.id).label("total"),
+            func.count(TaskRow.id)
+            .filter(TaskRow.status == TaskStatus.COMPLETED.value)
+            .label("completed"),
+        )
+        .outerjoin(TaskRow, TaskRow.task_list_id == TaskListRow.id)
+        .where(TaskListRow.owner_id == owner_id)
+        .group_by(TaskListRow.id)
+        .order_by(TaskListRow.created_at, TaskListRow.id)
+    )
 
 
 class SqlAlchemyTaskListRepository:
@@ -141,6 +184,37 @@ class SqlAlchemyTaskListRepository:
         )
         rows = await self._session.scalars(statement)
         return [task_list_to_entity(row) for row in rows]
+
+    async def list_for_owner_with_stats(
+        self, owner_id: UUID
+    ) -> Sequence[tuple[TaskList, CompletionStats]]:
+        """Every list this owner has and how far through it they are (LIST-03).
+
+        One round trip, from the grouped statement above. The shape this replaces
+        is `list_for_owner` followed by a `completion_stats` call per row, which
+        answers the same thing and issues one query per list - the N+1 LIST-03
+        names, and a read amplification a caller with many lists can trigger at
+        will (T-4-08).
+
+        The relationship is never touched: `TaskListRow.tasks` is `lazy="raise"`,
+        and the counters come from the join rather than from loading children the
+        caller did not ask for. Nothing is flushed and nothing is committed - this
+        is a read, and the transaction belongs to the unit of work.
+
+        The two counters are handed to `CompletionStats` as they arrive, for the
+        reason `SqlAlchemyTaskRepository.completion_stats` records: psycopg
+        decodes `bigint` as a Python `int`, a test asserts that rather than
+        assuming it, and a silent `int(...)` here would hide the day it stops
+        being true.
+        """
+        rows = await self._session.execute(lists_with_stats_statement(owner_id))
+        return [
+            (
+                task_list_to_entity(row),
+                CompletionStats(total=total, completed=completed),
+            )
+            for row, total, completed in rows
+        ]
 
     async def exists_with_name(self, owner_id: UUID, name: str) -> bool:
         """Whether this owner already has a list under exactly this name.
