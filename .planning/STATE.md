@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-11-PLAN.md
-last_updated: "2026-09-19T17:08:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 plan 11 complete
+stopped_at: Completed 05-12-PLAN.md
+last_updated: "2026-09-19T17:17:55.329Z"
+last_activity: 2026-09-19 -- Phase 05 plan 12 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 49
-  percent: 91
+  completed_plans: 50
+  percent: 93
 ---
 
 # Project State
@@ -27,17 +27,17 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 12 of 16
-Status: Executing Phase 05 (plans 01-11 complete; 05-12 next)
-Last activity: 2026-09-19 -- Phase 05 plan 11 complete
+Plan: 13 of 16
+Status: Executing Phase 05 (plans 01-12 complete; 05-13 next)
+Last activity: 2026-09-19 -- Phase 05 plan 12 complete
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 50
+- Total plans completed: 51
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -105,6 +105,7 @@ Progress: [█████████░] 91%
 | Phase 05 P10 | 14min | 3 tasks | 10 files |
 | Phase 05 P09 | 21min | 3 tasks | 7 files |
 | Phase 05 P11 | 24min | 3 tasks | 10 files |
+| Phase 05 P12 | 7min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -593,6 +594,32 @@ Recent decisions affecting current work:
   last claimant, the thirteenth consecutive plan in this phase to make the same call: the routes
   exist here, but their behaviour is asserted over HTTP by 05-13
 
+- [Phase 05-12]: DELETE .../assignee declares a 422 the plan's behaviour block excluded - the block
+  contradicts itself ('the two assignee operations declare ... 422; the delete declares the same
+  minus 422') and the exclusion is wrong on the facts: the verb has no body but two UUID-typed path
+  segments, so a malformed identifier is a 422 before any use case runs, exactly as on
+  routers/tasks.py's bodiless DELETE
+- [Phase 05-12]: the 403 set is asserted by EQUALITY, not containment - a missing 403 is a refusal a
+  client was not told about, and a surplus one is a dead branch plus a false claim about what this
+  API discloses; the failure message separates 'missing' from 'unexpected', and the four routes in
+  routers/tasks.py that must NOT take the leg are named in a comment on the constant itself
+- [Phase 05-12]: the nineteen-operation inventory reads the WHOLE document while the eighteen-entry
+  versioned one keeps the /api/v1 filter - _api_operations cannot see /health at all, so an
+  inventory taken through it would stay green if the health route disappeared; _all_operations was
+  added beside it rather than loosening a helper two other tests depend on
+- [Phase 05-12]: assignments.py declares TWO APIRouter objects and one register_assignment_routes -
+  the assignee verbs are nested under /task-lists and D-02 puts discovery on a flat /tasks, so the
+  prefixes differ, and a module still contributes exactly one line to the composition root
+- [Phase 05-12]: create_task's docstring said 'Phase 4 declares no assignment endpoint at all',
+  which this plan made false; rewritten in place to state D-06 and T-5-10 instead, rather than left
+  as a sentence a reader would take for the current design
+- [Phase 05-12]: coverage fell from 99.59% to 99.15% and was left there - eight of the fifteen
+  uncovered statements are the four new handler bodies, nothing drives them over HTTP until 05-13
+  and 05-14, and no pragma and no omit entry was added
+- [Phase 05-12]: requirement ticks ASGN-01/ASGN-02/ASGN-03/AUTH-03/AUTH-06/NOTF-01 deliberately NOT
+  taken - 05-16 is the last claimant, the fourteenth consecutive plan in this phase to make the same
+  call: the routes exist here, but none of the six is asserted over HTTP until 05-13 and 05-15
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -627,6 +654,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:08:00.000Z
-Stopped at: Completed 05-11-PLAN.md
+Last session: 2026-09-19T17:17:55.322Z
+Stopped at: Completed 05-12-PLAN.md
 Resume file: None
