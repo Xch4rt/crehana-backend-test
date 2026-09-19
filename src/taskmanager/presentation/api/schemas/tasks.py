@@ -21,6 +21,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from taskmanager.application.dto.commands import (
+    AssignTaskCommand,
     ChangeTaskStatusCommand,
     CreateTaskCommand,
     UpdateTaskCommand,
@@ -169,6 +170,47 @@ class TaskStatusChangeRequest(BaseModel):
             task_list_id=task_list_id,
             task_id=task_id,
             new_status=self.status,
+        )
+
+
+class TaskAssigneeRequest(BaseModel):
+    """`PUT .../tasks/{id}/assignee`: the one door onto assignment (D-05).
+
+    It lives in this module rather than in one of its own because D-05 makes
+    assignment the same kind of door as the status change above - a dedicated
+    verb on a nested resource, one required field, no side effect available
+    through the generic patch - and the two should be read together.
+
+    One required field, so an empty body is a 422 without needing the patch
+    models' at-least-one-field rule. The value is identifier-typed, so anything
+    else is refused before any use case runs; whether that identifier names a
+    real person is `AssignTask`'s question, asked *after* the ownership guard
+    has run (T-5-12).
+
+    `DELETE` on the same URL unassigns and takes **no** body, so it has no
+    model here: there is nothing for a client to say beyond the path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    assignee_id: UUID
+
+    def to_command(
+        self, *, actor_id: UUID, task_list_id: UUID, task_id: UUID
+    ) -> AssignTaskCommand:
+        """Bind the requested assignee to the task the path addressed.
+
+        `task_list_id` travels with it for the same reason the status request
+        sends it (ADR-050): the use case compares the path's parent segment
+        against the task's own and refuses a mismatch, and a nested path whose
+        parent never reached the use case would be an ownership check that
+        passes while checking nothing.
+        """
+        return AssignTaskCommand(
+            actor_id=actor_id,
+            task_list_id=task_list_id,
+            task_id=task_id,
+            assignee_id=self.assignee_id,
         )
 
 

@@ -47,12 +47,14 @@ from taskmanager.presentation.api.schemas.task_lists import (
     TaskListResponse,
 )
 from taskmanager.presentation.api.schemas.tasks import (
+    TaskAssigneeRequest,
     TaskCollectionResponse,
     TaskCreateRequest,
     TaskPatchRequest,
     TaskResponse,
     TaskStatusChangeRequest,
 )
+from taskmanager.presentation.api.schemas.users import UserSummaryResponse
 
 # Fixed identifiers and instants: a generated value makes an assertion
 # unfalsifiable, and the project uses literals everywhere for that reason.
@@ -123,6 +125,10 @@ USER_RESPONSE_MEMBERS = ["id", "email", "full_name", "created_at"]
 
 # AUTH-02's answer to a login, in `AccessTokenResult`'s order.
 TOKEN_RESPONSE_MEMBERS = ["access_token", "token_type", "expires_in"]
+
+# ASGN-03's literal wording - "id, name, email" - and therefore its order,
+# which is deliberately not the profile's above.
+USER_SUMMARY_MEMBERS = ["id", "full_name", "email"]
 
 
 def _patch(**body: object) -> TaskListPatchRequest:
@@ -855,3 +861,99 @@ def test_the_token_response_copies_the_three_members_of_its_result() -> None:
     assert response.token_type == "bearer"
     assert response.expires_in == 1800
     assert list(response.model_dump()) == TOKEN_RESPONSE_MEMBERS
+
+
+# ---------------------------------------------------------------------------
+# TaskAssigneeRequest
+# ---------------------------------------------------------------------------
+
+
+def test_the_assignee_request_builds_the_assign_command() -> None:
+    """D-05's door: the body names the assignee, the path names everything else.
+
+    All four identifiers are asserted, because `actor_id` and `assignee_id`
+    are the two that must never be confused - one is the authenticated caller
+    and the other is attacker-controlled input (T-5-12).
+    """
+    request = TaskAssigneeRequest.model_validate({"assignee_id": str(ASSIGNEE_ID)})
+
+    command = request.to_command(
+        actor_id=ACTOR_ID, task_list_id=LIST_ID, task_id=TASK_ID
+    )
+
+    assert command.actor_id == ACTOR_ID
+    assert command.task_list_id == LIST_ID
+    assert command.task_id == TASK_ID
+    assert command.assignee_id == ASSIGNEE_ID
+
+
+def test_the_assignee_request_refuses_an_empty_body() -> None:
+    """The field is required, so absence is a `missing` at that key."""
+    with pytest.raises(ValidationError) as caught:
+        TaskAssigneeRequest.model_validate({})
+
+    error = caught.value.errors()[0]
+
+    assert error["type"] == "missing"
+    assert error["loc"] == ("assignee_id",)
+
+
+def test_an_assignee_that_is_not_an_identifier_is_refused_by_the_type() -> None:
+    """The annotation is the check, so no parsing is written anywhere.
+
+    A value that is not an identifier is a 422 before any use case runs, which
+    is also what stops it reaching SQL as free text.
+    """
+    with pytest.raises(ValidationError) as caught:
+        TaskAssigneeRequest.model_validate({"assignee_id": "somebody"})
+
+    error = caught.value.errors()[0]
+
+    assert error["type"] == "uuid_parsing"
+    assert error["loc"] == ("assignee_id",)
+
+
+def test_the_assignee_request_refuses_an_unknown_key() -> None:
+    """One key and one only: the door decides nothing else about the request."""
+    with pytest.raises(ValidationError) as caught:
+        TaskAssigneeRequest.model_validate(
+            {"assignee_id": str(ASSIGNEE_ID), "notify": True}
+        )
+
+    errors = caught.value.errors()
+
+    assert len(errors) == 1
+    assert errors[0]["type"] == "extra_forbidden"
+    assert errors[0]["loc"] == ("notify",)
+
+
+# ---------------------------------------------------------------------------
+# UserSummaryResponse
+# ---------------------------------------------------------------------------
+
+
+def test_the_user_summary_publishes_asgn_03_s_three_members_in_its_order() -> None:
+    """ASGN-03 says "id, name, email", and the order is the contract.
+
+    Deliberately not the profile's order, and deliberately not the profile's
+    model: the directory and the profile answer different questions, and a
+    shared model would make one contract move whenever the other's did.
+    """
+    result = _user_result()
+
+    body = UserSummaryResponse.from_result(result).model_dump()
+
+    assert list(body) == USER_SUMMARY_MEMBERS
+    assert body["id"] == result.id
+    assert body["full_name"] == result.full_name
+    assert body["email"] == result.email
+
+
+def test_the_user_summary_publishes_nothing_the_directory_was_not_asked_for() -> None:
+    """The member list is the assertion; these two names make it legible.
+
+    `created_at` is absent because ASGN-03 does not ask for it and a field
+    published once has to keep being published; the stored hash is absent for
+    the reason `UserResult` exists at all (T-5-08).
+    """
+    assert list(UserSummaryResponse.model_fields) == USER_SUMMARY_MEMBERS

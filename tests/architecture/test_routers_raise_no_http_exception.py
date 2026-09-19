@@ -123,6 +123,7 @@ REQUIRED_SCANNED_MODULES: Final[frozenset[str]] = frozenset(
         "schemas/auth.py",
         "schemas/task_lists.py",
         "schemas/tasks.py",
+        "schemas/users.py",
     }
 )
 
