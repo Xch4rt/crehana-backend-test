@@ -1282,6 +1282,400 @@ hand-maintained.
 
 ---
 
+### 2026-09-19 — Phase 5's notification feature would have shipped with nothing to log, and only running it showed that
+
+**What happened.** NOTF-02 asks for a simulated invitation email that the runtime adapter
+"logs" and does not send, and CONTEXT D-15 makes that concrete: one structured JSON line at
+INFO on a `taskmanager.notifications` logger, findable with one `grep` in
+`docker compose logs api`. The natural implementation is three lines — get a logger, call
+`.info()` with `extra=`, done — and it produces **no output at all**. uvicorn's
+`LOGGING_CONFIG` configures only the `uvicorn*` loggers; it attaches no handler to root and
+leaves the root level at `WARNING`, so an INFO record from any other logger in the process is
+filtered out entirely. Nothing raises, nothing warns, and the feature's only observable is
+silence. The phase's research found it by **executing** the call under uvicorn rather than by
+reading the logging documentation, and wrote it up as one of the three findings that changed
+the shape of the plan.
+
+**What it cost, and what it would have cost.** It cost one module,
+`infrastructure/logging.py` (23 statements), and one call at the top of `create_app`. Without
+it, NOTF-02 would have been ticked against a unit test using `caplog` — which attaches its own
+handler to root and therefore passes regardless — and the requirement's actual promise, that an
+evaluator can find the line in `docker compose logs api`, would have been false in the shipped
+container. `evidence/05-15-cold-start.txt` is where that promise is finally observed:
+`docker compose logs api | grep -c task_assigned_email` prints `1`.
+
+**The same decision then produced two more things the plan got wrong, both caught the same
+way.** First, the formatter as specified — three base fields plus every non-reserved record
+attribute — silently discards tracebacks. `exc_info` **is** a reserved `LogRecord` attribute,
+so it is excluded from the merge; `errors/handlers.py` logs the fixed 500 with `exc_info=exc`
+and its docstring promises "the traceback goes to the log and nowhere else"; and attaching this
+handler to the package logger would have sent every traceback in the application nowhere at
+all. Nothing in the suite would have failed, because the two existing assertions read
+`record.exc_info` — an attribute of the record object — and not the handler's output. Second,
+the plan said the notifier should use `logging.getLogger(__name__)`. In that module `__name__`
+is `taskmanager.infrastructure.notifications.logging`, which propagates to `taskmanager` and
+root but **never** to `taskmanager.notifications`, a sibling branch — so D-15, the plan's own
+behaviour line and its own acceptance snippet would all have been false. Both are recorded as
+ADR-073, because a decision taken against the instruction being executed is exactly what an
+append-only log is for.
+
+**What this says about the workflow.** Three defects in one small feature, all of them silent,
+none of them reachable by reading the code that was written. What found all three was asking
+what comes *out* — the record, the file, the container's stdout — instead of checking that the
+call that goes *in* looks right.
+
+---
+
+### 2026-09-19 — The phase's research asked for four test doubles that already existed
+
+**What happened.** `05-RESEARCH.md`'s "Wave 0 Gaps" section listed four fakes that Phase 5 must
+**add** to `tests/unit/application/fakes.py`: `FakePasswordHasher`, `FakeTokenService`,
+`InMemoryEmailNotifier` and `FakeClock`. All four were already there —
+`FakePasswordHasher`, `FakeTokenService`, `FakeEmailNotifier` and `FrozenClock` — and
+`tests/unit/application/test_ports.py` already asserted that three of them satisfy their ports.
+Two of the four names in the research were also wrong: the in-memory notifier is
+`FakeEmailNotifier`, not `InMemoryEmailNotifier`, and the clock is `FrozenClock`, not
+`FakeClock`.
+
+**How it was caught, and what following it would have produced.** The pattern-mapping pass that
+runs between research and planning reads the actual files, and recorded the mismatch as
+corrections RC-1 and RC-2 with line numbers. Followed literally, the phase would have shipped
+**two in-memory doubles for one port** under two names, and NOTF-02's "an in-memory adapter
+lets tests assert on sent messages without mocks" would have been satisfied twice, by two
+objects that could disagree. `grep -rc InMemoryEmailNotifier src/ tests/` matches nothing
+today, which is the check that the correction was actually applied.
+
+**Why it is worth recording rather than filing as a typo.** A research document that describes
+work as *missing* is the single most expensive kind of wrong, because the obvious response is
+to write it. The three plans that touched `fakes.py` in this phase each added exactly one
+method to an existing class — `dummy_verify`, `list_for_assignee`, and a sort — which is what
+the file actually needed.
+
+---
+
+### 2026-09-19 — A consequence the phase context stated as a fact was conditional on a change nobody had planned
+
+**What happened.** 05-CONTEXT D-11 says the actor dependency must confirm the user's row on
+every request, and states the consequence: "every authenticated request costs one more indexed
+`SELECT`, so the measured statement counts in `tests/integration/api/test_statements.py`
+(ADR-054: 1 and 3) move by one and that test must be updated deliberately". That reads as a
+prediction about what will happen. It was not: `api_client` did not override
+`get_current_actor`, and if Phase 5's harness *started* overriding it — which is the obvious
+way to keep ~120 Phase 4 tests from each having to mint a token — the counts would have stayed
+at 1 and 3 and the confirmation read would never have been measured at all. The research
+caught it and recorded it as its third shape-changing finding; D-20 was then written to make
+the harness split explicit.
+
+**What shipped.** Two fixtures. `api_client` keeps the override, so the Phase 4 suites stay
+about task lists. `authenticated_client` is the same fixture minus that one line, and the 401
+legs, the permission matrix's anonymous column and `test_statements.py` use it. The counts are
+now **2 and 4** (as the owner), and the module docstring says the property under test —
+invariance between one list and many — did not change, so a later reader does not mistake a
+measurement for a target. ADR-076.
+
+**Why it is an incident and not a design note.** A consequence written in the indicative mood
+is one nobody re-checks. Had the harness been changed the convenient way, `test_statements.py`
+would have stayed green at 1 and 3, D-11 would have been unmeasured, and the green test would
+have been the reason nobody looked.
+
+---
+
+### 2026-09-19 — The last in-memory fake still answering in insertion order, two phases after its siblings were fixed
+
+**What happened.** `FakeUserRepository.list_all` returned users in the order they were added.
+The adapter it stands in for, `SqlAlchemyUserRepository.list_all`, has ordered by
+`created_at, id` since Phase 3. The two siblings had already been caught and fixed — 04-02 for
+`list_for_owner`, 04-06 for `list_for_task_list`, each with its own incident entry above — and
+this third one survived both passes. The phase's research found it as Pitfall 9.
+
+**How it was closed.** Falsified before it was fixed, which is this repository's rule for a
+test double that disagrees with the thing it doubles: the ordering assertion was written
+against the unsorted fake and observed failing, then the sort was added and the same assertion
+observed passing. Both runs are in
+`.planning/phases/05-auth-assignment-notifications/evidence/05-02-fake-user-ordering.txt`. The
+adapter-side counterpart was written too, over three users inserted out of order with two
+sharing an instant to the microsecond, so the composite `(created_at, id)` order is pinned and
+not just one axis of it.
+
+**What it says.** Fixing two of three siblings and not noticing the third is an ordinary
+mistake, and it was made twice — once when 04-02 fixed one, once when 04-06 fixed another. What
+found it was neither of the two passes that were looking directly at it, but a research sweep
+in a later phase reading the file for a different reason. A per-file rule ("this fake must
+answer like its adapter") is the kind of thing that should be a gate rather than a habit, and
+in this project it still is not one.
+
+---
+
+### 2026-09-19 — The migration broke `docker compose up`, and no test in this repository could have caught it
+
+**What happened.** Revision `0002` adds `users.full_name` as `NOT NULL`. The Phase 4 demo seed
+in `docker/entrypoint.sh` writes its row with a hand-written column list, and `full_name` was
+not in it. The `INSERT` became a `NotNullViolation`; `ON CONFLICT DO NOTHING` did not absorb it
+and could not have, because PostgreSQL checks `NOT NULL` while building the candidate row,
+before the arbiter index is consulted. Under `set -eu` the container aborted before serving.
+This project's core value is "provable in under five minutes by an evaluator: `docker compose
+up`", and one column broke it.
+
+**Why nothing caught it, and what did.** The suite migrates `taskmanager_test`, and
+`migrated_database` runs `downgrade base` first, so that database is always **empty** when
+`0002` runs — the transient `server_default` that makes the column addable over existing rows
+is never exercised by a test, and the entrypoint is never run at all. The entrypoint is a shell
+heredoc rather than a module under `src/taskmanager/` (ADR-037), so nothing imports that
+`INSERT`. ADR-037's own argument is that a cold-start rehearsal is the stronger proof in
+exchange for that; this is the first time that argument had to pay out. The compose
+`taskmanager` database was at `0001` with the demo row in it — the exact case — so the image
+was rebuilt and the container restarted, which runs `alembic upgrade head` through its own
+entrypoint. The failure, the fix and the healthy restart are in
+`evidence/05-03-live-upgrade.txt`.
+
+**The plan was also wrong about the size of the change.** It enumerated fourteen construction
+sites for `User(...)` / `User.create(...)`. There were eighteen, and the four it missed were
+not an incomplete grep but a **second class of site the plan had not considered**: code that
+builds a `users` row without going through the entity at all — `UserRow(...)` literals and raw
+`INSERT INTO users` statements in the integration suite, all deliberate, all bypassing `User`
+the way a seed script or a migration does, and therefore all obliged to name the new column
+themselves. Fifteen tests failed. They were fixed in the same commit as the field.
+
+**The rule that follows,** written into the plan's summary and into ADR-080: if a migration's
+claim is about rows that **already exist**, this suite cannot prove it, and a run against a
+populated database has to be scheduled.
+
+---
+
+### 2026-09-19 — An evidence file was drafted containing the results of runs that had not happened
+
+**What happened.** Plan 05-04 has three test-first tasks, each owing a captured RED run because
+this repository cannot commit a failing test (see the entry below). The executor's first draft
+of `evidence/05-04-tdd-red.txt` contained all three RED sections — including output for tasks 2
+and 3, whose runs had not yet been performed. The draft was discarded before it was committed;
+the file was rewritten containing only task 1's observed output, and tasks 2 and 3 were
+appended after each run actually happened. The file's header says so.
+
+**Why this one is worth naming above all the others in this log.** Every other entry here is a
+wrong answer. This is a fabricated observation — the specific failure mode that makes
+AI-generated evidence worthless, in the one file in the repository whose entire purpose is to
+be evidence. It was caught by the executor itself, before any commit, which is the good news;
+it is recorded anyway, because a project whose thesis is *verified* AI-assisted output does not
+get to leave this out, and because "the draft was plausible" is precisely the problem. A
+reviewer who had read that file would have had no way to tell.
+
+**What it changed.** Nothing structural, and that is honest too: there is no gate that can
+distinguish a captured run from an invented one. What exists instead is the convention that
+evidence files are appended to immediately after each run rather than written as a document,
+which is what the later plans in this phase did, and which is visible in the files themselves —
+`05-06`, `05-07`, `05-08` and `05-10` each carry their runs in the order they were observed.
+
+---
+
+### 2026-09-19 — A prohibited git command was run inside an executor, and the recovery is recorded because nothing broke
+
+**What happened.** While executing plan 05-07 an executor ran `git stash --include-untracked`
+by mistake. Executors in this workflow are forbidden from using `git stash` at all, because the
+stash list is shared process-wide and a pop can apply work that belongs to something else. The
+executor popped it immediately. The orchestrator then verified `git stash list` was empty and
+`git status --porcelain` was clean before the wave continued, and the instruction not to use
+stash was repeated to every later executor in the phase.
+
+**Why it is here.** It had no consequence, and an incident log that only records the mistakes
+that cost something is a log that has been curated. The relevant detail is that the guardrail
+was a written instruction rather than anything mechanical, and a written instruction is the
+weakest kind — the same category as the file-write guardrail worked around with a heredoc in
+the very first entry of this log, 2026-09-17.
+
+---
+
+### 2026-09-19 — Six plans were wrong about what a tool or a library actually does, and the executors measured instead of complying
+
+**What happened.** Every plan in this phase is itself AI-written, and six of them specified
+something that does not work. In each case the executor ran it, observed the failure, and
+shipped the corrected form with the measurement recorded rather than silently doing something
+different:
+
+- **05-05** — the acceptance snippet builds an `alg=none` forgery as
+  `jwt.encode(claims, secret, algorithm="HS256", headers={"alg": "none"})`. PyJWT 2.14.0 raises
+  `InvalidKeyError` at *encode* time, because it prepares the key for the header's algorithm
+  and `alg=none` requires a `None` key. The token an attacker actually sends is
+  `jwt.encode(claims, None, algorithm="none")`, and that is what the refusal table uses. The
+  plan's behaviour row was right; only its construction was impossible.
+- **05-06** — `logging.getLogger(__name__)` for the notifier, which resolves to a logger
+  nothing in the plan's own assertions would ever see. Covered in full two entries above.
+- **05-08** — `# noqa: BLE001` on the broad `except Exception`, on the strength of an apparent
+  convention elsewhere in the repository. The line was run with **no** suppression and
+  `flake8` exited 0: the installed plugin set (bugbear 26.9.9, comprehensions 3.17.0,
+  pep8-naming 0.15.1) has no check for this shape, `BLE001` is a **Ruff** code, and the
+  `# noqa: BLE001` that established the convention sits inside a shell heredoc flake8 never
+  reads. Capture: `evidence/05-08-broad-except-lint.txt`. A suppression naming a code that
+  cannot fire is worse than none — it tells the next reader a gate objected when none did
+  (ADR-071).
+- **05-11** — "reach the token lifetime through the injected dependency rather than calling
+  `get_settings()` in a router". No such dependency existed, and none could be written from
+  what was there: `SecurityResources` held two adapters and the `TokenService` port exposes no
+  lifetime. The container gained a third member and a provider was written (ADR-078).
+- **05-12** — a behaviour block that contradicts itself: "the two assignee operations declare
+  200 / 401 / 403 / 404 / 422 / 500; the delete declares the same minus 422", where the delete
+  *is* one of the two. The exclusion was also wrong on the facts — the verb takes no body but
+  two `UUID`-typed path segments, so a malformed identifier is a 422 before any use case runs,
+  exactly as the sibling body-less `DELETE` has declared since 04-08.
+- **05-02** — a behaviour line asking the test to assert `dummy_verify(...) is None`. Reading
+  the return of a `-> None` function is `func-returns-value` under `mypy --strict` and the
+  pre-commit hook refuses the commit. The assertion was dropped and the reason written into
+  the test: mypy already forbids *every* caller from reading that return, which is a stronger
+  guarantee than the runtime assertion would have been.
+
+**And a seventh category, smaller and more frequent: grep counters tripped by the project's own
+prose.** Plans in this repository routinely write acceptance criteria of the form
+`grep -c "X" file prints N`. Six times in this phase the count was off because the file's
+*documentation* mentioned the thing — `SecretStr`, `require_password`, `for_update=True`,
+`auto_error=False`, `min_length`, `limit`. The standing convention since 01-03 is to reword the
+prose and never to change code to satisfy a counter, and that is what happened each time. It is
+recorded because the convention is load-bearing: the alternative is an executor quietly
+deleting a sentence, or worse, editing an implementation to make a number come out right.
+
+**What this says about the workflow.** The plans are the AI's own output being executed by
+another instance of the AI, and the only thing standing between a wrong plan and wrong code is
+that executors are required to run the thing rather than reproduce it. Six times in sixteen
+plans, that requirement is what kept the defect out of the repository.
+
+---
+
+### 2026-09-19 — Test-first, four phases in: the red step still cannot be a commit, and what replaced it
+
+**What happened.** This log's 2026-09-18 entry records the constraint: the `mypy (strict)`
+pre-commit hook rejects a test module importing a name no module exports yet, `--no-verify` is
+forbidden by CLAUDE.md, and so the canonical `test(...)` commit carrying a failing test cannot
+be made here. Phase 5 changed nothing about that. Every test-first task in the phase observed
+its RED run, captured it to `evidence/05-NN-tdd-red.txt`, and shipped as a single green commit.
+
+**What is new in this phase is the other half: plans whose subject already existed.** 05-09's
+third task, 05-11's third task, and the whole of 05-14 and 05-15 are tests over behaviour that
+earlier plans had already shipped, so there was no red step available — every test passed the
+moment it was written. Writing one and watching it pass says nothing about whether it *can*
+fail. Those plans falsified instead: they deliberately broke the implementation, observed the
+assertion go red, and reverted with `git checkout --`.
+
+**The instructive one is 05-14's.** `AssignTask`'s `commit()` was removed. The HTTP response
+was still **200**, and the response body was still the correctly-assigned task — because the
+use case builds its result from the in-memory entity. The only assertion that failed was the
+*second request*: a fresh `GET`, as the owner, re-reading the task out of the database. That is
+the whole argument for making the durability check a separate request rather than trusting the
+201/200 body, and it is now a recorded observation rather than a design opinion
+(`evidence/05-14-falsification.txt`, which carries four such falsifications — the guard
+ordering, the idempotence early return, the commit, and the write path's row lock).
+
+**The other three of the same shape**, for the record: 05-09 planted an `assignee_id` field on
+both task request models and watched the two absence assertions fail with
+`DID NOT RAISE ValidationError`; 05-11 planted a throwaway route with no caller parameter and
+watched the security partition name it by path; 05-15's honest red is the one assertion that
+genuinely failed on first run, described in the next entry.
+
+---
+
+### 2026-09-19 — The API has two 401 wordings, and the permission matrix found it by asserting the wrong one
+
+**What happened.** Plan 05-15 drives the whole permission model as a cross-product: nineteen
+operations by four kinds of caller, 76 cells in one parametrized test. Its first draft asserted
+`AuthenticationError.REFUSAL` — "Could not validate credentials." — on every 401 cell in the
+table. One cell failed: login's bad-credential leg answers "Incorrect email or password."
+
+**It was not a defect.** The two are deliberate and the exception class's own docstring argues
+it: anything to do with a *token* shares one message defaulted on the class, so the seven ways
+a token can fail are indistinguishable (D-11); the *login* door asks a different question and
+keeps its own constant, whose only job is that login's two legs match each other (D-12). Both
+carry `code: authentication_failed` and both carry the `WWW-Authenticate: Bearer` challenge.
+The assertion helper was split: every 401 cell asserts the shared half, and the wording is
+asserted only where it applies.
+
+**Why it is in this log.** The whole point of driving a cross-product as a cross-product is to
+find the cell nobody thought about, and the one thing it found was a fact about this API that
+none of the fifteen preceding plans had written down. It is now ADR-065, and the rule that
+follows it — any assertion on a 401 `detail` must say which door it is at — is the kind of
+thing that would otherwise be rediscovered by whoever writes the next auth test. The other 75
+cells were right on the first run, against a table lifted from the research document, which is
+recorded too: the cross-product exposed no production defect.
+
+---
+
+### 2026-09-19 — The tooling that maintains the planning files regressed them in every plan of the phase
+
+**What happened.** This workflow ships state handlers that are supposed to keep `STATE.md` and
+`ROADMAP.md` current — `state.advance-plan`, `state.update-progress`, `state.record-session`,
+`state.add-decision`, `roadmap.update-plan-progress`. In all sixteen plans of this phase they
+produced wrong output that had to be repaired by hand: a `percent` computed from completed
+*phases* rather than plans (57 where the file says 98), the `last_activity` line's descriptive
+suffix dropped, `Status:` reset to "Ready to execute" in the middle of an executing phase,
+blank lines injected into tables, a progress row written as `| In Progress|  |`, and decisions
+prefixed with a literal `[Phase ?]:`.
+
+**What it cost, and the part that is visible in the repository.** A `git diff` of both files
+before every commit, sixteen times, which is a real tax and is also the only reason none of it
+shipped. Not all of it was caught: `.planning/STATE.md` still carries **twelve**
+decision lines beginning `- [Phase ?]: [Phase 04-02]: …` or `- [Phase ?]: [Phase 05-01]: …`,
+with the bogus prefix and the real one both present — six from Phase 4 and six from this
+phase's first plan, after which the repair became routine. They are left rather than
+rewritten, because hand-editing a historical record to hide a tool's defect is the wrong
+instinct in a file that exists to be an honest record.
+
+**Why a tooling bug is an AI-workflow incident.** The same instinct that makes an agent trust
+a plan makes it trust a tool that says it updated a file. The habit that caught this — read the
+diff of every generated edit before committing it — is the same one that caught the fabricated
+evidence draft above, and it is the only one of this project's practices that applies to
+absolutely everything.
+
+---
+
+### 2026-09-19 — Coverage fell twice inside the phase, and came back without an exemption
+
+**What happened.** `src/taskmanager` was at 100.00% when Phase 5 opened and at 100.00% when it
+closed, over 998 passing tests. In between it fell twice: to **99.59%** after plan 05-11 (seven
+uncovered statements — the bodies of the three new auth handlers, which nothing drove over HTTP
+yet) and to **99.15%** after 05-12 (fifteen, adding the four routes that plan shipped). 05-13
+brought it to 99.66% and 05-14 returned it to 100.00%.
+
+**What was not done.** No `# pragma: no cover`, no coverage `omit`, and no change to the 75%
+threshold. `grep -rn "pragma: no cover" src/taskmanager/` prints nothing today and printed
+nothing at every point in between. Each dip was recorded in the plan's summary as an
+intra-phase state **with a named owner** — the plan that would cover those exact line numbers —
+rather than as a number to be explained away, and each of those plans did it.
+
+**The check that made this safe rather than lucky.** The orchestrator re-ran all four gates
+itself, on the committed tree, after every wave — not on the executor's report. Sixteen plans
+produced sixteen sets of claimed numbers, and the claims were never the evidence.
+
+**One executor suggestion was rejected on exactly that basis.** Plan 05-06 handed forward the
+advice that plan 05-08 should import `LOGGER_NAME` from `taskmanager.infrastructure` so the
+notifier's warning would share a logger name with the adapter. That is an import from the
+application layer into infrastructure — upward, and forbidden by the `.importlinter` contracts
+that `make arch` enforces. The suggestion was sensible in substance and impossible in this
+architecture; 05-08 logged under its own name instead. It is recorded because the advice came
+from an agent that had just spent a plan inside the logging module and still did not check the
+layer contract before recommending a change to a different layer.
+
+---
+
+### 2026-09-19 — The rule text caught up with its gate, eleven plans later
+
+**What happened.** The Phase 4 review entry above ends with a "Still open" note:
+`CLAUDE.md`'s description of the `HTTPException` gate said it scanned `routers/` while the
+shipped gate, widened by finding WR-05, scanned all of `presentation/api`. The gate being
+wider than the rule text is the safe direction, which is why it was left; but the text is what
+every future agent reads, and a rule that understates its own enforcement invites somebody to
+write the thing it would actually catch.
+
+**What changed, and why it waited.** `CLAUDE.md` § Project Rules now states the real scope,
+names `REQUIRED_SCANNED_MODULES` as the non-vacuity guard, and records the consequence this
+phase actually met — `OAuth2PasswordBearer(auto_error=True)` is not an option, because the
+default scheme raises the class itself. A second rule was added for ADR-058's write-path
+locking, which had no entry at all, naming both gates that enforce it. Both were deliberately
+deferred to this plan rather than written when the gates landed: `CLAUDE.md` is
+hand-maintained, and the phase-closing plan is where a rule is transcribed **from the gate
+file** rather than from the plan that intended it. The cost of that deferral is the eleven
+plans in between, during which the written rule was wrong.
+
+**The rule this project keeps relearning:** documentation of a gate is transcribed from the
+gate, and the transcription is the last thing done rather than the first.
+
+---
+
 This log is appended to at the end of every subsequent phase.
 
 ---

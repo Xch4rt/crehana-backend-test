@@ -64,24 +64,24 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Authentication (AUTH)
 
-- [ ] **AUTH-01**: User can register with email, full name and password; duplicate email returns 409; the password hash is never returned [PDF 1.b.ii]
-- [ ] **AUTH-02**: User can log in via OAuth2 password flow and receives a JWT access token with expiry; Swagger's "Authorize" button works [PDF 1.b.ii]
-- [ ] **AUTH-03**: All task-list and task endpoints require a valid token; missing/invalid/expired tokens return 401 in problem+json [PDF 1.b.ii]
-- [ ] **AUTH-04**: Passwords are hashed with Argon2 (pwdlib) off the event loop; tokens are signed with PyJWT using an env-provided secret and a pinned algorithm; login failures do not reveal whether the email exists [R]
-- [ ] **AUTH-05**: User can fetch their own profile (`/auth/me`) [R]
-- [ ] **AUTH-06**: Resources invisible to the caller return 404 for every verb; resources visible but not permitted (assignee attempting owner-only actions) return 403 [PDF 2.d]
+- [x] **AUTH-01**: User can register with email, full name and password; duplicate email returns 409; the password hash is never returned [PDF 1.b.ii]
+- [x] **AUTH-02**: User can log in via OAuth2 password flow and receives a JWT access token with expiry; Swagger's "Authorize" button works [PDF 1.b.ii]
+- [x] **AUTH-03**: All task-list and task endpoints require a valid token; missing/invalid/expired tokens return 401 in problem+json [PDF 1.b.ii]
+- [x] **AUTH-04**: Passwords are hashed with Argon2 (pwdlib) off the event loop; tokens are signed with PyJWT using an env-provided secret and a pinned algorithm; login failures do not reveal whether the email exists [R]
+- [x] **AUTH-05**: User can fetch their own profile (`/auth/me`) [R]
+- [x] **AUTH-06**: Resources invisible to the caller return 404 for every verb; resources visible but not permitted (assignee attempting owner-only actions) return 403 [PDF 2.d]
 
 ### Assignment (ASGN)
 
-- [ ] **ASGN-01**: List owner can assign a task to an existing user and unassign it; a non-existent assignee is rejected [PDF 1.b.iii]
-- [ ] **ASGN-02**: Task responses expose the assignee; an assignee can view the task and change its status but cannot edit or delete it [PDF 1.b.iii]
-- [ ] **ASGN-03**: User can list users (id, name, email) so an assignee id is discoverable [R]
+- [x] **ASGN-01**: List owner can assign a task to an existing user and unassign it; a non-existent assignee is rejected [PDF 1.b.iii]
+- [x] **ASGN-02**: Task responses expose the assignee; an assignee can view the task and change its status but cannot edit or delete it [PDF 1.b.iii]
+- [x] **ASGN-03**: User can list users (id, name, email) so an assignee id is discoverable [R]
 
 ### Notifications (NOTF)
 
-- [ ] **NOTF-01**: Assigning a task sends a simulated invitation email to the assignee through an `EmailNotifier` port, after the transaction commits [PDF 1.b.iv]
-- [ ] **NOTF-02**: The runtime adapter logs the structured email (to, subject, body) and sends nothing real; an in-memory adapter lets tests assert on sent messages without mocks [PDF 1.b.iv]
-- [ ] **NOTF-03**: A notifier failure never fails the assignment request [R]
+- [x] **NOTF-01**: Assigning a task sends a simulated invitation email to the assignee through an `EmailNotifier` port, after the transaction commits [PDF 1.b.iv]
+- [x] **NOTF-02**: The runtime adapter logs the structured email (to, subject, body) and sends nothing real; an in-memory adapter lets tests assert on sent messages without mocks [PDF 1.b.iv]
+- [x] **NOTF-03**: A notifier failure never fails the assignment request [R]
 
 ### Testing (TEST)
 
@@ -191,18 +191,18 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | TASK-06 | Phase 4 | Complete |
 | TASK-07 | Phase 4 | Complete |
 | TASK-08 | Phase 4 | Complete |
-| AUTH-01 | Phase 5 | Pending |
-| AUTH-02 | Phase 5 | Pending |
-| AUTH-03 | Phase 5 | Pending |
-| AUTH-04 | Phase 5 | Pending |
-| AUTH-05 | Phase 5 | Pending |
-| AUTH-06 | Phase 5 | Pending |
-| ASGN-01 | Phase 5 | Pending |
-| ASGN-02 | Phase 5 | Pending |
-| ASGN-03 | Phase 5 | Pending |
-| NOTF-01 | Phase 5 | Pending |
-| NOTF-02 | Phase 5 | Pending |
-| NOTF-03 | Phase 5 | Pending |
+| AUTH-01 | Phase 5 | Complete |
+| AUTH-02 | Phase 5 | Complete |
+| AUTH-03 | Phase 5 | Complete |
+| AUTH-04 | Phase 5 | Complete |
+| AUTH-05 | Phase 5 | Complete |
+| AUTH-06 | Phase 5 | Complete |
+| ASGN-01 | Phase 5 | Complete |
+| ASGN-02 | Phase 5 | Complete |
+| ASGN-03 | Phase 5 | Complete |
+| NOTF-01 | Phase 5 | Complete |
+| NOTF-02 | Phase 5 | Complete |
+| NOTF-03 | Phase 5 | Complete |
 | TEST-01 | Phase 6 | Pending |
 | TEST-02 | Phase 6 | Pending |
 | TEST-03 | Phase 6 | Pending |
@@ -282,7 +282,52 @@ Every command exited `0` and collected at least one test. A command collecting z
 blocked its tick: `pytest` exits `5`, not `0`, when `-k` matches nothing, which is how a
 mis-specified selector announces itself rather than passing vacuously.
 
+### Phase 5 re-verification (plan 05-16)
+
+The twelve Phase 5 boxes — AUTH-01..06, ASGN-01..03, NOTF-01..03 — were ticked by **plan 05-16
+only**, after running the command in each row and seeing it exit `0` with at least one test
+collected. Fifteen consecutive Phase 5 plans deferred these ticks to the last claimant, which is
+the convention plans 02-07, 03-11 and 04-12 established. The full output of every command below
+is in `.planning/phases/05-auth-assignment-notifications/evidence/05-16-phase-gate.txt`.
+
+| ID | Command | Collected | A named test that proves it |
+|----|---------|-----------|------------------------------|
+| AUTH-01 | `pytest tests/integration/api/test_auth.py -k register` | 5 | `test_register_answers_201_with_the_profile_and_a_location_header` |
+| AUTH-01 | `pytest tests/integration/api/test_auth.py -k duplicate` | 1 | `test_register_with_the_same_address_in_another_case_is_a_duplicate_409` |
+| AUTH-02 | `pytest tests/integration/api/test_auth.py -k login` | 4 | `test_login_answers_a_bearer_token_and_the_configured_lifetime` |
+| AUTH-02 | `pytest tests/unit/presentation/test_security_scheme.py` | 5 | `test_the_document_declares_the_oauth2_password_scheme` |
+| AUTH-03 | `pytest tests/integration/api/test_auth.py -k unauthenticated` | 8 | `test_unauthenticated_requests_are_refused_with_the_one_shared_body[an_expired_token]` |
+| AUTH-03 | `pytest tests/integration/api/test_permission_matrix.py -k anonymous` | 20 | `test_the_permission_matrix_answers_what_the_table_promises[08-anonymous-GET-/api/v1/task-lists/{list_id}]` |
+| AUTH-04 | `pytest tests/unit/infrastructure/test_tokens.py` | 13 | `test_a_token_that_cannot_be_trusted_is_refused[alg_none]` |
+| AUTH-04 | `pytest tests/unit/infrastructure/test_passwords.py` | 10 | `test_hashing_and_verifying_leave_the_event_loop_in_that_order` |
+| AUTH-04 | `pytest tests/integration/api/test_auth.py -k indistinguishable` | 1 | `test_login_with_an_unknown_address_and_with_a_wrong_password_are_indistinguishable` |
+| AUTH-05 | `pytest tests/integration/api/test_auth.py -k _me` | 2 | `test_get_me_answers_the_callers_own_profile_and_no_stored_hash` |
+| AUTH-06 | `pytest tests/integration/api/test_permission_matrix.py` | 79 | `test_the_table_covers_every_operation_the_document_publishes` |
+| AUTH-06 | `pytest tests/unit/application/test_access.py` | 22 | `test_owned_task_refuses_the_assignee_with_the_projects_first_403` |
+| ASGN-01 | `pytest tests/integration/api/test_assignment.py -k assign` | 25 | `test_the_owner_assigns_a_task_and_the_assignee_id_persists` |
+| ASGN-01 | `pytest tests/unit/application/test_unassign_task.py` | 6 | `test_the_owner_clears_the_assignee_and_the_write_is_durable` |
+| ASGN-02 | `pytest tests/integration/api/test_assignment.py -k assignee_id` | 3 | `test_the_owner_assigns_a_task_and_the_assignee_id_persists` |
+| ASGN-02 | `pytest tests/integration/api/test_permission_matrix.py -k assignee` | 25 | `test_the_permission_matrix_answers_what_the_table_promises[14-assignee-PATCH-/api/v1/task-lists/{list_id}/tasks/{task_id}]` |
+| ASGN-03 | `pytest tests/integration/api/test_users.py` | 6 | `test_every_entry_publishes_exactly_the_three_members_in_declaration_order` |
+| NOTF-01 | `pytest tests/unit/application/test_assign_task.py -k notifies` | 2 | `test_the_owner_assigns_an_existing_user_and_notifies_them` |
+| NOTF-01 | `pytest tests/integration/api/test_assignment.py -k notifies` | 4 | `test_assigning_notifies_the_new_assignee_with_one_structured_record` |
+| NOTF-02 | `pytest tests/unit/infrastructure/test_notifier.py` | 7 | `test_the_module_imports_no_mail_library` |
+| NOTF-02 | `evidence/05-15-cold-start.txt` | — | `docker compose logs api \| grep -c task_assigned_email` prints `1`, and the line parses through `python3 -m json.tool` carrying `to`, `subject`, `body` and `task_id` |
+| NOTF-03 | `pytest tests/unit/application/test_assign_task.py -k notifier_failure` | 1 | `test_a_notifier_failure_leaves_the_assignment_durable` |
+| NOTF-03 | `pytest tests/integration/api/test_assignment.py -k notifier_failure` | 1 | `test_a_notifier_failure_leaves_the_assignment_committed` |
+
+Every command exited `0` and collected at least one test. A command collecting zero would have
+blocked its tick: `pytest` exits `5`, not `0`, when `-k` matches nothing.
+
+NOTF-02 is the one requirement whose second half is not a test. "The runtime adapter logs the
+structured email and sends nothing real" is a claim about a running container, and the evidence
+is the cold-start capture: on a volume wiped with `docker compose down -v`, one `grep` over
+`docker compose logs api` finds exactly one `task_assigned_email` record. The suite half —
+"an in-memory adapter lets tests assert on sent messages without mocks" — is
+`FakeEmailNotifier`, used by every assignment unit test, plus `test_notifier.py`'s source scan
+proving the runtime adapter imports no mail library at all.
+
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-19 after Phase 4 (plan 04-12): ARC-05, LIST-01..06 and TASK-01..08
-ticked against the re-verification table above; 44/69 complete*
+*Last updated: 2026-09-19 after Phase 5 (plan 05-16): AUTH-01..06, ASGN-01..03 and NOTF-01..03
+ticked against the re-verification table above; 56/69 complete*

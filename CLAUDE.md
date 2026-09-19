@@ -297,16 +297,32 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 ### Error handling
 
 - `fastapi.HTTPException` may **never** be raised outside the `presentation` layer.
-- No module under `src/taskmanager/presentation/api/routers/` raises **or imports**
-  `HTTPException` — not even inside `presentation`, where importing it is otherwise legal.
-  A router that raised it would produce a second error-body shape a client has to parse, and
-  would take a visibility decision (404 vs 403) in the one layer that does not know who owns
-  what. Enforced by `tests/architecture/test_routers_raise_no_http_exception.py`, which makes
-  two passes over the package's AST — one over `raise` statements, reporting `file:line` for
-  every offender, and one over imports and attribute access, which is the load-bearing half
-  because a module that never binds the name cannot raise it by any spelling. A third test
-  asserts the scan is non-vacuous, so a renamed or emptied routers package fails rather than
-  passing silently.
+- No module under `src/taskmanager/presentation/api/` raises **or imports** `HTTPException` —
+  the **whole** package, not the `routers/` subpackage alone, and not even elsewhere inside
+  `presentation`, where importing it is otherwise legal. A router that raised it would produce
+  a second error-body shape a client has to parse, and would take a visibility decision
+  (404 vs 403) in the one layer that does not know who owns what; `actor.py`, which decodes
+  the bearer token, is the single most likely place for a hand-raised 401 and was outside the
+  old scan. Enforced by `tests/architecture/test_routers_raise_no_http_exception.py` — the
+  file keeps its historical name, what it walks is the whole package — which makes two passes
+  over the AST: one over `raise` statements, reporting `file:line` for every offender and
+  resolving an aliased import to the local name it binds, and one over imports, attribute
+  access, bare names and star imports, which is the load-bearing half because a module that
+  never binds the name cannot raise it by any spelling. The one exemption is a module and not
+  a package, `errors/handlers.py`, which must name the class in order to *register a handler
+  for it*; `test_the_exempt_module_still_needs_its_exemption` fails if that exemption outlives
+  its reason. `REQUIRED_SCANNED_MODULES` names every module that must be in the scan —
+  `actor.py`, `dependencies.py`, `health.py` and every router and schema — so a renamed or
+  emptied package fails rather than passing silently, and a new module under
+  `presentation/api` adds its name there in the commit that creates it.
+- Consequence this rule has already had, recorded so the next reader does not rediscover it:
+  `OAuth2PasswordBearer(auto_error=True)` — FastAPI's default — is **not an option**, because
+  the scheme raises `HTTPException` itself on a missing or non-bearer header. The bearer
+  scheme is configured `auto_error=False` and `get_current_actor` raises `AuthenticationError`
+  instead, which is what keeps the gate green and Swagger's Authorize button working at the
+  same time (ADR-074). Enforced by the same AST gate, which names `actor.py` explicitly, and
+  by `tests/unit/presentation/test_security_scheme.py`, which asserts from `app.openapi()`
+  that every operation either requires the scheme or is one of the three named open ones.
 - Neither of the two gates above adds a pre-commit hook or a CI step, and that is deliberate:
   the contract rides inside `lint-imports` and the AST test rides inside pytest, and both
   commands are already run by the hook set, the Docker `test` stage and CI. The "a new gate
@@ -331,6 +347,18 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   port bindings in `tests/unit/infrastructure/test_adapter_ports.py` under `mypy --strict`, and
   by `test_a_returned_entity_is_readable_after_the_session_is_gone`, which reads an entity after
   the session is closed.
+- A use case about to **change or delete** a resource loads it through a locking read:
+  `visible_task_list(..., for_update=True)`, `visible_task(..., for_update=True)` or
+  `owned_task(..., for_update=True)`, each of which reaches `get_for_update` on the repository
+  port. Read paths keep the default and never wait. Only the **addressed** resource is held —
+  a task's writer holds the task and reads its parent list plainly — so a list deletion can
+  never end up waiting on a writer that is waiting on it (ADR-058). Enforced by
+  `tests/unit/application/test_write_paths_hold_what_they_change.py`, which pins the road each
+  use case takes against the fakes in **both** directions (a write path that reverts to a plain
+  `get` fails, and so does a read path that starts locking), and by
+  `tests/integration/test_concurrent_writes.py`, which proves the waiting itself with two units
+  of work on two real connections, bounded three ways so a broken lock is a red test rather
+  than a hung run.
 - Migrations run in the container entrypoint (`docker/entrypoint.sh` → `alembic upgrade head`),
   never in `create_app()` and never in the lifespan. Enforced by
   `test_creating_the_app_opens_no_connection`, which builds the real application against a dead

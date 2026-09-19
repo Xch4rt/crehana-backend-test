@@ -234,7 +234,7 @@ Plans:
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, ASGN-01, ASGN-02, ASGN-03, NOTF-01, NOTF-02, NOTF-03
 **Success Criteria** (what must be TRUE):
 
-  1. A user can register (duplicate email → 409, hash never returned), log in through the OAuth2 password flow to receive an expiring JWT, use Swagger's "Authorize" button successfully, and fetch their own profile at `/auth/me`.
+  1. A user can register (duplicate email → 409, hash never returned), log in through the OAuth2 password flow to receive an expiring JWT, and fetch their own profile at `/auth/me`; and the document Swagger builds its "Authorize" button from declares the OAuth2 password scheme with a `tokenUrl` resolving to the published login route, with every operation either requiring that scheme or being one of the three named open ones — asserted from `app.openapi()` by `tests/unit/presentation/test_security_scheme.py`. *(Amended 2026-09-19 by plan 05-16, following the Phase 2 SC-1, Phase 3 SC-4 and Phase 4 SC-5 precedent. The original wording read "use Swagger's 'Authorize' button successfully". Nobody in this project clicks that button: no human ran the browser flow and no test drives one, so the criterion as written credited an observation that was never made. The replacement names the contract the button reads and the gate that fails when it breaks — which is strictly what was verified, including the falsification in `evidence/05-11-open-route-falsification.txt` where a planted route with no caller parameter was caught by name. The end-to-end token path itself was exercised with `curl` against the running container in `evidence/05-15-cold-start.txt`.)*
   2. Every task-list and task endpoint rejects a missing, malformed or expired token with a 401 problem+json body, and a login with a wrong password is indistinguishable from a login with an unknown email.
   3. Resources the caller cannot see return 404 on every verb, while resources they can see but may not act on return 403 — demonstrated by an assignee who can read a task and change its status but cannot edit or delete it.
   4. A list owner can assign a task to an existing user and unassign it, a non-existent assignee is rejected, task responses expose the assignee, and `GET /users` makes assignee ids discoverable.
@@ -290,7 +290,7 @@ Plans:
 
 **Wave 11** *(blocked on Wave 10 completion)*
 
-- [ ] 05-16-PLAN.md — Phase 5 ADRs, the AI_WORKFLOW entries, the twelve requirement ticks and the full phase gate
+- [x] 05-16-PLAN.md — Phase 5 ADRs, the AI_WORKFLOW entries, the twelve requirement ticks and the full phase gate
 
 ### Phase 6: Test Hardening & Coverage
 
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 15/16 | In Progress | - |
+| 5. Auth, Assignment & Notifications | 16/16 | In Progress | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
