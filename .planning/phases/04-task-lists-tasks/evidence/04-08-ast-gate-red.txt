@@ -1,0 +1,185 @@
+D-15 AST-gate demonstration - Phase 4, plan 04-08
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1, FastAPI 0.141.1
+
+Commands, in the order they were run:
+  # PLANT 1 - the import AND a raise inside get_task() in routers/tasks.py
+  .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py -q --no-cov ; echo $?
+  # PLANT 2 - the import ONLY, the raise removed
+  .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py -q --no-cov ; echo $?
+  # both plants removed - the shipped tree
+  .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py -q --no-cov ; echo $?
+
+What this proves: D-15's gate is enforced rather than decorative, and its two
+assertions are not redundant. Plant 1 turns BOTH red. Plant 2 - a module that
+merely imports the class and never raises it - leaves the raise check GREEN and
+turns only the import check red, which is the whole case for keeping the second
+assertion: the raise check cannot see a construction bound to a local name, and
+the import check makes that spelling impossible in the first place.
+
+The plants were removed immediately after the red runs. They exist neither on
+disk nor in git history as tracked changes; the green run at the bottom is the
+shipped tree. Everything below is verbatim, exit codes included.
+
+The one edit applied to the captures below: the repository's trailing-whitespace
+pre-commit hook stripped the trailing spaces pytest pads its assertion-diff lines
+with. No line was added, removed or reworded, and no exit code changed.
+
+================================================================================
+PLANT 1 - the import and the raise, both in routers/tasks.py
+================================================================================
+
+--- the planted diff ---
+diff --git a/src/taskmanager/presentation/api/routers/tasks.py b/src/taskmanager/presentation/api/routers/tasks.py
+index 78ad13d..c7a9441 100644
+--- a/src/taskmanager/presentation/api/routers/tasks.py
++++ b/src/taskmanager/presentation/api/routers/tasks.py
+@@ -25,4 +25,5 @@ from typing import Annotated, Final
+ from uuid import UUID
+
++from fastapi import HTTPException
+ from fastapi import APIRouter, FastAPI, Query, Request, Response, status
+
+@@ -206,4 +207,5 @@ async def get_task(
+     passes it to `request.url_for` to build its `Location` header.
+     """
++    raise HTTPException(status_code=404)
+     result = await GetTask(uow).execute(
+         GetTaskCommand(actor_id=actor_id, task_list_id=list_id, task_id=task_id)
+
+--- RUN 1 - RED: both assertions fail ---
+.FF                                                                      [100%]
+=================================== FAILURES ===================================
+___________________ test_no_router_raises_an_http_exception ____________________
+
+    def test_no_router_raises_an_http_exception() -> None:
+        """No `raise` under the routers package names the framework's exception."""
+        offenders = [
+            _location(path, node)
+            for path in _router_modules()
+            for node in ast.walk(_parsed(path))
+            if isinstance(node, ast.Raise) and _raised_name(node) == FORBIDDEN_EXCEPTION
+        ]
+
+>       assert offenders == [], (
+            "A router must never answer a business failure itself: it raises a "
+            "DomainError, and the single exception handler turns that into the one "
+            "problem+json body the API speaks. Whether the caller may know the "
+            "resource exists is the use case's decision, not the router's "
+            "(ADR-008, D-15). Offending raise statements: "
+            f"{offenders}"
+        )
+E       AssertionError: A router must never answer a business failure itself: it raises a DomainError, and the single exception handler turns that into the one problem+json body the API speaks. Whether the caller may know the resource exists is the use case's decision, not the router's (ADR-008, D-15). Offending raise statements: ['tasks.py:209']
+E       assert ['tasks.py:209'] == []
+E
+E         Left contains one more item: 'tasks.py:209'
+E         Use -v to get more diff
+
+tests/architecture/test_routers_raise_no_http_exception.py:144: AssertionError
+___________________ test_no_router_imports_an_http_exception ___________________
+
+    def test_no_router_imports_an_http_exception() -> None:
+        """No router binds or reaches the framework's exception class at all.
+
+        Strictly stronger than the raise check, and the reason the pair exists: a
+        module that never names the class cannot raise it under any spelling,
+        including the bind-then-raise form the syntax of a `raise` statement cannot
+        see.
+        """
+        offenders = []
+        for path in _router_modules():
+            for node in ast.walk(_parsed(path)):
+                if isinstance(node, ast.ImportFrom) and any(
+                    alias.name == FORBIDDEN_EXCEPTION for alias in node.names
+                ):
+                    offenders.append(_location(path, node))
+                elif isinstance(node, ast.Attribute) and node.attr == FORBIDDEN_EXCEPTION:
+                    offenders.append(_location(path, node))
+
+>       assert offenders == [], (
+            "A router must not so much as name the framework's exception class - "
+            "importing it is the one step that makes the indirect raise the check "
+            "above cannot see possible at all (D-15). Offending references: "
+            f"{offenders}"
+        )
+E       AssertionError: A router must not so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['tasks.py:27']
+E       assert ['tasks.py:27'] == []
+E
+E         Left contains one more item: 'tasks.py:27'
+E         Use -v to get more diff
+
+tests/architecture/test_routers_raise_no_http_exception.py:172: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_router_raises_an_http_exception
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_router_imports_an_http_exception
+2 failed, 1 passed in 0.03s
+exit code: 1
+
+================================================================================
+PLANT 2 - the import ONLY; the raise is removed
+================================================================================
+
+--- the planted diff ---
+diff --git a/src/taskmanager/presentation/api/routers/tasks.py b/src/taskmanager/presentation/api/routers/tasks.py
+index 78ad13d..bf06282 100644
+--- a/src/taskmanager/presentation/api/routers/tasks.py
++++ b/src/taskmanager/presentation/api/routers/tasks.py
+@@ -25,4 +25,5 @@ from typing import Annotated, Final
+ from uuid import UUID
+
++from fastapi import HTTPException
+ from fastapi import APIRouter, FastAPI, Query, Request, Response, status
+
+
+--- RUN 2 - the raise check is GREEN, the import check is RED ---
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+___________________ test_no_router_imports_an_http_exception ___________________
+
+    def test_no_router_imports_an_http_exception() -> None:
+        """No router binds or reaches the framework's exception class at all.
+
+        Strictly stronger than the raise check, and the reason the pair exists: a
+        module that never names the class cannot raise it under any spelling,
+        including the bind-then-raise form the syntax of a `raise` statement cannot
+        see.
+        """
+        offenders = []
+        for path in _router_modules():
+            for node in ast.walk(_parsed(path)):
+                if isinstance(node, ast.ImportFrom) and any(
+                    alias.name == FORBIDDEN_EXCEPTION for alias in node.names
+                ):
+                    offenders.append(_location(path, node))
+                elif isinstance(node, ast.Attribute) and node.attr == FORBIDDEN_EXCEPTION:
+                    offenders.append(_location(path, node))
+
+>       assert offenders == [], (
+            "A router must not so much as name the framework's exception class - "
+            "importing it is the one step that makes the indirect raise the check "
+            "above cannot see possible at all (D-15). Offending references: "
+            f"{offenders}"
+        )
+E       AssertionError: A router must not so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['tasks.py:27']
+E       assert ['tasks.py:27'] == []
+E
+E         Left contains one more item: 'tasks.py:27'
+E         Use -v to get more diff
+
+tests/architecture/test_routers_raise_no_http_exception.py:172: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_router_imports_an_http_exception
+1 failed, 2 passed in 0.03s
+exit code: 1
+
+================================================================================
+BOTH PLANTS REMOVED - GREEN: this is the shipped tree
+================================================================================
+
+$ git diff --stat -- src/taskmanager/presentation/api/routers/tasks.py
+(no output above: the file is byte-identical to the committed version)
+
+--- RUN 3 - GREEN ---
+...                                                                      [100%]
+3 passed in 0.01s
+exit code: 0

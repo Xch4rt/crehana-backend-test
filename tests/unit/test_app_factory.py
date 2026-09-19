@@ -1,5 +1,7 @@
 """Unit tests for the FastAPI composition root."""
 
+from typing import Any, Final
+
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +24,49 @@ from tests.probe import probe_router
 
 DATABASE_URL = "postgresql+psycopg://user:pass@localhost:5432/taskmanager"
 JWT_SECRET = "b" * 32
+
+API_PREFIX = "/api/v1"
+
+# The eleven routes Phase 4 owes, written down rather than derived. A derived
+# expectation would agree with whatever the application happens to expose, which
+# is the one thing an inventory must not do: a route silently added, removed or
+# re-pathed has to fail here, and a typo in a path is exactly the defect a
+# generated list would reproduce faithfully on both sides.
+EXPECTED_API_ENDPOINTS: Final[frozenset[tuple[str, str]]] = frozenset(
+    {
+        ("POST", "/api/v1/task-lists"),
+        ("GET", "/api/v1/task-lists"),
+        ("GET", "/api/v1/task-lists/{list_id}"),
+        ("PATCH", "/api/v1/task-lists/{list_id}"),
+        ("DELETE", "/api/v1/task-lists/{list_id}"),
+        ("POST", "/api/v1/task-lists/{list_id}/tasks"),
+        ("GET", "/api/v1/task-lists/{list_id}/tasks"),
+        ("GET", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
+        ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
+        ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
+        ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}/status"),
+    }
+)
+
+
+def _api_operations(app: FastAPI) -> dict[tuple[str, str], dict[str, Any]]:
+    """Every published `/api/v1` operation, keyed by (method, path).
+
+    Read out of `app.openapi()` rather than off `app.routes`, and that is not a
+    convenience. On the pinned stack `include_router` leaves a single opaque
+    `_IncludedRouter` object in `app.routes` with no `path` and no `methods` at
+    all - the same representation change this module's probe guard already ran
+    into - so walking `app.routes` would find the four documentation endpoints
+    and none of the eleven. The schema is also the thing a client reads, which
+    makes it the honest place to assert a published contract.
+    """
+    schema = app.openapi()
+    return {
+        (method.upper(), path): operation
+        for path, item in schema["paths"].items()
+        for method, operation in item.items()
+        if path.startswith(API_PREFIX)
+    }
 
 
 def _declared_endpoints(router: APIRouter) -> list[tuple[str, str]]:
@@ -120,3 +165,91 @@ async def test_production_app_answers_no_probe_route(
             # The declared method, so a 405 can never stand in for a 404 and
             # make an actually-registered route look absent.
             assert response.status_code == 404, f"{method} {path} is reachable"
+
+
+def test_create_app_publishes_exactly_the_phase_four_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The eleven routes, at these paths, on these verbs - no more, no fewer.
+
+    An inventory rather than a count. `len(...) == 11` would stay green if a
+    route were re-pathed, if a verb changed, or if one route were deleted while
+    another was added; comparing the whole set means the failure message names
+    which route moved.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    assert set(_api_operations(app)) == EXPECTED_API_ENDPOINTS
+
+
+def test_every_api_route_declares_a_response_model_or_returns_no_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ARC-05's mechanical half: a Pydantic schema, or a 204 with no body.
+
+    A handler annotated with an application result dataclass and no explicit
+    model makes FastAPI infer the published schema from that dataclass. The
+    endpoint would answer a `curl` perfectly, the response would even look
+    right, and ARC-05's claim that Pydantic types every HTTP boundary would
+    have quietly stopped being true. Here it fails instead.
+
+    The assertion is on the *published* schema, so it also catches a route whose
+    model was declared but never reached the document.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    undeclared = []
+    for endpoint, operation in _api_operations(app).items():
+        responses = operation["responses"]
+        no_content = "204" in responses and "content" not in responses["204"]
+        modelled = any(
+            "content" in responses[code]
+            for code in responses
+            if code.startswith("2") and code != "204"
+        )
+        if not (no_content or modelled):
+            undeclared.append(endpoint)
+
+    assert undeclared == [], (
+        "Every route must publish a Pydantic response model, or answer 204 "
+        f"with no body (ARC-05). These declare neither: {undeclared}"
+    )
+
+
+def test_every_api_route_is_documented(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A tag, a summary, a description of the success, and the refusal legs.
+
+    DOC-04 is Phase 7's budget, but a route documented in a plan and nowhere
+    else is documented nowhere. Asserting the four members here is what stops
+    the twelfth route from arriving bare, which is how an OpenAPI document
+    becomes half-useful and then ignored.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    undocumented = [
+        endpoint
+        for endpoint, operation in _api_operations(app).items()
+        if not (
+            operation.get("tags")
+            and operation.get("summary")
+            and any(
+                code.startswith("2") and operation["responses"][code].get("description")
+                for code in operation["responses"]
+            )
+            and any(not code.startswith("2") for code in operation["responses"])
+        )
+    ]
+
+    assert undocumented == [], (
+        "Every route needs a tag, a summary, a description of its success and "
+        f"a responses map naming its refusal legs. Bare: {undocumented}"
+    )

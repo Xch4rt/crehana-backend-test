@@ -46,6 +46,8 @@ from taskmanager.infrastructure.config.settings import Settings, get_settings
 from taskmanager.infrastructure.db.engine import create_database_resources
 from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 from taskmanager.presentation.api.health import register_health_routes
+from taskmanager.presentation.api.routers.task_lists import register_task_list_routes
+from taskmanager.presentation.api.routers.tasks import register_task_routes
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -75,4 +77,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database = resources
     register_exception_handlers(app)
     register_health_routes(app)
+    register_task_list_routes(app)
+    register_task_routes(app)
     return app
