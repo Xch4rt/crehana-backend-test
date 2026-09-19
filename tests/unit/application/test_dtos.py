@@ -39,12 +39,21 @@ from taskmanager.application.dto.commands import (
     UpdateTaskCommand,
     UpdateTaskListCommand,
 )
+from taskmanager.application.dto.results import (
+    TaskCollectionResult,
+    TaskListResult,
+    TaskResult,
+)
 from taskmanager.application.dto.unset import UNSET
+from taskmanager.domain.entities.task import Task
+from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.value_objects.completion import CompletionStats
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
 
-# Fixed identifiers and a fixed moment, for the reason the sibling suites give:
+# Fixed identifiers and fixed moments, for the reason the sibling suites give:
 # a generated value would leave the assertions unable to say what they expect.
+NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 LATER = datetime(2026, 6, 1, 9, 30, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -53,6 +62,8 @@ TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 # Attribute names live in constants so mypy does not reject the very assignment
 # the immutability tests exist to observe failing at runtime.
 UNDECLARED_FIELD = "actor"
+DECLARED_RESULT_FIELD = "name"
+DECLARED_COLLECTION_FIELD = "total_tasks"
 
 # Each case is one command instance and the name of a field the immutability
 # test tries to overwrite. The tuple is annotated `Any` because the ten commands
@@ -258,3 +269,187 @@ def test_the_task_listing_filters_default_to_no_filter() -> None:
 
     assert command.status is None
     assert command.priority is None
+
+
+def _task_list() -> TaskList:
+    """A fully populated list - description included, and two distinct moments.
+
+    `created_at` and `updated_at` differ on purpose: equal values would let a
+    mapping that copied one of them into both fields pass the field-by-field
+    test below.
+    """
+    return TaskList(
+        id=TASK_LIST_ID,
+        owner_id=ACTOR_ID,
+        name="Phase 4",
+        description="Task lists and tasks",
+        created_at=NOW,
+        updated_at=LATER,
+    )
+
+
+def _task(title: str, *, status: TaskStatus = TaskStatus.PENDING) -> Task:
+    """One task, identified by its title so ordering assertions can name it."""
+    return Task(
+        id=TASK_ID,
+        task_list_id=TASK_LIST_ID,
+        title=title,
+        status=status,
+        priority=TaskPriority.MEDIUM,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+
+def test_a_task_list_result_cannot_be_edited_on_its_way_out() -> None:
+    """frozen=True: a response cannot be rewritten after the transaction closed."""
+    result = TaskListResult.from_entity(
+        _task_list(), CompletionStats(total=0, completed=0)
+    )
+
+    with pytest.raises(FrozenInstanceError) as excinfo:
+        setattr(result, DECLARED_RESULT_FIELD, "edited")
+
+    assert DECLARED_RESULT_FIELD in str(excinfo.value)
+    assert not hasattr(result, "__dict__")
+
+
+def test_a_task_list_result_rejects_an_undeclared_attribute() -> None:
+    """slots=True: a field nobody declared has nowhere to live (T-4-20)."""
+    result = TaskListResult.from_entity(
+        _task_list(), CompletionStats(total=0, completed=0)
+    )
+
+    with pytest.raises((AttributeError, TypeError)):
+        setattr(result, UNDECLARED_FIELD, ACTOR_ID)
+
+    assert not hasattr(result, UNDECLARED_FIELD)
+
+
+def test_a_task_list_result_copies_every_field_and_the_three_statistics() -> None:
+    """All nine fields cross, so a forgotten one fails here and not at the HTTP
+    boundary where the symptom is a missing key in someone else's client.
+
+    This is the test that catches drift between the entity and the result when
+    `TaskList` gains a field (T-4-19).
+    """
+    task_list = _task_list()
+
+    result = TaskListResult.from_entity(
+        task_list, CompletionStats(total=4, completed=1)
+    )
+
+    assert result.id == task_list.id
+    assert result.owner_id == task_list.owner_id
+    assert result.name == task_list.name
+    assert result.description == task_list.description
+    assert result.created_at == task_list.created_at
+    assert result.updated_at == task_list.updated_at
+    assert result.total_tasks == 4
+    assert result.completed_tasks == 1
+    assert result.completion_percentage == 25.0
+    assert {field.name for field in fields(TaskListResult)} == {
+        "id",
+        "owner_id",
+        "name",
+        "description",
+        "created_at",
+        "updated_at",
+        "total_tasks",
+        "completed_tasks",
+        "completion_percentage",
+    }
+
+
+def test_an_empty_task_list_reports_zero_percent_rather_than_failing() -> None:
+    """D-10's empty case: 0.0, never a ZeroDivisionError and never null.
+
+    The guard lives in `CompletionStats.percentage`, so this test also pins that
+    the result reads it rather than dividing the two counters itself.
+    """
+    result = TaskListResult.from_entity(
+        _task_list(), CompletionStats(total=0, completed=0)
+    )
+
+    assert result.completion_percentage == 0.0
+    assert result.total_tasks == 0
+    assert result.completed_tasks == 0
+
+
+def test_a_task_list_percentage_is_rounded_to_two_decimals() -> None:
+    """2 of 3 is 66.666..., and D-09 fixes it at 66.67 for lists and tasks alike.
+
+    Pinned here rather than only in the domain suite because this is the number
+    that reaches a client: a later "improvement" to the rounding would change a
+    published response, and it fails this test first.
+    """
+    result = TaskListResult.from_entity(
+        _task_list(), CompletionStats(total=3, completed=2)
+    )
+
+    assert result.completion_percentage == 66.67
+
+
+def test_a_task_collection_result_cannot_be_edited_on_its_way_out() -> None:
+    """The tasks envelope is frozen and slotted exactly like every other DTO."""
+    result = TaskCollectionResult.from_parts([], CompletionStats(total=0, completed=0))
+
+    with pytest.raises(FrozenInstanceError) as excinfo:
+        setattr(result, DECLARED_COLLECTION_FIELD, 99)
+
+    assert DECLARED_COLLECTION_FIELD in str(excinfo.value)
+    assert not hasattr(result, "__dict__")
+
+
+def test_a_task_collection_result_rejects_an_undeclared_attribute() -> None:
+    """slots=True on the envelope too, for the same T-4-20 reason."""
+    result = TaskCollectionResult.from_parts([], CompletionStats(total=0, completed=0))
+
+    with pytest.raises((AttributeError, TypeError)):
+        setattr(result, UNDECLARED_FIELD, ACTOR_ID)
+
+    assert not hasattr(result, UNDECLARED_FIELD)
+
+
+def test_a_task_collection_keeps_its_items_in_a_tuple_in_input_order() -> None:
+    """A tuple, not a list - a list would stay editable through the frozen
+    wrapper - and D-13's order is preserved rather than re-sorted here.
+
+    Ordering belongs to the repository's `created_at, id` clause; a result DTO
+    that sorted would be a second, competing answer to the same question.
+    """
+    tasks = [_task("first"), _task("second"), _task("third")]
+
+    result = TaskCollectionResult.from_parts(
+        tasks, CompletionStats(total=3, completed=0)
+    )
+
+    assert isinstance(result.items, tuple)
+    assert [item.title for item in result.items] == ["first", "second", "third"]
+    assert all(isinstance(item, TaskResult) for item in result.items)
+
+
+def test_a_task_collection_reports_the_whole_list_never_the_filtered_view() -> None:
+    """D-09: the filter describes the view, the counters describe the list.
+
+    One item is handed in - a filtered page - beside statistics covering four
+    tasks, and the envelope must carry both without reconciling them. An
+    implementation that recomputed the counters from `items` would answer 1 and
+    0 here.
+    """
+    result = TaskCollectionResult.from_parts(
+        [_task("only the pending one")], CompletionStats(total=4, completed=3)
+    )
+
+    assert len(result.items) == 1
+    assert result.total_tasks == 4
+    assert result.completed_tasks == 3
+    assert result.completion_percentage == 75.0
+
+
+def test_an_empty_task_collection_reports_zero_percent() -> None:
+    """An empty list is an ordinary list: an empty tuple and 0.0, not an error."""
+    result = TaskCollectionResult.from_parts([], CompletionStats(total=0, completed=0))
+
+    assert result.items == ()
+    assert result.completion_percentage == 0.0
