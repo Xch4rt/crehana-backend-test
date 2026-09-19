@@ -3925,3 +3925,66 @@ nobody introduced.
   Every gate this phase added was falsified at least once before being committed.
 
 ---
+
+## ADR-092: an `exclude_also` entry is judged by what it removes, not by being on the pinned list (2026-09-19, amending ADR-089)
+
+**Context**
+ADR-089 pinned `exclude_also` by exact value and recorded four entries, and this log stated that
+each was harmless. One was not. `\.\.\.` is an **unanchored** regex, and when the line it matches
+is the header of a block, coverage.py excludes the **whole block**. Asked directly —
+`Coverage(config_file="pyproject.toml").analysis2(...)` — it was removing:
+`ListUsers.execute` (users/list.py:52-64), `ListTaskLists.execute` (task_lists/list.py:48-63),
+`ListAssignedTasks.execute` (tasks/list_assigned.py:52-63) and `DomainError.__reduce__`
+(domain/exceptions.py:70-71). Every one of those signatures returns a
+`tuple[XResult, ...]`, which is all it took. That is an `omit` written as a regex, and CLAUDE.md
+forbids reaching the number that way. Worse, the gate certified it: the pin made *removing* the
+entry a red test, and the docstring of `test_the_exclusion_list_is_exactly_the_four_known_entries`
+asserted in prose that none of the four excluded executable behaviour.
+
+**Options**
+
+- **Anchor the pattern** (`^\s*\.\.\.\s*$`). Fixes this instance and leaves the class of defect
+  intact: the next unanchored entry — a decorator name, `if not TYPE_CHECKING:` — arrives with the
+  same argument and the same gate waving it through, because a value pin can only ever say "this is
+  the list somebody approved".
+- **Drop the entry and keep pinning by value.** Necessary, and it is what makes the three
+  remaining entries auditable, but on its own it is the configuration that just failed.
+- **Drop the entry and add a gate that measures the effect.**
+
+**Decision**
+The third. `\.\.\.` is gone from `pyproject.toml` — coverage's own `DEFAULT_EXCLUDE` already
+carries an *anchored* pattern for an ellipsis body, so every Protocol method and `@overload`
+signature under `application/ports/` and `infrastructure/db/mappers.py` stays excluded without it.
+`tests/architecture/test_coverage_configuration.py::test_no_exclusion_removes_a_real_statement`
+then reads the exclusions back out of `analysis2` for every module under `src/taskmanager` and
+fails on any excluded line that carries a statement, unless that line sits inside a stub body
+(`...`, `pass`, a docstring, `raise NotImplementedError`) or inside an `if TYPE_CHECKING:` block —
+the `orelse` of such an `if` deliberately not included, since code under the runtime branch runs.
+
+**Consequences**
+
+- **The gate is indifferent to spelling, which is the only property worth having.** A pragma
+  comment, a default pattern and a hand-written regex all reach it as the same input: a line
+  number coverage.py says it is not measuring. The literal pragma scan beside it keeps its own
+  value as a faster, more readable message, not as the last line of defence.
+- **The denominator grew and the percentage did not move.** Host CPython 3.14: 1643 → **1659**
+  statements, 0 missing, 100 %. Container CPython 3.13: 1796 → **1813**, 0 missing, 100 %. 1080
+  tests pass in both. So the three `execute` bodies were being exercised all along — the number
+  was true and unmeasured, which is the good case and was in no way guaranteed. Had a line come
+  back missing, the rule is CLAUDE.md's: write the test.
+- **It was driven red twice, deliberately.** Once by re-planting the entry in `pyproject.toml`
+  (the failure names `users/list.py:58: async with self._uow:` and its siblings, `file:line` plus
+  source), and once as a test of its own —
+  `test_the_exclusion_scan_catches_an_unanchored_pattern` plants a module whose signature mentions
+  `tuple[int, ...]` over a real body, asks coverage.py for its verdict under a planted
+  `[report] exclude_also` and under this repository's configuration, and asserts red for the first
+  and clean for the second. A gate that only ever ran green on the tree that satisfies it is not a
+  tested gate.
+- **ADR-089's list is now three entries, and its statement counts are superseded by the two
+  figures above.** That ADR is otherwise unchanged and still describes the gate correctly.
+- **The lesson generalises past coverage.** Two of this phase's gates pin a configuration *value*
+  (`EXPECTED_EXCLUDE_ALSO`, `EXPECTED_CONTRACT_NAMES`). A value pin proves that a human approved
+  the list; it proves nothing about what the list does. Where the effect is askable — and here it
+  was, through one public API — the gate should ask.
+
+---

@@ -393,11 +393,21 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   parses `pytest.ini` and `pyproject.toml` and fails on: a threshold below 75 (parsed as a number,
   so raising it stays legal), a coverage `source` that is not `["taskmanager"]`, `branch` off, a
   `concurrency` value other than `["thread", "greenlet"]`, an `omit` key, a second `fail_under`
-  home in `[tool.coverage.report]`, a fifth `exclude_also` entry, or any `# pragma: no cover`
+  home in `[tool.coverage.report]`, a fourth `exclude_also` entry, or any `# pragma: no cover`
   under `src/` — that last one reported by `file:line` (ADR-089). The `greenlet` entry is the one
   that defends against the number being too *low*: without it, Python 3.13 reported 18 executed
   router lines as missing, every one of them after a handler's first `await` into SQLAlchemy's
   async bridge.
+- **An `exclude_also` entry is judged by what it removes, not by being on the approved list.**
+  Entries are **unanchored** regexes, and one that matches a block header removes the whole block —
+  which is an `omit` in disguise. A fourth entry, `\.\.\.`, did exactly that to the `execute` body
+  of `ListUsers`, `ListTaskLists` and `ListAssignedTasks` (their signatures return
+  `tuple[XResult, ...]`) and to `DomainError.__reduce__`, while the value pin made *removing* it
+  red. It is gone; coverage's own anchored default still excludes Protocol and `@overload`
+  ellipsis bodies. `test_no_exclusion_removes_a_real_statement` now reads the exclusions back out
+  of `coverage.Coverage.analysis2` for every module under `src/taskmanager` and fails on any
+  excluded line carrying a statement outside a stub body or an `if TYPE_CHECKING:` block, so the
+  gate is indifferent to how an exclusion was spelled (ADR-092, amending ADR-089).
 - Every collected test carries **exactly one** of the two markers `pytest.ini` registers, `unit`
   or `integration`, as a module-level `pytestmark`. `--strict-markers` refuses an *unregistered*
   marker; nothing in pytest refuses a *missing* one, so `pytest_collection_modifyitems` in

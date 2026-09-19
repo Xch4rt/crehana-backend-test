@@ -51,10 +51,21 @@ concurrency = ["thread", "greenlet"]
 
 # No `omit` entries and no `fail_under` here: the threshold lives in the
 # pytest.ini addopts so every invocation is gated identically.
+#
+# Every entry below is a regex matched against a line, UNANCHORED, and when the
+# matching line is the header of a block coverage.py drops the whole block. An
+# entry that can match a signature is therefore an `omit` in disguise. A fourth
+# entry, `\.\.\.`, was removed in plan 06-05 for exactly that reason: it matched
+# `-> tuple[UserResult, ...]:` and silently took the entire `execute` body of
+# ListUsers, ListTaskLists and ListAssignedTasks, plus `DomainError.__reduce__`,
+# out of the denominator. Protocol and overload ellipsis bodies stay excluded
+# without it - coverage's own DEFAULT_EXCLUDE carries an anchored pattern for
+# them. See DECISION_LOG.md ADR-092, and the gate in
+# tests/architecture/test_coverage_configuration.py that now proves no excluded
+# line sits inside a real function body.
 [tool.coverage.report]
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
     "@abstractmethod",
-    "\\.\\.\\.",
 ]
