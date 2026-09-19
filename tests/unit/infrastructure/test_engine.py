@@ -23,6 +23,8 @@ from taskmanager.infrastructure.db.engine import (
     create_session_factory,
 )
 
+pytestmark = pytest.mark.unit
+
 # Syntactically valid, deliberately unreachable: port 1 on the loopback has no
 # listener, so any accidental connection attempt fails loudly instead of
 # silently reaching the developer's local PostgreSQL.

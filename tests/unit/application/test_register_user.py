@@ -40,6 +40,8 @@ from tests.unit.application.fakes import (
     FrozenClock,
 )
 
+pytestmark = pytest.mark.unit
+
 # Fixed on purpose, for the reason `test_create_task_list.py` gives: a generated
 # identifier or a real clock reading would leave the assertions unable to say
 # what they expect.

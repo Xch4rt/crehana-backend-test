@@ -34,6 +34,8 @@ from taskmanager.infrastructure.logging import (
     configure_logging,
 )
 
+pytestmark = pytest.mark.unit
+
 NOTIFICATIONS_LOGGER = "taskmanager.notifications"
 
 

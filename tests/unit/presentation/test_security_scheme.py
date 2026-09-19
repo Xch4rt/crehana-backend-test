@@ -39,8 +39,12 @@ added to the auth router and the partition test named it - the capture is
 
 from typing import Any, Final
 
+import pytest
+
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.main import create_app
+
+pytestmark = pytest.mark.unit
 
 DATABASE_URL = "postgresql+psycopg://user:pass@localhost:5432/taskmanager"
 JWT_SECRET = "b" * 32

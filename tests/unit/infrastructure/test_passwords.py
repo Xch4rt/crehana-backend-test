@@ -35,6 +35,8 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 from taskmanager.domain.entities.user import User
 from taskmanager.infrastructure.security.passwords import PwdlibPasswordHasher
 
+pytestmark = pytest.mark.unit
+
 PASSWORD = "correct horse battery staple"
 
 # The value the Phase 4 demo seed wrote into `users.password_hash` (see

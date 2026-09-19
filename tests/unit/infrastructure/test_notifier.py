@@ -33,6 +33,8 @@ from taskmanager.infrastructure.notifications.logging import (
     LoggingEmailNotifier,
 )
 
+pytestmark = pytest.mark.unit
+
 RECIPIENT = "assignee@example.com"
 TITLE = "Ship the release notes"
 

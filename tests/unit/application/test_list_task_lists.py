@@ -13,6 +13,8 @@ long, so a regression fails in the layer it was written in.
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
+
 from taskmanager.application.dto.commands import ListTaskListsCommand
 from taskmanager.application.use_cases.task_lists.list import ListTaskLists
 from taskmanager.domain.entities.task import Task
@@ -24,6 +26,8 @@ from tests.unit.application.fakes import (
     FakeTaskRepository,
     FakeUnitOfWork,
 )
+
+pytestmark = pytest.mark.unit
 
 # Fixed on purpose. A generated identifier or a real clock reading would make
 # every assertion below unfalsifiable: the test could no longer state which

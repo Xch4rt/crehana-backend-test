@@ -6,6 +6,8 @@ import pytest
 
 from taskmanager.domain.value_objects.task_status import ALLOWED_TRANSITIONS, TaskStatus
 
+pytestmark = pytest.mark.unit
+
 
 def test_task_status_serializes_to_its_lowercase_value() -> None:
     """json.dumps emits the bare string value, with no custom encoder."""

@@ -56,6 +56,8 @@ from taskmanager.presentation.api.schemas.tasks import (
 )
 from taskmanager.presentation.api.schemas.users import UserSummaryResponse
 
+pytestmark = pytest.mark.unit
+
 # Fixed identifiers and instants: a generated value makes an assertion
 # unfalsifiable, and the project uses literals everywhere for that reason.
 ACTOR_ID = UUID("00000000-0000-4000-8000-0000000000a1")

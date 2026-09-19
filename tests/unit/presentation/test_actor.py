@@ -37,6 +37,7 @@ from datetime import UTC, datetime
 from typing import Annotated, get_args, get_origin, get_type_hints
 from uuid import UUID
 
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 
@@ -59,6 +60,8 @@ from tests.unit.application.fakes import (
     FakeUnitOfWork,
     FakeUserRepository,
 )
+
+pytestmark = pytest.mark.unit
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 

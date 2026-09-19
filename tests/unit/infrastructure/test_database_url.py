@@ -19,6 +19,8 @@ from taskmanager.infrastructure.config.database_url import (
 )
 from taskmanager.infrastructure.config.settings import Settings
 
+pytestmark = pytest.mark.unit
+
 # The compose and CI credential pair, verbatim: user and password both spell the
 # word that also names the database.
 COMPOSE_URL = "postgresql+psycopg://taskmanager:taskmanager@localhost:5432/taskmanager"

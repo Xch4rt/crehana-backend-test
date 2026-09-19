@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from taskmanager.infrastructure.config.settings import Settings, get_settings
 
+pytestmark = pytest.mark.unit
+
 # A syntactically valid DSN and an obviously fake 32-character secret. Both are
 # injected through monkeypatch so no test ever depends on the developer's shell.
 ENV = {

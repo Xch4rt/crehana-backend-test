@@ -23,6 +23,10 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 # tests/unit/test_break_check.py -> tests/unit -> tests -> repository root.
 ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 SCRIPT: Final[Path] = ROOT / "scripts" / "break-check.sh"

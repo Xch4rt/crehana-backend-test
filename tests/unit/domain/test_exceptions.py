@@ -7,6 +7,8 @@ import re
 from collections.abc import Iterator
 from uuid import UUID
 
+import pytest
+
 from taskmanager.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -23,6 +25,8 @@ from taskmanager.domain.exceptions import (
     ValidationError,
 )
 from taskmanager.domain.value_objects.task_status import TaskStatus
+
+pytestmark = pytest.mark.unit
 
 # The living documentation of the taxonomy. A new error class added without a
 # line here - and therefore without a status in presentation/api/errors/

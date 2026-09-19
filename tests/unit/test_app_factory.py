@@ -46,6 +46,8 @@ from taskmanager.presentation.api.schemas import users as user_schemas
 from tests.integration.test_dependencies import uow_probe_router
 from tests.probe import probe_router
 
+pytestmark = pytest.mark.unit
+
 DATABASE_URL = "postgresql+psycopg://user:pass@localhost:5432/taskmanager"
 JWT_SECRET = "b" * 32
 

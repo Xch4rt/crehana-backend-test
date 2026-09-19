@@ -13,8 +13,11 @@ never fail. The supported Python API below returns False on a violation, which w
 observed before this file was committed (see evidence/import-linter-red-green.txt).
 """
 
+import pytest
 from importlinter import api
 from importlinter.application import use_cases
+
+pytestmark = pytest.mark.unit
 
 EXPECTED_CONTRACT_NAMES = {
     "Layered architecture (high to low)",

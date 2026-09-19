@@ -6,6 +6,8 @@ import pytest
 
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 
+pytestmark = pytest.mark.unit
+
 
 def test_task_priority_is_ordered_from_low_to_high() -> None:
     """Declaration order is the ascending urgency order clients read as a list."""

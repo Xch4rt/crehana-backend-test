@@ -31,6 +31,8 @@ from taskmanager.domain.exceptions import (
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from tests.unit.application.fakes import FakeUnitOfWork
 
+pytestmark = pytest.mark.unit
+
 # Fixed on purpose. A generated identifier or a real clock reading would make
 # every assertion below unfalsifiable: the test could no longer state which
 # moment, or which actor, it expects.

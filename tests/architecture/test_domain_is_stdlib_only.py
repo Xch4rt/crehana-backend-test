@@ -31,6 +31,10 @@ import ast
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 DOMAIN_ROOT = Path(__file__).resolve().parents[2] / "src" / "taskmanager" / "domain"
 
 MINIMUM_DOMAIN_MODULES = 10

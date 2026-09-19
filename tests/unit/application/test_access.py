@@ -48,6 +48,8 @@ from taskmanager.domain.exceptions import (
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from tests.unit.application.fakes import FakeTaskListRepository, FakeUnitOfWork
 
+pytestmark = pytest.mark.unit
+
 # Fixed on purpose, exactly as the reference use case's suite fixes them: a
 # generated identifier would make every assertion below unfalsifiable, because
 # the test could no longer state which actor, or which list, it expects.

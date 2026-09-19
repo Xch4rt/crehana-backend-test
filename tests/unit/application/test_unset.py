@@ -1,6 +1,10 @@
 """Unit tests for the PATCH sentinel that marks a field the client omitted."""
 
+import pytest
+
 from taskmanager.application.dto.unset import UNSET, Unset
+
+pytestmark = pytest.mark.unit
 
 
 def _title_or_default(value: str | Unset) -> str:

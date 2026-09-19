@@ -88,6 +88,10 @@ import ast
 from pathlib import Path
 from typing import Final
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 # tests/architecture/test_routers_raise_no_http_exception.py ->
 # tests/architecture -> tests -> repository root.
 PRESENTATION_API: Final[Path] = (

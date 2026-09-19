@@ -10,6 +10,8 @@ from taskmanager.domain.exceptions import InvalidStatusTransitionError, Validati
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
 
+pytestmark = pytest.mark.unit
+
 # Every instant and identifier below is a literal. A freshly generated identifier
 # or a clock reading would make the assertions on `updated_at` and `completed_at`
 # unfalsifiable: the test could no longer state which moment it expects.

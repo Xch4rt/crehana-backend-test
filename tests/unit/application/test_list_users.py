@@ -16,11 +16,15 @@ import inspect
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
+
 from taskmanager.application.dto.commands import ListUsersCommand
 from taskmanager.application.dto.results import UserResult
 from taskmanager.application.use_cases.users.list import ListUsers
 from taskmanager.domain.entities.user import User
 from tests.unit.application.fakes import FakeUnitOfWork
+
+pytestmark = pytest.mark.unit
 
 # Fixed on purpose. A generated identifier or a real clock reading would make
 # every assertion below unfalsifiable: the test could no longer state which

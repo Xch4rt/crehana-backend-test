@@ -55,6 +55,8 @@ from taskmanager.infrastructure.notifications.logging import LoggingEmailNotifie
 from taskmanager.infrastructure.security.passwords import PwdlibPasswordHasher
 from taskmanager.infrastructure.security.tokens import JwtTokenService
 
+pytestmark = pytest.mark.unit
+
 # The same unreachable DSN `test_engine.py` uses, and for the same reason: an
 # accidental connection attempt must fail loudly instead of silently reaching
 # whatever PostgreSQL the developer has running.

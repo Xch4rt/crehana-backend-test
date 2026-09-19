@@ -33,6 +33,8 @@ from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from tests.unit.application.fakes import FakeUnitOfWork, FrozenClock
 
+pytestmark = pytest.mark.unit
+
 # Fixed on purpose. A generated identifier or a real clock reading would make
 # every assertion below unfalsifiable: the test could no longer state which
 # moment, or which actor, it expects.

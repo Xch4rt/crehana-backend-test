@@ -65,6 +65,10 @@ import ast
 from pathlib import Path
 from typing import Final
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 # tests/architecture/test_use_case_totality.py -> tests/architecture -> tests ->
 # repository root.
 ROOT: Final[Path] = Path(__file__).resolve().parents[2]

@@ -24,6 +24,8 @@ list, so a list deletion can never end up waiting on a writer that waits on it.
 from datetime import UTC, datetime
 from uuid import UUID
 
+import pytest
+
 from taskmanager.application.dto.commands import (
     AssignTaskCommand,
     ChangeTaskStatusCommand,
@@ -61,6 +63,8 @@ from tests.unit.application.fakes import (
     FakeUnitOfWork,
     FrozenClock,
 )
+
+pytestmark = pytest.mark.unit
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")

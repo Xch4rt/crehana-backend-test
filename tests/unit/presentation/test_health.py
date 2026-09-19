@@ -27,6 +27,8 @@ from taskmanager import __version__
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.main import create_app
 
+pytestmark = pytest.mark.unit
+
 # Port 1 is reserved and unassignable, so a connection attempt is refused
 # immediately rather than hanging: the failure this module needs, arriving fast.
 UNREACHABLE_DATABASE_URL = "postgresql+psycopg://user:pass@127.0.0.1:1/nothing"

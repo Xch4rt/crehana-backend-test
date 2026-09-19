@@ -37,6 +37,8 @@ milliseconds, at the line that would have to change.
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
+
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
@@ -46,6 +48,8 @@ from tests.unit.application.fakes import (
     FakeTaskRepository,
     FakeUserRepository,
 )
+
+pytestmark = pytest.mark.unit
 
 # Fixed literals, never uuid4()/now(): an assertion about a lookup key must be
 # reproducible from the source alone.

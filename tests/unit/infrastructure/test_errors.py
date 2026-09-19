@@ -28,6 +28,8 @@ from taskmanager.infrastructure.db.errors import (
     violated_constraint,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def test_an_unknown_constraint_is_not_swallowed() -> None:
     """A non-psycopg original is unknowable, so a caller must re-raise it."""

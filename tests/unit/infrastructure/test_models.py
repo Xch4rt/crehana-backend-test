@@ -17,6 +17,7 @@ error translation to silently stop matching.
 
 from typing import Final
 
+import pytest
 from sqlalchemy import Column, DateTime, String, Table, create_engine
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.schema import CreateIndex, CreateTable
@@ -27,6 +28,8 @@ from taskmanager.domain.entities.user import User
 from taskmanager.infrastructure.db import constraints
 from taskmanager.infrastructure.db.base import Base
 from taskmanager.infrastructure.db.models import TaskListRow, TaskRow, UserRow
+
+pytestmark = pytest.mark.unit
 
 TABLE_NAMES: Final[tuple[str, ...]] = ("users", "task_lists", "tasks")
 

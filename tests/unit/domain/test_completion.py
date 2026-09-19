@@ -6,6 +6,8 @@ import pytest
 
 from taskmanager.domain.value_objects.completion import CompletionStats
 
+pytestmark = pytest.mark.unit
+
 # Attribute names are held in constants rather than written as literals inside
 # `setattr`, which keeps both negative tests readable and keeps mypy from
 # rejecting an assignment the test exists precisely to observe at runtime.

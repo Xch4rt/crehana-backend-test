@@ -22,6 +22,8 @@ from taskmanager import __version__
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.main import create_app
 
+pytestmark = pytest.mark.unit
+
 # tests/unit/test_version.py -> tests/unit -> tests -> repository root.
 PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 

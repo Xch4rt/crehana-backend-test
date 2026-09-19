@@ -36,6 +36,8 @@ from tests.unit.application.fakes import (
     FakeUserRepository,
 )
 
+pytestmark = pytest.mark.unit
+
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
 DELETED_USER_ID = UUID("99999999-9999-4999-8999-999999999999")

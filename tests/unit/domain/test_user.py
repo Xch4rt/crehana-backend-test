@@ -8,6 +8,8 @@ import pytest
 from taskmanager.domain.entities.user import User
 from taskmanager.domain.exceptions import ValidationError
 
+pytestmark = pytest.mark.unit
+
 # Fixed literals, never a clock reading or a generated identifier, for the same
 # reason as in the sibling entity tests: the expected values stay readable.
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)

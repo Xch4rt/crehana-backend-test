@@ -15,6 +15,8 @@ from taskmanager.domain.validation import (
     require_utc,
 )
 
+pytestmark = pytest.mark.unit
+
 # Fixed literals rather than a clock reading or a generated identifier: a guard
 # that normalises time must be asserted against an instant the reader can see.
 AWARE_UTC = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)

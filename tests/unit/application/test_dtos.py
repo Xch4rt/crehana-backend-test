@@ -67,6 +67,8 @@ from taskmanager.domain.value_objects.completion import CompletionStats
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
 
+pytestmark = pytest.mark.unit
+
 # Fixed identifiers and fixed moments, for the reason the sibling suites give:
 # a generated value would leave the assertions unable to say what they expect.
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)

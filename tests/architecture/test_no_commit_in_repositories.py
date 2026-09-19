@@ -40,6 +40,10 @@ Docker test stage and CI all already run. Same argument, same outcome, as plan
 from pathlib import Path
 from typing import Final
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 # tests/architecture/test_no_commit_in_repositories.py -> tests/architecture ->
 # tests -> repository root.
 REPOSITORIES: Final[Path] = (

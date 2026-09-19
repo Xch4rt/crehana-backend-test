@@ -73,7 +73,11 @@ import ast
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 from taskmanager.domain.exceptions import DomainError
+
+pytestmark = pytest.mark.unit
 
 # tests/architecture/test_error_contract_totality.py -> tests/architecture ->
 # tests -> repository root.

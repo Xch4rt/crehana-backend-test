@@ -16,6 +16,8 @@ unused local, and at module level it never appears in the report at all.
 from datetime import UTC, datetime
 from uuid import UUID
 
+import pytest
+
 from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.notifications import EmailNotifier
 from taskmanager.application.ports.repositories import (
@@ -37,6 +39,8 @@ from tests.unit.application.fakes import (
     FakeUserRepository,
     FrozenClock,
 )
+
+pytestmark = pytest.mark.unit
 
 # Fixed on purpose: a generated identifier or a clock reading would make the
 # percentage assertion below unfalsifiable.

@@ -39,6 +39,8 @@ from tests.unit.application.fakes import (
     FakeUserRepository,
 )
 
+pytestmark = pytest.mark.unit
+
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 USER_ID = UUID("11111111-1111-4111-8111-111111111111")
 

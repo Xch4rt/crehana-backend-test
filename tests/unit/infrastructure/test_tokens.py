@@ -38,6 +38,8 @@ from taskmanager.infrastructure.clock import SystemClock
 from taskmanager.infrastructure.security.tokens import JwtTokenService
 from tests.unit.application.fakes import FrozenClock
 
+pytestmark = pytest.mark.unit
+
 SECRET = "a" * 32
 # A second key of the same length: the difference under test is whose secret
 # signed the token, never how long it was. Both clear the 32-byte floor D-26

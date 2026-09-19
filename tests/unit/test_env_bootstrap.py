@@ -14,6 +14,8 @@ import pytest
 
 from taskmanager.infrastructure.config.settings import Settings
 
+pytestmark = pytest.mark.unit
+
 # tests/unit/test_env_bootstrap.py -> tests/unit -> tests -> repository root.
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "init-env.sh"

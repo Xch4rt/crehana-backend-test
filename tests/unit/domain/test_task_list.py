@@ -8,6 +8,8 @@ import pytest
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.exceptions import ValidationError
 
+pytestmark = pytest.mark.unit
+
 # Fixed literals, never a clock reading or a generated identifier: a test that
 # asserts on `updated_at` has to be able to name the moment it expects.
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)

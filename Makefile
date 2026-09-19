@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install env lint format typecheck arch test break-check docker-test up down run
+.PHONY: install env lint format typecheck arch test test-unit break-check docker-test up down run
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -70,6 +70,25 @@ arch:
 # and a bare `pytest` are gated by the same bytes.
 test:
 	$(VENV)/bin/pytest
+
+# The fast host loop: the no-database slice, in about a second and a half, so
+# there is no reason to run the suite less often than every edit. It needs no
+# `make up`, no container and no network - which also makes it the one test
+# command that works on a machine where Docker is not running.
+#
+# `--no-cov`, never a threshold override. `pytest.ini` also sets
+# `--cov-report=xml`, so a partial run would overwrite `coverage.xml` with a
+# partial number - and that file is the artifact D-11's three-way agreement is
+# read off, produced by `make test`, `make docker-test` and CI. The slice does
+# in fact clear 75% on its own today, which is exactly why not to gate it: a
+# green that depends on a number nobody is defending fails one day for a reason
+# nobody intended.
+#
+# A convenience subset, not a gate: it runs a strict subset of what `test` runs,
+# so it adds nothing to .pre-commit-config.yaml or .github/workflows/ci.yml to
+# be out of sync with. CLAUDE.md's two-places rule applies to a *new* gate.
+test-unit:
+	$(VENV)/bin/pytest -m unit --no-cov
 
 # The answer to "your tests are green, but do they check anything?" - roadmap
 # SC-4. The script breaks src/ on purpose five times, runs the tests that should

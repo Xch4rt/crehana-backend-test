@@ -9,8 +9,12 @@ in the pytest report.
 
 from datetime import timedelta
 
+import pytest
+
 from taskmanager.application.ports.clock import Clock
 from taskmanager.infrastructure.clock import SystemClock
+
+pytestmark = pytest.mark.unit
 
 
 def test_system_clock_satisfies_the_clock_port() -> None:

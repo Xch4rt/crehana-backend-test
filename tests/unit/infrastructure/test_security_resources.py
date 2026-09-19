@@ -34,6 +34,8 @@ from taskmanager.infrastructure.security.resources import (
 )
 from taskmanager.infrastructure.security.tokens import JwtTokenService
 
+pytestmark = pytest.mark.unit
+
 # The same unreachable DSN the sibling suites use: this container touches no
 # database at all, and a DSN that could connect would hide it if it ever did.
 UNREACHABLE_DATABASE_URL = "postgresql+psycopg://user:pass@127.0.0.1:1/nothing"
