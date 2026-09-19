@@ -85,11 +85,11 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Testing (TEST)
 
-- [ ] **TEST-01**: Unit tests cover domain rules and every use case using in-memory fakes, with no database or HTTP [PDF 2.e, 3.a]
-- [ ] **TEST-02**: Integration tests exercise every endpoint through HTTP against a real PostgreSQL, isolated per test [PDF 2.e, 3.a]
-- [ ] **TEST-03**: Total coverage is >= 75% and enforced by `--cov-fail-under=75` locally and in CI [PDF 3.b]
-- [ ] **TEST-04**: Negative-path tests exist for the error contract, cross-user access (404/403 matrix), invalid transitions and auth failures [NL]
-- [ ] **TEST-05**: Every test contains meaningful assertions; a deliberate-break spot check is performed and recorded [NL]
+- [x] **TEST-01**: Unit tests cover domain rules and every use case using in-memory fakes, with no database or HTTP [PDF 2.e, 3.a]
+- [x] **TEST-02**: Integration tests exercise every endpoint through HTTP against a real PostgreSQL, isolated per test [PDF 2.e, 3.a]
+- [x] **TEST-03**: Total coverage is >= 75% and enforced by `--cov-fail-under=75` locally and in CI [PDF 3.b]
+- [x] **TEST-04**: Negative-path tests exist for the error contract, cross-user access (404/403 matrix), invalid transitions and auth failures [NL]
+- [x] **TEST-05**: Every test contains meaningful assertions; a deliberate-break spot check is performed and recorded [NL]
 
 ### Docker (DOCK)
 
@@ -203,11 +203,11 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | NOTF-01 | Phase 5 | Complete |
 | NOTF-02 | Phase 5 | Complete |
 | NOTF-03 | Phase 5 | Complete |
-| TEST-01 | Phase 6 | Pending |
-| TEST-02 | Phase 6 | Pending |
-| TEST-03 | Phase 6 | Pending |
-| TEST-04 | Phase 6 | Pending |
-| TEST-05 | Phase 6 | Pending |
+| TEST-01 | Phase 6 | Complete |
+| TEST-02 | Phase 6 | Complete |
+| TEST-03 | Phase 6 | Complete |
+| TEST-04 | Phase 6 | Complete |
+| TEST-05 | Phase 6 | Complete |
 | DOCK-01 | Phase 1 | Complete |
 | DOCK-02 | Phase 3 | Complete |
 | DOCK-03 | Phase 3 | Complete |
@@ -237,6 +237,24 @@ Phase 6 = 5, Phase 7 = 8.
   in Phases 2-5; Phase 6 is where completeness and assertion quality are audited.
 - **FND-06** is the coverage *configuration* (Phase 1); **TEST-03** is the coverage *number*
   being met (Phase 6).
+- **TEST-01..05 were ticked once, in plan 06-04**, each against a named passing test rather than
+  against a plan header:
+  - **TEST-01** — `tests/architecture/test_use_case_totality.py` (every use case reachable from
+    the fakes-based suite, AST-derived) plus the 755-test `make test-unit` slice, which runs with
+    no database and no live engine.
+  - **TEST-02** — `tests/integration/test_endpoint_totality.py`, which compares the operations
+    the run actually requested (recorded by the ASGI wrapper in `tests/integration/conftest.py`)
+    with `app.openapi()["paths"]`.
+  - **TEST-03** — `tests/architecture/test_coverage_configuration.py` for the configuration, and
+    the measured number: `make test` → 1078 passed, 100.00%; `make docker-test` → 1078 passed,
+    100.00%. The CI leg is the phase's one manual verification (`06-VALIDATION.md`).
+  - **TEST-04** — the transition complement in `tests/integration/api/test_tasks.py` (derived from
+    `ALLOWED_TRANSITIONS`), the seeded auth failure modes in
+    `tests/integration/api/test_auth.py`, `tests/architecture/test_error_contract_totality.py`,
+    and the 19-row `tests/integration/api/test_permission_matrix.py` for the 404/403 matrix.
+  - **TEST-05** — `tests/architecture/test_assertion_quality.py` (both halves, with the
+    `no_reread` exemption that must keep earning itself) plus `make break-check`, whose five
+    deliberate breaks all turn the suite red, recorded in `AI_WORKFLOW.md`.
 - **DOCK-01/04** (image + dockerized test command) land in Phase 1; **DOCK-02/03** (full
   startup contract with migrations and `/health` DB readiness) need Alembic and an engine, so
   they land in Phase 3.

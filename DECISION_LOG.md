@@ -3613,3 +3613,315 @@ amends D-15: step one of the evaluator's path is now `make env` rather than a co
   running container was rebuilt onto a generated secret as the first step of the fix.
 
 ---
+
+## ADR-085: every use case must be reachable from the fakes-based unit suite, checked by an AST walk
+
+**Context**
+TEST-01 says "every use case" has a unit test against in-memory fakes. Nothing enforced the
+"every". A use case added in a later plan could ship with an integration test and no unit test at
+all, and the suite would stay green: the coverage gate would be satisfied by the HTTP path
+exercising the same lines, and nobody reading a diff notices a file that was *not* added. The
+failure is silent by construction, which is the only kind worth building a gate for.
+
+**Options**
+
+- **Trust the plan checklist.** Free, and it is what had been happening; the audit that produced
+  this phase found the gap by hand, which is the argument against relying on finding it by hand.
+- **Require a per-use-case test file by name.** A naming convention is cheap to check and cheap to
+  satisfy without writing an assertion: an empty module with the right name passes.
+- **Walk the AST of `tests/unit/application/` and require each public use-case symbol to be
+  imported and then named in a call or a construction.**
+
+**Decision**
+The third. `tests/architecture/test_use_case_totality.py` discovers the expected set from
+`application/use_cases/` — every public module-level symbol, by AST, never a hand-kept list — and
+requires each one to be imported and used under `tests/unit/application/`. A use case with no
+fakes-based test fails a build.
+
+**Consequences**
+
+- **The claim is reachability, not correctness, and the gate says so.** It proves a unit test
+  constructs or calls the use case; the coverage gate proves the lines ran; only a human reading
+  the test knows whether it asserts anything worth asserting. Stating the limit is what stops the
+  gate being read as more than it is.
+- **The expected set is derived, so it cannot drift.** A new use case joins the requirement by
+  existing. There is no registry to forget to update, which is the defect the naming-convention
+  option shares with the checklist.
+- **A use case that is genuinely presentation-only has nowhere to hide.** It would have to be
+  moved out of `application/use_cases/`, which is a visible change to the layer it lives in
+  rather than an omission in a test directory.
+
+---
+
+## ADR-086: endpoint totality is observed at run time from `app.openapi()`, not asserted from a list
+
+**Context**
+TEST-02 says "every endpoint" has an integration test. The published document
+(`app.openapi()["paths"]`) is the only authority on what "every endpoint" means, and a test cannot
+know what the suite *requested* by reading source: a request travels through fixtures, helpers and
+parametrized tables, and the path that reaches the app is a template the test never spells.
+
+**Options**
+
+- **A registry of expected operations beside the permission matrix.** A second home for a truth the
+  application already publishes; it drifts the first time a route is added, and it drifts silently.
+- **An `httpx` event hook recording the requested URL.** It sees the concrete path
+  (`/api/v1/task-lists/<uuid>`), never the template, so every request would record a distinct
+  operation and the comparison would have nothing to compare.
+- **Wrap the ASGI application in the integration fixtures and record the matched route.**
+
+**Decision**
+The third. The integration harness wraps the app, records the matched operation into a run-wide
+`REQUESTED` set, and `tests/integration/test_endpoint_totality.py` compares that set with
+`app.openapi()["paths"]`. The total half skips on a partial selection — it cannot be true of a
+single-module run — while the recorded-subset half, which catches a recorded operation the document
+does not publish, is always on.
+
+**Consequences**
+
+- **A published operation no test requests fails a full run.** That is the property TEST-02 asks
+  for, and it is checked against the document rather than against anyone's memory of it.
+- **The total half is conditional, and that is a real hole with a stated shape.** A developer who
+  only ever runs a focused selection never sees it. CI and `make test` run the full suite, so the
+  hole closes before a merge, not before a commit.
+- **It records what was requested, never what was asserted.** An operation reached by a test that
+  checks only its status code counts as covered here; ADR-088 is the gate for that question, and
+  the two are deliberately separate.
+- **ADR-057's `_IncludedRouter` fact is why the resolver matches by suffix.** FastAPI's include
+  machinery means the recorded path and the published path do not always compare as equal strings.
+
+---
+
+## ADR-087: every raisable domain error leaf must have its RFC 9457 code asserted somewhere
+
+**Context**
+D-06 fixed the error body and ADR-021 mapped the hierarchy to statuses. What nothing checked was
+whether each *leaf* had ever been produced through the API and had its `code` asserted. A new
+`DomainError` subclass raised in a use case answers with whatever the MRO walk finds, which is
+frequently the right status and the wrong `code` — and a negative-path test that asserts only the
+status passes.
+
+**Options**
+
+- **Assert the status table is total.** Cheap, and it proves nothing about the wire: the table maps
+  classes to integers, and the `code` is derived elsewhere.
+- **A registry of expected codes.** The second-home problem again, and here the registry would be
+  the very thing the test is supposed to discover.
+- **Walk `src/` for leaves actually raised, then require each one's `code` as a non-docstring
+  string literal somewhere under `tests/`.**
+
+**Decision**
+The third. `tests/architecture/test_error_contract_totality.py` collects every `DomainError` leaf
+that some module under `src/` actually raises, requires every leaf to be declared in
+`domain/exceptions.py`, and requires each raisable leaf's `code` to appear as a real string literal
+in a test. It excludes itself from its own scan, or it would satisfy its own requirement.
+
+**Consequences**
+
+- **A leaf nobody ever asserted on fails a build.** Adding an exception now costs one assertion,
+  which is the cost of the exception being part of a published contract.
+- **"Raised somewhere under `src/`" is the scope, deliberately.** A leaf that exists but is never
+  raised is not on the wire and owes nothing; the declaration check is what keeps it from being
+  defined in a corner instead.
+- **A string literal is a weak proof and a strong signal.** The gate cannot tell an assertion from
+  a comment-shaped constant, but it can tell the difference between a code that appears in the test
+  suite and one that does not, and the second is the failure that was actually happening.
+- **Self-exclusion is load-bearing and was found the hard way.** Plan 06-01 produced a live example
+  of a gate that its own non-vacuity guard satisfied; see ADR-090's consequences.
+
+---
+
+## ADR-088: an HTTP test must assert on something the API said, and a mutating one must re-read it
+
+**Context**
+Roadmap SC-3 is two claims: every test asserts on a response body rather than a status code alone,
+and every mutating test re-reads through the API. Both were house style, written into module
+docstrings from plan 04-09 onward, and both were partly untrue — a sweep found 29 tests asserting
+status codes only and a set of mutations nothing read back. A status-only test passes against a
+handler that returns an empty body; a mutation nobody re-reads passes against a handler that
+never committed.
+
+**Options**
+
+- **Keep it as a docstring standard.** It is what produced the 29, so it is not a candidate.
+- **Require a literal body member in every test.** Measured against the real suite, this reported
+  29 false positives out of 30 findings: the suite reaches response members through helpers, named
+  fixtures and intermediate locals, and a rule that demands a literal punishes exactly the tests
+  that factored their assertions well. A noisy gate gets deleted.
+- **An AST gate with taint tracking to a fixed point, scoped to tests that issue a request.**
+
+**Decision**
+The third. `tests/architecture/test_assertion_quality.py` accepts four shapes — a response member,
+a name tainted from one, a named `Response`-taking helper, or a recorded side-effect fixture the
+test declares — and propagates taint to a fixed point, which reduced the 30 findings to 1 real
+offender. Half (a) has no opt-out, because the rule stated correctly needs none. Half (b), the
+re-read, has exactly one: `@pytest.mark.no_reread("<reason>")`, whose node id must appear in
+`REQUIRED_NO_REREAD` in the gate module.
+
+**Consequences**
+
+- **The exemption has to keep earning itself.** Beyond being listed, every exempted test is
+  re-parsed with its marker stripped and must still be an offender. An exemption that stops being
+  necessary — because someone added a re-read — fails the build until it is deleted. No other
+  exemption list in this repository has that fourth check, and it is the one that stops the list
+  becoming a graveyard.
+- **`REQUIRED_NO_REREAD` is compared as an equality in both directions.** A marker on an unlisted
+  test is an exemption granted without editing the gate; a listed id whose test lost its marker is
+  a stale entry. A subset check catches neither.
+- **The rule is per test, not per response, and that is a stated hole.** A test that asserts one
+  body and only a status code on a second response satisfies it. The per-response rule is a much
+  larger change with an unmeasured false-positive rate, and the whole argument above is that a
+  noisy gate does not survive.
+- **A gate's detection rules are code and get their own tests.** 20 of that module's 28 tests are
+  planted snippets. Two of the rules were wrong in ways only the tree could reveal, and both were
+  caught in minutes because they were executable rather than prose.
+
+---
+
+## ADR-089: the coverage configuration is pinned by a test, and greenlet is declared to it
+
+**Context**
+CLAUDE.md states the coverage rule in prose: the 75 % threshold is never lowered, it is never
+reached with `# pragma: no cover` or an `omit` entry, and the tests stay out of the denominator.
+Prose is not a gate. One character in `pytest.ini` turns 75 into 70; one line in `pyproject.toml`
+removes a package from the denominator. Both leave every test green and the reported percentage
+higher than before, which is the direction nobody audits.
+
+**Options**
+
+- **String-match `--cov-fail-under=75` in the addopts.** Red on `--cov-fail-under=80`, which is a
+  strictly better configuration — it punishes the one change nobody needs to prevent.
+- **Assert the coverage number itself.** 100 % is a norm this project holds to, not a requirement
+  (D-12). A test pinning it would go red on an honest refactor that added a defensive branch, and
+  the only way back to green would be to write a test for something the code does not do.
+- **Parse both configuration files and assert every fact the number rests on, with the threshold as
+  a floor.**
+
+**Decision**
+The third. `tests/architecture/test_coverage_configuration.py` reads `pytest.ini` with
+`configparser` and `pyproject.toml` with `tomllib` and asserts: `--cov=taskmanager`;
+`--cov-fail-under=N` with `N >= 75`, parsed as a number; `source == ["taskmanager"]`; `branch`;
+`concurrency == ["thread", "greenlet"]`; no `omit` key; no second `fail_under` home; `exclude_also`
+exactly four entries; and zero `# pragma: no cover` under `src/`, reported by `file:line`. Each of
+those was planted and observed red before the gate was trusted.
+
+**Consequences**
+
+- **`concurrency = ["thread", "greenlet"]` was added here, and it fixed a false negative nobody
+  would have investigated.** Running `make docker-test` for the first time against a suite with
+  routers in it reported 99.08 % on Python 3.13: 18 lines missing, every one of them a
+  `return XResponse.from_result(...)` or a `Location` header — the lines that run *after* a
+  handler's first `await` into SQLAlchemy's greenlet bridge, in a frame coverage stops following
+  unless greenlet is declared. The tests asserting those very response bodies were passing. With
+  the line added, Python 3.13 reports 100 % and Python 3.14 is unchanged. A coverage error that
+  makes the number too low is the one kind that never gets reported.
+- **The host and the container agree on the percentage and disagree on the denominator, for a
+  reason that is not a defect.** 1643 statements on CPython 3.14 against 1796 on 3.13, both at
+  100 % with zero partial branches: Python 3.14 evaluates annotations lazily (PEP 649/749), so the
+  annotation lines in the schemas and router signatures are not executable statements there.
+  D-11's agreement is about the percentage and the pass count, and both match exactly.
+- **`exclude_also` is compared by exact value, which costs something.** A legitimate fifth entry
+  fails the gate until it is argued for in `EXPECTED_EXCLUDE_ALSO`. That is the point: a fifth
+  entry is how a real exclusion would be smuggled in, and every weaker comparison waves it through.
+- **The threshold keeps exactly one home.** `[tool.coverage.report] fail_under` and the
+  `--cov-fail-under` addopt are two knobs for one rule, and coverage.py resolves the conflict
+  without complaining. Keeping it in the addopts alone is what makes `make test`, `make
+  docker-test`, CI and a bare `pytest` gated by identical bytes.
+
+---
+
+## ADR-090: every collected test carries `unit` or `integration`, and a collection hook enforces it
+
+**Context**
+`pytest.ini` has registered both markers since Phase 1, and `--strict-markers` refuses an
+*unregistered* one. Nothing in pytest refuses a *missing* one. Measured at the start of this phase:
+zero tests carried `unit`, 315 carried `integration`, and 704 carried neither — including a third
+top-level directory, `tests/api/`, that the two-bucket vocabulary has no name for. A test outside
+both markers is run by the full `pytest` nobody types while writing code, and by no selection
+anyone does.
+
+**Options**
+
+- **Leave the markers unused and select by path.** `pytest tests/unit` works until a no-database
+  test lands somewhere else, and it is how `tests/api/` came to exist in the first place.
+- **Add the markers and rely on review to keep them.** The same argument as ADR-085: the omission
+  is invisible in a diff, because what is missing is a line nobody wrote.
+- **Make the partition total and add a collection-time guard that fails on an unmarked item.**
+
+**Decision**
+The third. `pytestmark` is a module-level line in all 81 collected modules, placed where the
+integration modules already placed theirs; `tests/api/` was folded into
+`tests/unit/presentation/` with `git mv`, and its two shared constants moved to a never-collected
+`tests/problem_details.py`. `pytest_collection_modifyitems` in `tests/conftest.py` raises
+`pytest.UsageError` naming the offending node ids when any collected item carries neither marker.
+`make test-unit` runs the 755-test no-database slice with `--no-cov`.
+
+**Consequences**
+
+- **A new test cannot join the suite unmarked.** The guard was driven red by deleting one
+  `pytestmark` line, under both a full run and a `-m unit` run, before it was trusted.
+- **`tryfirst=True` pins an ordering that happens to hold anyway.** pytest's own mark plugin
+  implements the same hook and *removes* deselected items, so running after it would mean an
+  unmarked item was already gone. On pytest 9 a conftest implementation is called first regardless
+  — observed with the decorator removed — but relying on registration order for that is relying on
+  something no version promises, and the failure would be a silent hole rather than an error.
+- **`make test-unit` uses `--no-cov`, not a threshold override.** `pytest.ini` also writes
+  `coverage.xml`, and that file is the artifact D-11's agreement is read off; a partial run must
+  not overwrite it. The slice does clear 75 % on its own today, which is precisely why it is not
+  gated on a number nobody is defending.
+- **It is a convenience subset, not a new gate.** It runs a strict subset of `make test`, so
+  ADR-015's "a new gate goes in two places" does not apply and neither `.pre-commit-config.yaml`
+  nor `ci.yml` learns about it.
+- **The two-marker vocabulary is now closed.** A future test that is neither — a contract test
+  against a running container, say — has to argue for a third marker in `pytest.ini`, in the guard
+  and in this ADR, rather than arriving as an unmarked file.
+
+---
+
+## ADR-091: the deliberate-break spot check is a script, and it is the one tool allowed to write to `src/`
+
+**Context**
+Roadmap SC-4 asks for a deliberate break that turns the suite red, recorded in `AI_WORKFLOW.md`.
+Done by hand it is a one-off anecdote, and the hand-run version of it in this phase produced two
+breaks the suite did *not* catch — including token expiry, which was enforced by nothing. So the
+check has to be repeatable. But it is also the only tool here that edits `src/` on purpose, which
+makes its safety a bigger question than its findings.
+
+**Options**
+
+- **Keep it manual and documented.** An anecdote does not survive a refactor, and the two
+  survivals prove the exercise is worth repeating rather than remembering.
+- **Adopt a mutation-testing tool.** The honest choice for a larger budget; it is a dependency, a
+  configuration and a multi-minute run for a deliverable whose whole review path is five minutes
+  (D-08).
+- **A POSIX shell script applying five named mutations, each with the tests that should care.**
+
+**Decision**
+The third. `scripts/break-check.sh` behind `make break-check` applies five mutations, runs a named
+selection per break, asserts each turns red, restores the file and exits non-zero if any break
+survives. It is held to three rules no other tool here needs: it refuses to start unless
+`git status --porcelain -- src/` is empty; it restores through a trap installed before the first
+mutation, and restores **only the files it touched**; and every mutation carries an
+`assert old in s` precondition, so a drifted source line fails loudly instead of reporting a defect
+nobody introduced.
+
+**Consequences**
+
+- **"Restore only what you touched" is a rule, not a preference.** A blanket
+  `git checkout -- src/`, `git stash` or `git reset --hard` would destroy uncommitted work the
+  script never touched, and plan 06-02 produced a live example of exactly that. The dirty-tree
+  refusal makes the blanket form *usually* harmless, which is not the same as safe.
+- **It is deliberately in no gate path** — not `make test`, not `.pre-commit-config.yaml`, not
+  `ci.yml` (D-09). It runs a large selection five times over, and the value of a ten-second commit
+  loop is that nobody is tempted to skip it. ADR-015's two-places rule does not apply, because
+  this is a spot check and not a gate.
+- **`BREAK_CHECK_PYTEST` is the one seam, and it exists for the unit test.**
+  `tests/unit/test_break_check.py` drives the script as a program in a throwaway repository, where
+  there is no `.venv` and running the real suite would defeat the point. Its three safety legs were
+  each driven red by deleting the single line that provides the property.
+- **A gate is not trusted until it has been driven red, and a gate must never be satisfiable by its
+  own non-vacuity guard.** Both rules were paid for in this phase: ADR-087's gate was briefly
+  green because the guard that proved it had scanned something also satisfied what it scanned for.
+  Every gate this phase added was falsified at least once before being committed.
+
+---

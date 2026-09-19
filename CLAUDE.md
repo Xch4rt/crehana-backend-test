@@ -389,11 +389,76 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 - Coverage is gated at **75%** over `src/taskmanager` (`--cov-fail-under=75` in
   `pytest.ini`). The threshold is never lowered, and it is never reached with
   `# pragma: no cover` or a coverage `omit` entry. If the number is short, write the test.
+- That rule is a **test**, not a convention. `tests/architecture/test_coverage_configuration.py`
+  parses `pytest.ini` and `pyproject.toml` and fails on: a threshold below 75 (parsed as a number,
+  so raising it stays legal), a coverage `source` that is not `["taskmanager"]`, `branch` off, a
+  `concurrency` value other than `["thread", "greenlet"]`, an `omit` key, a second `fail_under`
+  home in `[tool.coverage.report]`, a fifth `exclude_also` entry, or any `# pragma: no cover`
+  under `src/` — that last one reported by `file:line` (ADR-089). The `greenlet` entry is the one
+  that defends against the number being too *low*: without it, Python 3.13 reported 18 executed
+  router lines as missing, every one of them after a handler's first `await` into SQLAlchemy's
+  async bridge.
+- Every collected test carries **exactly one** of the two markers `pytest.ini` registers, `unit`
+  or `integration`, as a module-level `pytestmark`. `--strict-markers` refuses an *unregistered*
+  marker; nothing in pytest refuses a *missing* one, so `pytest_collection_modifyitems` in
+  `tests/conftest.py` fails the run and names the offending node ids (ADR-090). `make test-unit`
+  runs the no-database slice with `--no-cov` — never a threshold override, because `pytest.ini`
+  also writes the `coverage.xml` that `make test` and CI produce. It is a subset of `make test`,
+  so it is a convenience and not a gate.
+- **None of the gates in this section or in "Test quality" below adds a pre-commit hook or a CI
+  step.** Each rides inside `lint-imports` or inside `pytest`, and both commands are already run
+  by the hook set, the Docker `test` stage and CI. The two-places rule immediately below applies
+  to a gate that introduces a *new command*. `make break-check` is the one thing here that is in
+  neither, and deliberately: it is a spot check run on demand, not a gate (D-09, ADR-091).
 - Where each gate runs: pre-commit is the **developer-host** gate and depends on `.venv`
   existing (its whole-program hook entries are `.venv/bin/`-qualified). CI and the Docker
   `test` stage have no `.venv`, so they run the same tools **directly** as named steps.
   A new gate must therefore be added in **both** `.pre-commit-config.yaml` and
   `.github/workflows/ci.yml` — neither derives from the other.
+
+### Test quality
+
+Six rules about the suite itself, all of them gates. They exist because "every use case has a
+test", "every endpoint is covered" and "every test asserts something" were house style for five
+phases and each one turned out to be partly untrue the first time it was checked mechanically.
+
+- **A gate is not trusted until it has been driven red**, and **a gate must never be satisfiable by
+  its own non-vacuity guard**. Both were paid for in Phase 6:
+  `tests/architecture/test_error_contract_totality.py` was briefly green while proving nothing,
+  because the `REQUIRED_RAISED_CODES` guard that proved the scan had matched something also
+  contained the literals the scan looked for. It excludes itself from its own scan now, and
+  `test_the_self_exclusion_is_load_bearing` keeps that exemption honest. Every gate below was
+  falsified at least once — by planting the violation and observing the failure — before it was
+  committed.
+- **Use-case totality.** Every public module-level symbol under `application/use_cases/` must be
+  imported and then constructed or called by some module under `tests/unit/application/`. The
+  expected set is discovered by an AST walk, never listed by hand. Enforced by
+  `tests/architecture/test_use_case_totality.py` (ADR-085). It proves reachability from the
+  fakes-based suite; the coverage gate proves execution.
+- **Endpoint totality, observed.** Every operation in `app.openapi()` must be *requested* through
+  HTTP during a full run. The integration harness wraps the ASGI app and records the matched
+  operation into `REQUESTED` in `tests/integration/conftest.py`;
+  `tests/integration/test_endpoint_totality.py` compares that with the published document. The
+  total half skips on a partial selection, the recorded-subset half is always on (ADR-086).
+- **Error-leaf totality.** Every `DomainError` leaf actually raised under `src/` must be declared
+  in `domain/exceptions.py` and must have its RFC 9457 `code` asserted as a non-docstring string
+  literal somewhere under `tests/`. Enforced by
+  `tests/architecture/test_error_contract_totality.py` (ADR-087).
+- **Assertion quality.** Every test under `tests/integration/api/` that issues a request must
+  assert on something the API said — a response member, a name tainted from one, a named
+  `Response`-taking helper, or a recorded side-effect fixture it declares — and every test that
+  mutates must read the resource back with a `GET` after its last mutation. The only exemption is
+  from the second half: `@pytest.mark.no_reread("<reason>")`, whose node id must appear in
+  `REQUIRED_NO_REREAD`, and which fails the build the moment it stops being *necessary*. Enforced
+  by `tests/architecture/test_assertion_quality.py` (ADR-088). The rule is per **test**, not per
+  **response**.
+- **The spot check may write to `src/`, and nothing else may.** `scripts/break-check.sh` refuses to
+  start unless `git status --porcelain -- src/` is empty, restores through a trap installed before
+  the first mutation, restores **only the files it touched**, and guards every mutation with an
+  `assert old in s` precondition. A blanket `git checkout -- src/`, `git stash` or
+  `git reset --hard` is forbidden anywhere in this repository's tooling: it destroys uncommitted
+  work the tool never touched, and Phase 6 produced a live example. Enforced by
+  `tests/unit/test_break_check.py`, which drives the script in a throwaway repository (ADR-091).
 
 ### Configuration
 

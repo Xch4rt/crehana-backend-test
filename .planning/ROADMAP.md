@@ -327,7 +327,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-04-PLAN.md — The coverage configuration pin, the marker partition, `make test-unit`, the ADRs and the five requirement ticks
+- [x] 06-04-PLAN.md — The coverage configuration pin, the marker partition, `make test-unit`, the ADRs and the five requirement ticks
 
 ### Phase 7: Documentation & Delivery
 
@@ -357,7 +357,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
-| 6. Test Hardening & Coverage | 3/4 | In progress | - |
+| 6. Test Hardening & Coverage | 4/4 | In progress | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
 ## Standing Rules
