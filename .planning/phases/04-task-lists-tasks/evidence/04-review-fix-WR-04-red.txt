@@ -1,0 +1,155 @@
+WR-04 response-model gate, driven red - Phase 4 review fix
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1, FastAPI 0.141.1
+
+What this proves, in two halves.
+
+1. The review was right: the gate as shipped could not fail. Under BOTH plants
+   below - `get_task` returning the application dataclass `TaskResult` with no
+   `response_model`, and `get_task` with no return annotation at all - the OLD
+   test body (the file at HEAD before this fix) stays GREEN.
+2. The rewritten test goes RED under both plants, and names the route and the
+   component it found (`TaskResult`, then `<inline>`), and is GREEN on the
+   shipped tree.
+
+Command, identical in all five runs:
+  .venv/bin/pytest tests/unit/test_app_factory.py -k test_every_api_route_declares_a_response_model_or_returns_no_content --no-cov -q -p no:cacheprovider --tb=short ; echo exit=$?
+
+"OLD test" means `git show HEAD:tests/unit/test_app_factory.py` written over the
+working file for that run only; "NEW test" is the file this commit ships. The
+router plants were removed with `git checkout -- <router>` immediately after
+each pair of runs, and exist neither on disk nor in history. Captures are
+verbatim apart from trailing whitespace. The runs happened in an isolated git
+worktree of this repository under /private/tmp, which is why paths begin there.
+
+================================================================================
+PLANT (dataclass) - the planted diff
+================================================================================
+
+diff --git a/src/taskmanager/presentation/api/routers/tasks.py b/src/taskmanager/presentation/api/routers/tasks.py
+index 78ad13d..8a8bef2 100644
+--- a/src/taskmanager/presentation/api/routers/tasks.py
++++ b/src/taskmanager/presentation/api/routers/tasks.py
+@@ -34,6 +34,7 @@ from taskmanager.application.dto.commands import (
+ from taskmanager.application.use_cases.tasks.change_task_status import ChangeTaskStatus
+ from taskmanager.application.use_cases.tasks.create import CreateTask
+ from taskmanager.application.use_cases.tasks.delete import DeleteTask
++from taskmanager.application.dto.results import TaskResult
+ from taskmanager.application.use_cases.tasks.get import GetTask
+ from taskmanager.application.use_cases.tasks.list import ListTasks
+ from taskmanager.application.use_cases.tasks.update import UpdateTask
+@@ -181,7 +182,6 @@ async def list_tasks(
+
+ @task_router.get(
+     "/{list_id}/tasks/{task_id}",
+-    response_model=TaskResponse,
+     summary="Read one task",
+     response_description="The task, in full.",
+     responses={
+@@ -195,7 +195,7 @@ async def get_task(
+     task_id: UUID,
+     actor_id: CurrentActor,
+     uow: UnitOfWorkDependency,
+-) -> TaskResponse:
++) -> TaskResult:
+     """Read one task, addressed through the list that owns it.
+
+     A task id requested under a list it does not belong to answers 404,
+@@ -208,7 +208,7 @@ async def get_task(
+     result = await GetTask(uow).execute(
+         GetTaskCommand(actor_id=actor_id, task_list_id=list_id, task_id=task_id)
+     )
+-    return TaskResponse.from_result(result)
++    return result
+
+
+ @task_router.patch(
+
+--- OLD test under this plant (expected: GREEN - the gate is blind) ---
+.                                                                        [100%]
+1 passed, 5 deselected in 0.05s
+exit=0
+
+--- NEW test under this plant (expected: RED) ---
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_every_api_route_declares_a_response_model_or_returns_no_content _____
+tests/unit/test_app_factory.py:288: in test_every_api_route_declares_a_response_model_or_returns_no_content
+    assert published == expected, (
+E   AssertionError: Every route must publish its presentation response model, or answer 204 with no body (ARC-05).
+E   assert {('GET', '/ap...sponse'], ...} == {('POST', '/a...sponse'], ...}
+E
+E     Omitting 10 identical items, use -vv to show
+E     Differing items:
+E     {('GET', '/api/v1/task-lists/{list_id}/tasks/{task_id}'): ['TaskResult']} != {('GET', '/api/v1/task-lists/{list_id}/tasks/{task_id}'): ['TaskResponse']}
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/unit/test_app_factory.py::test_every_api_route_declares_a_response_model_or_returns_no_content
+1 failed, 5 deselected in 0.06s
+exit=1
+
+================================================================================
+PLANT (bare) - the planted diff
+================================================================================
+
+diff --git a/src/taskmanager/presentation/api/routers/tasks.py b/src/taskmanager/presentation/api/routers/tasks.py
+index 78ad13d..c5bfc6d 100644
+--- a/src/taskmanager/presentation/api/routers/tasks.py
++++ b/src/taskmanager/presentation/api/routers/tasks.py
+@@ -181,7 +181,6 @@ async def list_tasks(
+
+ @task_router.get(
+     "/{list_id}/tasks/{task_id}",
+-    response_model=TaskResponse,
+     summary="Read one task",
+     response_description="The task, in full.",
+     responses={
+@@ -195,7 +194,7 @@ async def get_task(
+     task_id: UUID,
+     actor_id: CurrentActor,
+     uow: UnitOfWorkDependency,
+-) -> TaskResponse:
++):
+     """Read one task, addressed through the list that owns it.
+
+     A task id requested under a list it does not belong to answers 404,
+@@ -208,7 +207,7 @@ async def get_task(
+     result = await GetTask(uow).execute(
+         GetTaskCommand(actor_id=actor_id, task_list_id=list_id, task_id=task_id)
+     )
+-    return TaskResponse.from_result(result)
++    return result
+
+
+ @task_router.patch(
+
+--- OLD test under this plant (expected: GREEN - the gate is blind) ---
+.                                                                        [100%]
+1 passed, 5 deselected in 0.03s
+exit=0
+
+--- NEW test under this plant (expected: RED) ---
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_every_api_route_declares_a_response_model_or_returns_no_content _____
+tests/unit/test_app_factory.py:288: in test_every_api_route_declares_a_response_model_or_returns_no_content
+    assert published == expected, (
+E   AssertionError: Every route must publish its presentation response model, or answer 204 with no body (ARC-05).
+E   assert {('GET', '/ap...sponse'], ...} == {('POST', '/a...sponse'], ...}
+E
+E     Omitting 10 identical items, use -vv to show
+E     Differing items:
+E     {('GET', '/api/v1/task-lists/{list_id}/tasks/{task_id}'): ['<inline>']} != {('GET', '/api/v1/task-lists/{list_id}/tasks/{task_id}'): ['TaskResponse']}
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/unit/test_app_factory.py::test_every_api_route_declares_a_response_model_or_returns_no_content
+1 failed, 5 deselected in 0.06s
+exit=1
+
+================================================================================
+PLANTS REMOVED - the shipped tree, NEW test
+================================================================================
+
+.                                                                        [100%]
+1 passed, 5 deselected in 0.03s
+exit=0

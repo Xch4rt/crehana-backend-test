@@ -7,6 +7,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from taskmanager import __version__
@@ -19,6 +20,8 @@ from taskmanager.presentation.api.errors.handlers import (
     handle_unexpected_error,
     handle_validation_error,
 )
+from taskmanager.presentation.api.schemas import task_lists as task_list_schemas
+from taskmanager.presentation.api.schemas import tasks as task_schemas
 from tests.integration.test_dependencies import uow_probe_router
 from tests.probe import probe_router
 
@@ -185,10 +188,64 @@ def test_create_app_publishes_exactly_the_phase_four_routes(
     assert set(_api_operations(app)) == EXPECTED_API_ENDPOINTS
 
 
+# Which named component each route's success body must be, or `None` for a 204
+# with no body. Written out by hand for the reason `EXPECTED_API_ENDPOINTS` is:
+# a table derived from the application would agree with whatever the application
+# says, including when it is wrong.
+EXPECTED_RESPONSE_MODELS: Final[dict[tuple[str, str], str | None]] = {
+    ("POST", "/api/v1/task-lists"): "TaskListResponse",
+    ("GET", "/api/v1/task-lists"): "TaskListResponse",
+    ("GET", "/api/v1/task-lists/{list_id}"): "TaskListResponse",
+    ("PATCH", "/api/v1/task-lists/{list_id}"): "TaskListResponse",
+    ("DELETE", "/api/v1/task-lists/{list_id}"): None,
+    ("POST", "/api/v1/task-lists/{list_id}/tasks"): "TaskResponse",
+    ("GET", "/api/v1/task-lists/{list_id}/tasks"): "TaskCollectionResponse",
+    ("GET", "/api/v1/task-lists/{list_id}/tasks/{task_id}"): "TaskResponse",
+    ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}"): "TaskResponse",
+    ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}"): None,
+    ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}/status"): "TaskResponse",
+}
+
+
+def _presentation_models() -> dict[str, type[BaseModel]]:
+    """Every Pydantic model the two presentation schema modules define, by name."""
+    return {
+        name: member
+        for module in (task_list_schemas, task_schemas)
+        for name, member in vars(module).items()
+        if isinstance(member, type)
+        and issubclass(member, BaseModel)
+        and member.__module__ == module.__name__
+    }
+
+
+def _published_success_models(operation: dict[str, Any]) -> list[str | None]:
+    """The component each 2xx response points at; `None` where it has no body.
+
+    A `$ref`, or an array of one, is what a declared model looks like in the
+    document. Anything else - the `{}` FastAPI publishes for an unannotated
+    handler, or an inline object - has no name and is reported as `"<inline>"`,
+    which no entry of the table above can equal.
+    """
+    published: list[str | None] = []
+    for code, response in operation["responses"].items():
+        if not code.startswith("2"):
+            continue
+        if "content" not in response:
+            published.append(None)
+            continue
+        schema = response["content"]["application/json"]["schema"]
+        reference = schema.get("items", schema).get("$ref")
+        published.append(
+            "<inline>" if reference is None else reference.rsplit("/", 1)[-1]
+        )
+    return published
+
+
 def test_every_api_route_declares_a_response_model_or_returns_no_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ARC-05's mechanical half: a Pydantic schema, or a 204 with no body.
+    """ARC-05's mechanical half: a *presentation* Pydantic schema, or a bodiless 204.
 
     A handler annotated with an application result dataclass and no explicit
     model makes FastAPI infer the published schema from that dataclass. The
@@ -196,29 +253,41 @@ def test_every_api_route_declares_a_response_model_or_returns_no_content(
     right, and ARC-05's claim that Pydantic types every HTTP boundary would
     have quietly stopped being true. Here it fails instead.
 
-    The assertion is on the *published* schema, so it also catches a route whose
-    model was declared but never reached the document.
+    **This test could not fail until the Phase 4 review's WR-04.** It asserted
+    only that a 2xx response had a `content` member, and FastAPI publishes one
+    for the dataclass case (a `$ref` to a component named after the dataclass)
+    and for a handler with no annotation at all (`"schema": {}`). Both were
+    "modelled", so the gate was green by construction. It now asserts *which*
+    component each route publishes, against a hand-written table, and that every
+    name in that table is a `BaseModel` defined under
+    `presentation/api/schemas/` - so an application DTO cannot be written into
+    the table to make a wrong route pass. Driven red by pointing `get_task` at
+    `TaskResult`; the capture is
+    `.planning/phases/04-task-lists-tasks/evidence/04-review-fix-WR-04-red.txt`.
     """
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
 
     app = create_app(Settings(_env_file=None))
+    presentation_models = _presentation_models()
 
-    undeclared = []
-    for endpoint, operation in _api_operations(app).items():
-        responses = operation["responses"]
-        no_content = "204" in responses and "content" not in responses["204"]
-        modelled = any(
-            "content" in responses[code]
-            for code in responses
-            if code.startswith("2") and code != "204"
-        )
-        if not (no_content or modelled):
-            undeclared.append(endpoint)
+    # The table is only a gate if it names presentation models and nothing else.
+    named = {name for name in EXPECTED_RESPONSE_MODELS.values() if name is not None}
+    assert named <= set(presentation_models), named - set(presentation_models)
+    # And it has to cover the inventory exactly, or a twelfth route is unchecked.
+    assert set(EXPECTED_RESPONSE_MODELS) == EXPECTED_API_ENDPOINTS
 
-    assert undeclared == [], (
-        "Every route must publish a Pydantic response model, or answer 204 "
-        f"with no body (ARC-05). These declare neither: {undeclared}"
+    published = {
+        endpoint: _published_success_models(operation)
+        for endpoint, operation in _api_operations(app).items()
+    }
+    expected = {
+        endpoint: [model] for endpoint, model in EXPECTED_RESPONSE_MODELS.items()
+    }
+
+    assert published == expected, (
+        "Every route must publish its presentation response model, or answer "
+        "204 with no body (ARC-05)."
     )
 
 
