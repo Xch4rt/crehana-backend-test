@@ -123,3 +123,33 @@ everybody. The new `ChangeTaskStatus` case in
 `test_write_paths_hold_what_they_change.py` is green throughout too -- the
 assignee's status change was already correct after task 1, and that test exists
 to keep it correct while the two neighbouring write paths move away from it.
+
+
+Appendix -- the prose-not-literal constraint in `tasks/update.py`, observed
+==========================================================================
+Task 3 asks each rewired use case to name the door it takes and why the read
+verb and the status verb keep the other one. Naming the status *use case* in
+`update.py`'s docstring is not available, and the reason was verified rather
+than assumed: `test_update_task_cannot_change_a_status` asserts
+`TaskStatus.__name__ not in inspect.getsource(update_module)`, and the class
+name is a substring of the use case's name.
+
+Probe: the sentence "advancing its state machine through the dedicated
+endpoint" was rewritten to spell the use case instead, and that one test run.
+
+$ .venv/bin/pytest tests/unit/application/test_update_task.py \
+      -k cannot_change_a_status -q --no-cov
+
+    E           ugh ChangeTaskStatus - and those two use cases deliberately stay on
+    E         ?           ++++++++++
+    tests/unit/application/test_update_task.py:345: AssertionError
+    =========================== short test summary info ============================
+    FAILED tests/unit/application/test_update_task.py::test_update_task_cannot_change_a_status
+    1 failed, 17 deselected in 0.05s
+
+Reverted immediately (`git checkout -- src/taskmanager/application/use_cases/
+tasks/update.py`), and the shipped docstring names the endpoint in prose. This
+is the 01-03 prose-not-literal convention arriving from a new direction: until
+now it protected `grep -c` acceptance criteria, and here it protects a D-08
+source scan that has been in the suite since 04-06. `delete.py` is under no such
+constraint and was written the same way for symmetry.
