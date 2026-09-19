@@ -1,0 +1,57 @@
+TDD RED for plan 05-04 -- the assignee legs of `visible_task`, and the first 403.
+
+Why this is a file rather than a commit
+---------------------------------------
+CLAUDE.md requires `make lint`, `make typecheck`, `make arch` and `make test` to be
+green before any commit, and `--no-verify` is forbidden. A commit whose tests fail is
+therefore not a state this repository can hold, so the RED step is observed, captured
+here, and the task ships as one green commit. Same compromise, same reason, as
+02-01, 04-02, 05-01 and 05-02; AI_WORKFLOW.md records it as a cost, not a virtue.
+
+Each section below was written after the run it quotes, never before.
+
+
+Task 1 -- `visible_task` short-circuits for the assignee (D-01)
+===============================================================
+Tests written first, run against `access.py` as Phase 4 left it.
+
+$ .venv/bin/pytest tests/unit/application/test_access.py \
+      tests/unit/application/test_change_task_status.py -q --no-cov
+
+        if task is None or task.task_list_id != task_list_id:
+            raise TaskNotFoundError(task_id)
+        task_list = await uow.task_lists.get(task_list_id)
+        if task_list is None or task_list.owner_id != actor_id:
+    >       raise TaskNotFoundError(task_id)
+    E       taskmanager.domain.exceptions.TaskNotFoundError: No task exists with
+            identifier 22222222-2222-4222-8222-222222222222.
+
+    src/taskmanager/application/use_cases/access.py:128: TaskNotFoundError
+    =========================== short test summary info ============================
+    FAILED tests/unit/application/test_access.py::test_visible_task_answers_its_assignee_without_reading_the_parent_list
+    FAILED tests/unit/application/test_access.py::test_the_assignee_leg_holds_the_task_and_still_reads_no_list
+    FAILED tests/unit/application/test_change_task_status.py::test_change_task_status_lets_the_assignee_advance_the_task
+    3 failed, 25 passed in 0.16s
+
+Three failures, and they are the three legs the task adds. The two *negative*
+assignee tests written in the same edit -- a stranger on a task assigned to
+somebody else, and the assignee of a task addressed under the wrong list -- pass
+here and must keep passing afterwards: they are the guard rails on the new clause,
+so a RED from them would have meant the tests were wrong, not the code.
+
+The failure is raised from the line the short-circuit is placed *before*, which is
+the whole of D-01: the parent list was read, it belonged to somebody else, and the
+assignee was refused on the strength of a statement that should never have been
+issued.
+
+One further finding from the same task, unrelated to the assignee. The plan's
+acceptance criterion "`access.py` shows no missing lines under
+`tests/unit/application/test_access.py`" was **already false** before this plan:
+this module's own suite never passed `for_update=True` to either guard, so both
+locking roads were covered only by `test_write_paths_hold_what_they_change.py`.
+After the assignee tests it read
+
+    src/taskmanager/application/use_cases/access.py   24   1   12   1   94%   92
+
+line 92 being `visible_task_list`'s `get_for_update`. Closed by writing the missing
+test rather than by reinterpreting the criterion.

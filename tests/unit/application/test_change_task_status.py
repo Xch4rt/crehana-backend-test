@@ -350,30 +350,34 @@ async def test_the_wrong_list_answer_is_identical_to_the_absent_task_answer() ->
     assert str(OTHER_LIST_ID) not in str(wrong_list.details)
 
 
-async def test_change_task_status_hides_the_task_from_its_assignee_for_now() -> None:
-    """D-04: Phase 4 is the owner's phase, and the assignee leg returns in Phase 5.
+async def test_change_task_status_lets_the_assignee_advance_the_task() -> None:
+    """ASGN-02 and D-03: the assignee may move the state machine, and only that.
 
-    This test asserts the *current* scope rather than ASGN-02, which it used to
-    assert, and the inversion is deliberate. The old guard's
-    `task.assignee_id == actor_id` clause was dropped when the visibility rule
-    moved to `access.py`, because no Phase 4 endpoint can set `assignee_id` -
-    keeping the clause would have shipped a branch no request could reach, and
-    the coverage gate is met by writing tests, not by excusing lines. Phase 5
-    adds assignment, restores the clause in `access.py`, and turns this test
-    back into the one it was.
+    This test was inverted for the length of Phase 4 and is now back to the
+    claim it was written to make. The clause it rests on -
+    `task.assignee_id == actor_id` - was dropped when the visibility rule moved
+    into `access.py`, because no Phase 4 endpoint could set `assignee_id` and
+    keeping it would have shipped a branch no request could reach. Plan 05-04
+    put the clause in `access.py`'s `visible_task`, and plan 05-08 gives an
+    owner a way to assign somebody, so the branch is reachable and this is
+    again a statement about the product rather than about the phase.
+
+    The list belongs to somebody else, so nothing but the assignee clause can
+    let this request through; the generic `PATCH` and the `DELETE` on the very
+    same task answer 403, which is `owned_task`'s half of D-03 and is pinned in
+    `test_update_task.py` and `test_delete_task.py`.
     """
     unit_of_work = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
     use_case = ChangeTaskStatus(unit_of_work, FrozenClock(LATER))
 
-    with pytest.raises(DomainError) as excinfo:
-        await use_case.execute(_command(TaskStatus.IN_PROGRESS))
+    result = await use_case.execute(_command(TaskStatus.IN_PROGRESS))
 
-    error = excinfo.value
-    assert isinstance(error, TaskNotFoundError)
-    assert not isinstance(error, AuthorizationError)
-    assert error.details == {"task_id": str(TASK_ID)}
-    assert unit_of_work.commits == 0
-    assert unit_of_work.rollbacks == 1
+    assert result.status is TaskStatus.IN_PROGRESS
+    assert result.updated_at == LATER
+    assert result.assignee_id == ACTOR_ID
+    assert len(unit_of_work.task_repository.updated) == 1
+    assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
 
 
 async def test_change_task_status_propagates_a_forbidden_transition() -> None:

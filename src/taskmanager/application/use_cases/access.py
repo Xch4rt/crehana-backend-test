@@ -60,10 +60,12 @@ writer by accident, and the flag is keyword-only, so a write path names it at th
 call site where a reviewer will look for it.
 
 Only the *addressed* resource is held. `visible_task(..., for_update=True)` holds
-the task and reads its parent list plainly: the list is consulted for ownership,
-not changed, and a rule of "a task's writer never holds a list" is what keeps a
-list deletion, which reaches its tasks through the cascade, from ever waiting on
-a writer that is waiting on it.
+the task and, when it has to consult the parent list at all, reads it plainly:
+the list is consulted for ownership, not changed, and a rule of "a task's writer
+never holds a list" is what keeps a list deletion, which reaches its tasks
+through the cascade, from ever waiting on a writer that is waiting on it. The
+assignee's leg does not consult it at all, so on that path there is no second
+resource to reason about; see `visible_task` for why.
 """
 
 from uuid import UUID
@@ -105,14 +107,18 @@ async def visible_task(
 ) -> Task:
     """The task, if it is in this list and this actor may see it (D-14, ADR-008).
 
-    Four refusals, one answer. The task is absent; the task exists under another
-    list; the parent list is gone; the parent list belongs to someone else. All
-    four raise `TaskNotFoundError(task_id)`, carrying only the identifier the
-    caller supplied - see the module docstring for why the third and fourth do
-    not get an error of their own.
+    Two answers and four refusals. The owner of the parent list is answered, and
+    so is the task's own assignee (D-01) - they are the two actors who may see
+    it. The four refusals are unchanged: the task is absent; the task exists
+    under another list; the parent list is gone; the parent list belongs to
+    someone else and the caller is not the assignee either. All four raise
+    `TaskNotFoundError(task_id)`, carrying only the identifier the caller
+    supplied - see the module docstring for why the third and fourth do not get
+    an error of their own.
 
     `for_update=True` is for a caller about to change or delete the task. It
-    holds the task only; the parent list is read plainly on every path.
+    holds the task only; the parent list is read plainly on the owner's path and
+    not at all on the assignee's.
     """
     if for_update:
         task = await uow.tasks.get_for_update(task_id)
@@ -123,6 +129,21 @@ async def visible_task(
     # cannot depend on whether the addressed list exists.
     if task is None or task.task_list_id != task_list_id:
         raise TaskNotFoundError(task_id)
+    # D-01, and its placement is the whole design. The assignee sees the task
+    # without ever seeing its list, so the list is not read on this leg: the
+    # decision is already made, and issuing the statement anyway would put the
+    # list's existence - and its owner - on the code path of a caller entitled
+    # to know nothing about either. The saving is real (one `SELECT` here where
+    # the owner's request costs two), but the reason is the disclosure, not the
+    # statement count.
+    #
+    # It sits *after* the parent comparison above rather than before it, and
+    # that ordering is ADR-050 outranking D-01. Placed first, an assignee who
+    # addressed their task under the wrong list would be answered anyway, and
+    # would thereby learn that the task lives under some other list - the one
+    # bit a wrong-list request must not return.
+    if task.assignee_id == actor_id:
+        return task
     task_list = await uow.task_lists.get(task_list_id)
     if task_list is None or task_list.owner_id != actor_id:
         raise TaskNotFoundError(task_id)
