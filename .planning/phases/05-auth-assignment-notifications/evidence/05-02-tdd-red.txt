@@ -56,3 +56,52 @@ $ .venv/bin/pytest tests/unit/application/test_ports.py -q --no-cov
 
 $ .venv/bin/mypy src tests
 Success: no issues found in 141 source files
+
+
+================================================================================
+Task 2: TaskRepository.list_for_assignee (D-02) does not exist yet
+================================================================================
+
+$ .venv/bin/pytest tests/unit/application/test_fakes.py -q --no-cov
+>       assigned = await tasks.list_for_assignee(ASSIGNEE_ID)
+E       AttributeError: 'FakeTaskRepository' object has no attribute 'list_for_assignee'
+
+tests/unit/application/test_fakes.py:194: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/application/test_fakes.py::test_list_for_assignee_spans_every_list_the_user_appears_in
+FAILED tests/unit/application/test_fakes.py::test_list_for_assignee_is_empty_for_a_user_with_nothing_assigned
+FAILED tests/unit/application/test_fakes.py::test_list_for_assignee_is_ordered_by_created_at_then_id
+3 failed, 6 passed in 0.04s
+
+$ .venv/bin/pytest tests/integration/test_repositories_tasks.py -k assignee -q --no-cov
+>       assigned = await repository.list_for_assignee(ASSIGNEE_ID)
+E       AttributeError: 'SqlAlchemyTaskRepository' object has no attribute 'list_for_assignee'
+
+tests/integration/test_repositories_tasks.py:732: AttributeError
+=========================== short test summary info ============================
+FAILED tests/integration/test_repositories_tasks.py::test_listing_for_an_assignee_spans_every_list_they_appear_in
+FAILED tests/integration/test_repositories_tasks.py::test_listing_for_an_assignee_with_nothing_assigned_is_empty
+FAILED tests/integration/test_repositories_tasks.py::test_listing_for_an_assignee_is_ordered_by_created_at_then_id
+3 failed, 1 passed, 19 deselected in 0.26s
+
+$ .venv/bin/mypy src tests
+tests/unit/application/test_fakes.py:158: error: "FakeTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/unit/application/test_fakes.py:179: error: "FakeTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/unit/application/test_fakes.py:180: error: "FakeTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/unit/application/test_fakes.py:194: error: "FakeTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/integration/test_repositories_tasks.py:682: error: "SqlAlchemyTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/integration/test_repositories_tasks.py:712: error: "SqlAlchemyTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/integration/test_repositories_tasks.py:713: error: "SqlAlchemyTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+tests/integration/test_repositories_tasks.py:732: error: "SqlAlchemyTaskRepository" has no attribute "list_for_assignee"  [attr-defined]
+Found 8 errors in 2 files (checked 141 source files)
+
+--- GREEN: port + adapter + fake, added together -------------------------------
+
+$ .venv/bin/pytest tests/unit/application/test_fakes.py -q --no-cov
+9 passed in 0.01s
+
+$ .venv/bin/pytest tests/integration/test_repositories_tasks.py -q --no-cov
+23 passed in 0.47s
+
+$ .venv/bin/mypy src tests
+Success: no issues found in 141 source files

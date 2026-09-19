@@ -99,6 +99,17 @@ class FakeTaskRepository:
         # either, since the clock is read once per request.
         return sorted(tasks, key=lambda entry: (entry.created_at, entry.id))
 
+    async def list_for_assignee(self, assignee_id: UUID) -> Sequence[Task]:
+        # D-02's discovery query: assignee only, across every list, and sorted
+        # on `(created_at, id)` for the reason spelled out just above - the
+        # adapter's `ORDER BY` says the same thing, and a fake that answered in
+        # insertion order would make an ordering assertion pass here and fail
+        # over HTTP.
+        assigned = [
+            task for task in self.stored.values() if task.assignee_id == assignee_id
+        ]
+        return sorted(assigned, key=lambda entry: (entry.created_at, entry.id))
+
     async def completion_stats(self, task_list_id: UUID) -> CompletionStats:
         # Counted from what is stored, not canned: the aggregate Phase 3 will
         # write in SQL has to agree with this, so the fake must be able to

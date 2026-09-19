@@ -78,6 +78,19 @@ class TaskRepository(Protocol):
         priority: TaskPriority | None = None,
     ) -> Sequence[Task]: ...
 
+    # D-02: the assigned-tasks collection behind `GET /tasks/assigned-to-me`,
+    # and the only query in this project whose answer is not scoped to one list.
+    # The argument makes the same point `list_for_task_list` makes above: the
+    # filter belongs in the query the adapter issues rather than in a
+    # comprehension the use case applies to a full table read - which here would
+    # mean reading *every* task in the database to return one caller's few.
+    #
+    # No `status` or `priority` keyword, and that is a decision rather than an
+    # oversight: filtering `assigned-to-me` is a Deferred Idea in 05-CONTEXT,
+    # not part of ASGN-02. Widening the signature later is additive; a caller
+    # that grew to depend on filters nobody asked for is not.
+    async def list_for_assignee(self, assignee_id: UUID) -> Sequence[Task]: ...
+
     async def completion_stats(self, task_list_id: UUID) -> CompletionStats: ...
 
 

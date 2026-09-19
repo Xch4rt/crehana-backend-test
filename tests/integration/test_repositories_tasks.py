@@ -64,16 +64,20 @@ DIALECT: Final[Dialect] = create_engine("postgresql+psycopg://").dialect
 # whatever row happened to be there, and the ordering and aggregate tests are
 # exactly where that would stop being noticed.
 OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
+OTHER_OWNER_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
 ASSIGNEE_ID = uuid.UUID("00000000-0000-4000-8000-000000000003")
 MISSING_USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000fe")
 LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000011")
 OTHER_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000012")
+THIRD_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000013")
 MISSING_LIST_ID = uuid.UUID("00000000-0000-4000-8000-0000000000ff")
 TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000021")
 OTHER_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000022")
 THIRD_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000023")
 FOURTH_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000024")
 FOREIGN_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000025")
+SHARED_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000026")
+OWNERS_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000027")
 MISSING_TASK_ID = uuid.UUID("00000000-0000-4000-8000-0000000000fd")
 
 NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
@@ -82,6 +86,7 @@ LATER = datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC)
 
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 OWNER_EMAIL = "owner@example.test"
+OTHER_OWNER_EMAIL = "other-owner@example.test"
 ASSIGNEE_EMAIL = "assignee@example.test"
 
 
@@ -220,6 +225,93 @@ async def given_a_mixed_list(repository: SqlAlchemyTaskRepository) -> None:
             task_id=FOREIGN_TASK_ID,
             task_list_id=OTHER_LIST_ID,
             title="Sweep the floor",
+            created_at=EARLIER,
+        )
+    )
+
+
+async def given_a_second_owner_with_a_list(session: AsyncSession) -> None:
+    """A third user and a list they own, so an assignment can cross an owner.
+
+    `given_a_list_with_an_owner` builds two lists under one owner, which is all
+    the per-list queries need. D-02's `assigned-to-me` is the one query whose
+    answer is not scoped to a list at all, so proving it needs a task in a list
+    the assignee's other tasks have no owner in common with - otherwise a
+    statement that scoped by owner, or by the parent of the first row it found,
+    would pass.
+
+    Added after the two base users for the same flush-ordering reason
+    `given_a_list_with_an_owner` records: the list references the user, and only
+    a `relationship` would make SQLAlchemy work that out for itself.
+    """
+    session.add(
+        user_to_row(
+            User(
+                id=OTHER_OWNER_ID,
+                email=OTHER_OWNER_EMAIL,
+                password_hash=PASSWORD_HASH,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+    )
+    await session.flush()
+    session.add(
+        task_list_to_row(
+            TaskList(
+                id=THIRD_LIST_ID,
+                owner_id=OTHER_OWNER_ID,
+                name="Shared",
+                description=None,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+    )
+    await session.flush()
+
+
+async def given_assignments_across_two_owners(
+    repository: SqlAlchemyTaskRepository,
+) -> None:
+    """Three tasks for one assignee in two owners' lists, and two decoys.
+
+    The two decoys are what give the filter teeth: one task assigned to the list
+    owner instead, and one assigned to nobody at all. Both are older than
+    everything else, so a statement that lost its `WHERE` would put a decoy
+    *first* rather than merely returning too much.
+
+    `Water the plants` is written before `Buy milk` although the two share an
+    instant and `Buy milk` has the lower id - the reverse of the expected answer,
+    so an implementation that ordered by `created_at` alone cannot produce the
+    asserted order by accident.
+    """
+    await repository.add(
+        a_task(task_id=FOURTH_TASK_ID, title="Water the plants", created_at=NOW)
+    )
+    await repository.add(a_task(task_id=TASK_ID, title="Buy milk", created_at=NOW))
+    await repository.add(
+        a_task(
+            task_id=SHARED_TASK_ID,
+            task_list_id=THIRD_LIST_ID,
+            title="Fix the shelf",
+            created_at=EARLIER,
+        )
+    )
+    await repository.add(
+        a_task(
+            task_id=OWNERS_TASK_ID,
+            title="Owner's own errand",
+            assignee_id=OWNER_ID,
+            created_at=EARLIER,
+        )
+    )
+    await repository.add(
+        a_task(
+            task_id=FOREIGN_TASK_ID,
+            task_list_id=OTHER_LIST_ID,
+            title="Sweep the floor",
+            assignee_id=None,
             created_at=EARLIER,
         )
     )
@@ -569,6 +661,81 @@ async def test_listing_never_returns_a_task_from_another_list(
         task.title for task in await repository.list_for_task_list(OTHER_LIST_ID)
     ] == ["Sweep the floor"]
     assert list(await repository.list_for_task_list(MISSING_LIST_ID)) == []
+
+
+async def test_listing_for_an_assignee_spans_every_list_they_appear_in(
+    session: AsyncSession,
+) -> None:
+    """D-02's discovery query, and the only one whose answer crosses lists.
+
+    `Fix the shelf` lives in a list owned by somebody else entirely, so a
+    statement that scoped by owner - or that reused `list_for_task_list`'s
+    `WHERE` - would drop it. The two decoys prove the other direction: the task
+    assigned to the list's owner and the task assigned to nobody are both absent
+    even though they sit in a list the assignee does have tasks in.
+    """
+    await given_a_list_with_an_owner(session)
+    await given_a_second_owner_with_a_list(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_assignments_across_two_owners(repository)
+
+    assigned = await repository.list_for_assignee(ASSIGNEE_ID)
+
+    assert sorted(task.title for task in assigned) == [
+        "Buy milk",
+        "Fix the shelf",
+        "Water the plants",
+    ]
+    assert {task.task_list_id for task in assigned} == {LIST_ID, THIRD_LIST_ID}
+    assert all(task.assignee_id == ASSIGNEE_ID for task in assigned)
+    # Entities, not rows, exactly as every other method here returns (DB-03).
+    assert all(type(task) is Task for task in assigned)
+
+
+async def test_listing_for_an_assignee_with_nothing_assigned_is_empty(
+    session: AsyncSession,
+) -> None:
+    """Nothing assigned is no rows, never every row and never a raise.
+
+    `OTHER_OWNER_ID` is a real account that owns a list holding one of the
+    assignee's tasks, which is the case worth pinning: an implementation that
+    answered by list membership rather than by `assignee_id` would hand this
+    caller somebody else's task. The unknown identifier is asked too, because an
+    adapter must not distinguish "no assignments" from "no such user" - who may
+    learn that a user exists is ADR-008's decision and belongs to a use case.
+    """
+    await given_a_list_with_an_owner(session)
+    await given_a_second_owner_with_a_list(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_assignments_across_two_owners(repository)
+
+    assert list(await repository.list_for_assignee(OTHER_OWNER_ID)) == []
+    assert list(await repository.list_for_assignee(MISSING_USER_ID)) == []
+
+
+async def test_listing_for_an_assignee_is_ordered_by_created_at_then_id(
+    session: AsyncSession,
+) -> None:
+    """Oldest first, `id` breaks the tie, exactly as `list_for_task_list` is.
+
+    `Buy milk` and `Water the plants` share an instant to the microsecond and are
+    written in the reverse of the expected order, so PostgreSQL has no reason to
+    return them this way round unless the `id` tie-break asked it to. Without it
+    the D-02 collection would be flaky rather than wrong, which is much worse to
+    diagnose.
+    """
+    await given_a_list_with_an_owner(session)
+    await given_a_second_owner_with_a_list(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await given_assignments_across_two_owners(repository)
+
+    assigned = await repository.list_for_assignee(ASSIGNEE_ID)
+
+    assert [task.title for task in assigned] == [
+        "Fix the shelf",
+        "Buy milk",
+        "Water the plants",
+    ]
 
 
 async def test_completion_stats_counts_the_whole_list(

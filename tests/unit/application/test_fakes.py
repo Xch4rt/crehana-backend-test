@@ -1,7 +1,9 @@
 """Behaviours of the in-memory doubles, each pinned to a rule the database keeps.
 
 A fake is only worth testing where it can *disagree* with the adapter it stands
-in for, and two places in `FakeTaskListRepository` can.
+in for, and two places in `FakeTaskListRepository` can - plus, since Phase 5,
+`FakeTaskRepository.list_for_assignee`, which is D-02's discovery query and is
+the only listing in the project whose answer crosses a list boundary.
 
 `exists_with_name` is what every Phase 4 use-case test will run LIST-06's
 duplicate-name pre-check against, and the only thing that makes those tests
@@ -41,6 +43,14 @@ OTHER_OWNER_ID = UUID("33333333-3333-4333-8333-333333333333")
 TASK_LIST_ID = UUID("22222222-2222-4222-8222-222222222222")
 OTHER_LIST_ID = UUID("44444444-4444-4444-8444-444444444444")
 THIRD_LIST_ID = UUID("55555555-5555-4555-8555-555555555555")
+ASSIGNEE_ID = UUID("77777777-7777-4777-8777-777777777777")
+STRANGER_ID = UUID("88888888-8888-4888-8888-888888888888")
+# Two of the three share an instant, and the lower id is deliberately the one
+# seeded second, so the `id` tie-break has something to do.
+TIED_LOWER_TASK_ID = UUID("99999999-0000-4000-8000-000000000001")
+TIED_HIGHER_TASK_ID = UUID("99999999-0000-4000-8000-000000000002")
+OLDEST_TASK_ID = UUID("99999999-0000-4000-8000-000000000003")
+UNASSIGNED_TASK_ID = UUID("99999999-0000-4000-8000-000000000004")
 
 
 def _stored_list(
@@ -77,6 +87,117 @@ async def _given_tasks(
         if index < completed:
             task.change_status(TaskStatus.COMPLETED, now=NOW)
         await tasks.add(task)
+
+
+async def _given_assignments(tasks: FakeTaskRepository) -> None:
+    """Three tasks for one assignee across two lists, plus two that are not theirs.
+
+    The insertion order is not the answer on either axis. `TIED_HIGHER_TASK_ID`
+    goes in before `TIED_LOWER_TASK_ID` although they share an instant, so only
+    the `id` tie-break can separate them, and the oldest task goes in last. The
+    two decoys - a task assigned to someone else and a task assigned to nobody -
+    are both older than everything else, so a query that dropped its filter
+    would put one of them first.
+    """
+    await tasks.add(
+        Task.create(
+            task_id=TIED_HIGHER_TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Tied, higher id",
+            assignee_id=ASSIGNEE_ID,
+            now=NOW,
+        )
+    )
+    await tasks.add(
+        Task.create(
+            task_id=TIED_LOWER_TASK_ID,
+            task_list_id=OTHER_LIST_ID,
+            title="Tied, lower id",
+            assignee_id=ASSIGNEE_ID,
+            now=NOW,
+        )
+    )
+    await tasks.add(
+        Task.create(
+            task_id=OLDEST_TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Oldest",
+            assignee_id=ASSIGNEE_ID,
+            now=EARLIER,
+        )
+    )
+    await tasks.add(
+        Task.create(
+            task_id=UNASSIGNED_TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Nobody's",
+            now=EARLIER,
+        )
+    )
+    await tasks.add(
+        Task.create(
+            task_id=UUID("99999999-0000-4000-8000-000000000005"),
+            task_list_id=TASK_LIST_ID,
+            title="Somebody else's",
+            assignee_id=STRANGER_ID,
+            now=EARLIER,
+        )
+    )
+
+
+async def test_list_for_assignee_spans_every_list_the_user_appears_in() -> None:
+    """D-02's discovery query crosses list boundaries, which no other listing does.
+
+    A fake that reused `list_for_task_list`'s scoping - or that answered from one
+    list at a time - would return two of these three tasks, so the assertion is
+    on the set of parent lists as well as on the titles.
+    """
+    tasks = FakeTaskRepository()
+    await _given_assignments(tasks)
+
+    assigned = await tasks.list_for_assignee(ASSIGNEE_ID)
+
+    assert sorted(task.title for task in assigned) == [
+        "Oldest",
+        "Tied, higher id",
+        "Tied, lower id",
+    ]
+    assert {task.task_list_id for task in assigned} == {TASK_LIST_ID, OTHER_LIST_ID}
+    assert all(task.assignee_id == ASSIGNEE_ID for task in assigned)
+
+
+async def test_list_for_assignee_is_empty_for_a_user_with_nothing_assigned() -> None:
+    """Nothing assigned is an empty answer, never everything and never a raise.
+
+    `STRANGER_ID` does have a task in the store, so this asks about a third user
+    entirely: an implementation that ignored its argument would answer five here,
+    and one that treated an unknown user as "no filter" would answer the same.
+    """
+    tasks = FakeTaskRepository()
+    await _given_assignments(tasks)
+
+    assert list(await tasks.list_for_assignee(OTHER_OWNER_ID)) == []
+    assert list(await FakeTaskRepository().list_for_assignee(ASSIGNEE_ID)) == []
+
+
+async def test_list_for_assignee_is_ordered_by_created_at_then_id() -> None:
+    """The same total order the adapter's `ORDER BY created_at, id` produces.
+
+    Two of the three share an instant to the microsecond, which is not contrived:
+    the clock is read once per request. The insertion order in `_given_assignments`
+    disagrees with the expected order on both axes, so neither `dict` ordering nor
+    a sort on `created_at` alone can produce it.
+    """
+    tasks = FakeTaskRepository()
+    await _given_assignments(tasks)
+
+    assigned = await tasks.list_for_assignee(ASSIGNEE_ID)
+
+    assert [task.id for task in assigned] == [
+        OLDEST_TASK_ID,
+        TIED_LOWER_TASK_ID,
+        TIED_HIGHER_TASK_ID,
+    ]
 
 
 async def test_exists_with_name_matches_the_case_sensitive_unique_constraint() -> None:

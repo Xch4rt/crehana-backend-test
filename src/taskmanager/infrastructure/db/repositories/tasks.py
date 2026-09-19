@@ -215,6 +215,33 @@ class SqlAlchemyTaskRepository:
         )
         return [task_to_entity(row) for row in rows]
 
+    async def list_for_assignee(self, assignee_id: UUID) -> Sequence[Task]:
+        """Every task assigned to one user, across every list, oldest first.
+
+        D-02's discovery route. The filter is on `assignee_id` and nothing else:
+        this is the one listing in the adapter whose result spans lists, and
+        deliberately so - an assignee may hold tasks in lists they cannot
+        otherwise see at all, which is the whole point of the route. Whether the
+        caller is allowed to ask for *this* `assignee_id` is not decided here;
+        the use case passes the token's subject, so the question never reaches
+        SQL (T-5-11).
+
+        Applied in the statement rather than to a full read, for
+        `list_for_task_list`'s reason and then some: a comprehension would have
+        to read every task in the database to return one person's handful.
+
+        The order is `created_at` then `id`, the same total order every listing
+        in this package uses, because `created_at` alone is not one - two tasks
+        created in a single request share an instant, and PostgreSQL may then
+        return them either way round on different runs.
+        """
+        rows = await self._session.scalars(
+            select(TaskRow)
+            .where(TaskRow.assignee_id == assignee_id)
+            .order_by(TaskRow.created_at, TaskRow.id)
+        )
+        return [task_to_entity(row) for row in rows]
+
     async def completion_stats(self, task_list_id: UUID) -> CompletionStats:
         """The list's two counters, from the one statement above (ADR-009).
 
