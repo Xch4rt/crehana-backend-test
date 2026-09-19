@@ -28,15 +28,15 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 05 (auth-assignment-notifications) — AWAITING VERIFICATION
 Plan: 16 of 16
-Status: Phase 05 plans 01-16 all complete. The phase is NOT marked complete here: the
-phase checkbox in ROADMAP.md, its Progress-table status cell and its completion date
-belong to the orchestrator after verification.
+Status: Phase 05 plans 01-16 all complete; awaiting verification before the phase is marked complete
 Last activity: 2026-09-19 -- Phase 05 plan 16 complete
 
 Progress: [██████████] 100%
 
-(`total_plans` counts planned plans only. Phases 6 and 7 are not yet planned, so 54/54
-means "every plan that exists has been executed", not "the milestone is finished".)
+The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
+date are deliberately untouched: they belong to the orchestrator after verification.
+`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 54/54
+means "every plan that exists has been executed", not "the milestone is finished".
 
 ## Performance Metrics
 
