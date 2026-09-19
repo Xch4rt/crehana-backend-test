@@ -8,6 +8,7 @@ from taskmanager.domain.exceptions import ValidationError
 from taskmanager.domain.validation import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
+    is_storable_text,
     optional_text,
     require_password,
     require_text,
@@ -174,6 +175,52 @@ def test_a_nul_is_reported_before_the_length() -> None:
     assert "NUL" in str(excinfo.value)
 
 
+# Phase 5 review WR-04, the second value a text column cannot hold. Built from
+# `chr` rather than written as an escape so that this source file stays
+# encodable UTF-8: a lone surrogate in a literal would make the file itself
+# unreadable by any tool that decodes it strictly.
+WITH_A_LONE_SURROGATE = "A" + chr(0xD800) + "B"
+
+
+def test_require_text_refuses_a_lone_surrogate() -> None:
+    """An unpaired surrogate is refused by the domain, not by psycopg."""
+    with pytest.raises(ValidationError) as excinfo:
+        require_text(WITH_A_LONE_SURROGATE, field="full_name", max_length=100)
+
+    assert excinfo.value.details == {"field": "full_name"}
+    assert chr(0xD800) not in str(excinfo.value)
+
+
+def test_optional_text_refuses_a_lone_surrogate() -> None:
+    """The second helper, so no text field is closed against one and not the other."""
+    with pytest.raises(ValidationError) as excinfo:
+        optional_text(WITH_A_LONE_SURROGATE, field="description", max_length=2000)
+
+    assert excinfo.value.details == {"field": "description"}
+
+
+@pytest.mark.parametrize(
+    ("value", "storable"),
+    [
+        ("Ana Torres", True),
+        ("acentuación, 日本語, emoji 🙂", True),
+        (WITH_A_NUL, False),
+        (WITH_A_LONE_SURROGATE, False),
+    ],
+    ids=["ordinary", "non-ascii", "nul", "lone-surrogate"],
+)
+def test_is_storable_text_answers_what_a_text_column_can_hold(
+    value: str, storable: bool
+) -> None:
+    """The predicate both helpers consult, and the one `Login` asks directly.
+
+    Non-ASCII text is in the table because the rule is "encodable UTF-8", not
+    "ASCII": an implementation that narrowed it would refuse most of the names
+    this application exists to store.
+    """
+    assert is_storable_text(value) is storable
+
+
 # D-10's two numbers, spelled here and in `validation.py` and nowhere else. Every
 # password test below builds its input from the constants rather than from a
 # literal, exactly as the entity tests read their ClassVar - so the one test that
@@ -242,7 +289,7 @@ def test_require_password_accepts_a_nul_character() -> None:
 
     Only the Argon2 encoded hash is stored, and Argon2 hashes arbitrary bytes, so
     the NUL guard that protects `title` and `full_name` has nothing to protect
-    here. This test is what proves `_refuse_nul` is genuinely not called.
+    here. This test is what proves `_refuse_unstorable` is genuinely not called.
     """
     with_a_nul = "pass" + WITH_A_NUL + "word"
 

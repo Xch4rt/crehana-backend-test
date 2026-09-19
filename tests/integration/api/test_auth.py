@@ -86,6 +86,11 @@ PASSWORD = "correct-horse-battery-staple"
 # distinctive for the same reason.
 SHORT_PASSWORD = "7chars!"
 
+# Phase 5 review WR-01: an address no text column can hold, written as an
+# escape so this file stays free of the character. It is what the form field
+# `a%00b@example.com` decodes to.
+UNSTORABLE_EMAIL = "a\x00b@example.com"
+
 # The same address in two letter cases. `EmailStr` lower-cases the domain half
 # only, and `User.__post_init__` lower-cases the whole address, so these two
 # collide at `uq_users_email_lower` however they were typed (D-10, AUTH-01).
@@ -382,6 +387,68 @@ async def test_login_with_an_unknown_address_and_with_a_wrong_password_are_indis
     assert anonymised(unknown_address) == anonymised(wrong_password)
     assert "nobody@example.com" not in unknown_address.text
     assert PASSWORD not in wrong_password.text
+
+
+async def test_login_with_an_unstorable_username_is_the_same_401(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """WR-01: a NUL in `username` answers the ordinary refusal, not a 500.
+
+    The login form has no schema by design, so nothing above the use case
+    refused this value: it reached psycopg, the statement failed, and the
+    fixed 500 came back with the submitted address in the log. The body is
+    compared against the unknown-address refusal built beside it, because "it
+    is a 401 now" would also be true of a 401 that said something different.
+    """
+    client, _ = authenticated_client
+
+    created = await client.post(REGISTER, json=a_registration())
+    assert created.status_code == 201
+
+    unstorable = await client.post(LOGIN, data=a_login_form(username=UNSTORABLE_EMAIL))
+    unknown_address = await client.post(
+        LOGIN, data=a_login_form(username="nobody@example.com")
+    )
+
+    assert unstorable.status_code == 401
+    assert unstorable.headers["content-type"] == PROBLEM_JSON
+    assert unstorable.headers["WWW-Authenticate"] == "Bearer"
+    assert list(unstorable.json()) == MEMBERS
+    assert anonymised(unstorable) == anonymised(unknown_address)
+
+
+async def test_register_with_an_unstorable_name_is_the_domains_422(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """WR-04: an unpaired surrogate in `full_name` is refused by the domain.
+
+    The body is sent as a raw string rather than as a dict, because the value
+    only exists as the JSON escape `\\ud800`: it passes Pydantic's `str`, and
+    before this fix it passed every domain guard too and became a 500 while
+    psycopg bound the INSERT - after a full Argon2 hash had been paid for by an
+    unauthenticated request.
+    """
+    client, _ = authenticated_client
+
+    response = await client.post(
+        REGISTER,
+        content=(
+            '{"email": "surrogate@example.com", '
+            '"full_name": "A\\ud800B", '
+            f'"password": "{PASSWORD}"}}'
+        ),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == [*MEMBERS, "errors"]
+    assert body["code"] == "validation_error"
+    assert body["errors"] == {"field": "full_name"}
+    assert "ud800" not in response.text
 
 
 async def test_get_me_answers_the_callers_own_profile_and_no_stored_hash(

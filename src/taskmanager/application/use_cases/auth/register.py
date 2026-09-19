@@ -16,9 +16,13 @@ slow - measured at 25-37 ms in `05-RESEARCH.md` - and a connection held across
 it is a pool slot spent on arithmetic. Nothing read inside the block depends on
 the hash, so there is nothing to gain by moving it in.
 
-**No email or name validation here.** `User.__post_init__` trims both, lowers
-the address and applies every length bound, for the reason `create.py` gives at
-length: a limit that exists in two layers is a defect rather than redundancy.
+**No email or name validation here, and one name guard that is not a second
+copy of one.** `User.__post_init__` trims both, lowers the address and applies
+every length bound, for the reason `create.py` gives at length: a limit that
+exists in two layers is a defect rather than redundancy. The `require_text`
+call below calls that same domain helper - it does not restate a rule - and it
+is there only to move the question in front of the hashing, exactly as the
+password guard is (Phase 5 review WR-04).
 
 **On the duplicate-address pre-check.** It is a convenience, not the guard -
 the same argument `create.py` makes about list names, and CLAUDE.md's
@@ -55,7 +59,7 @@ from taskmanager.application.ports.security import PasswordHasher
 from taskmanager.application.ports.unit_of_work import UnitOfWork
 from taskmanager.domain.entities.user import User
 from taskmanager.domain.exceptions import EmailAlreadyRegisteredError
-from taskmanager.domain.validation import require_password
+from taskmanager.domain.validation import require_password, require_text
 
 
 class RegisterUser:
@@ -75,6 +79,12 @@ class RegisterUser:
         # docstring. The returned value is deliberately not bound - the
         # plaintext is already in hand and the call is here for its refusal.
         require_password(command.password, field="password")
+        # The same question `User.create` asks below, asked before the work an
+        # unauthenticated caller can demand (T-5-07): a name the database
+        # cannot hold used to cost a full Argon2 hash before it was refused.
+        require_text(
+            command.full_name, field="full_name", max_length=User.FULL_NAME_MAX_LENGTH
+        )
         hashed = await self._hasher.hash(command.password)
         async with self._uow:
             # Read once and handed down, so `created_at` and `updated_at` are

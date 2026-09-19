@@ -56,8 +56,35 @@ def require_utc(value: datetime, *, field: str) -> datetime:
         ) from error
 
 
-def _refuse_nul(text: str, *, field: str) -> None:
-    """Refuse the one character no text column can hold (Phase 4 review WR-03).
+def is_storable_text(value: str) -> bool:
+    """Answer whether PostgreSQL's text types can hold this string at all.
+
+    Two values they cannot: a string containing NUL, and a string that is not
+    encodable UTF-8 - which in practice means an unpaired surrogate, written
+    `\\ud800` in a JSON body. Both are valid Python `str` values and both are
+    refused by psycopg while it binds the parameter. The escape is spelled with
+    a doubled backslash so that this docstring stays encodable text rather than
+    containing the very character it describes.
+
+    The rule lives here and nowhere else. `_refuse_unstorable` below uses this
+    predicate to decide *whether* to refuse and only then decides which message
+    to raise, so the two can never disagree about what is storable. It is
+    public because a caller outside the entities needs the same question
+    answered without the exception: `Login` asks it about a submitted address,
+    where a value the database cannot hold is simply an address no account has
+    (Phase 5 review WR-01).
+    """
+    if "\x00" in value:
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _refuse_unstorable(text: str, *, field: str) -> None:
+    """Refuse text no text column can hold (Phase 4 review WR-03, WR-04).
 
     `"\u0000"` is valid JSON and a valid Python `str`; it survives `strip()` and
     counts as one character, so it passed every rule below - and PostgreSQL then
@@ -71,14 +98,27 @@ def _refuse_nul(text: str, *, field: str) -> None:
     adapter that turned a `DataError` back into "your title is wrong" would be
     guessing which field a statement-level failure was about. Called from both
     helpers, so there is one copy and no text field can be added without it.
-    Only NUL is refused - other control characters are storable, and whether
+
+    Phase 5 review WR-04 found the second such value: an unpaired surrogate,
+    which reached the same 500 from the unauthenticated register route. Rather
+    than a second guard beside this one, the question moved into
+    `is_storable_text` above. This function asks it once, returns when the
+    answer is yes, and only then chooses between the two messages - so the
+    re-test for NUL below selects wording and can never gate the refusal.
+    Nothing else is refused: other control characters are storable, and whether
     they are *welcome* is a product question nobody has asked.
     """
+    if is_storable_text(text):
+        return
     if "\x00" in text:
         raise ValidationError(
             f"{field} must not contain NUL characters.",
             details={"field": field},
         )
+    raise ValidationError(
+        f"{field} must be valid Unicode text.",
+        details={"field": field},
+    )
 
 
 def require_text(value: str, *, field: str, max_length: int) -> str:
@@ -89,7 +129,7 @@ def require_text(value: str, *, field: str, max_length: int) -> str:
             f"{field} must not be blank.",
             details={"field": field},
         )
-    _refuse_nul(text, field=field)
+    _refuse_unstorable(text, field=field)
     if len(text) > max_length:
         # The number comes from the argument, never from a literal repeated
         # here, so the entity ClassVar stays the single source of the limit.
@@ -114,12 +154,13 @@ def require_password(value: str, *, field: str) -> str:
       password, not noise around it; trimming would silently change a credential
       between registration and login, so a password chosen with a trailing space
       would be unusable and its owner would have no way to find out why.
-    - It does **not** call `_refuse_nul`. That guard exists because PostgreSQL's
-      text types cannot hold NUL and `title`, `name` and `full_name` are stored
-      verbatim. A password never becomes a text column - only its Argon2 encoded
-      hash is stored, and Argon2 hashes arbitrary bytes - so the guard would have
-      nothing to protect here, and refusing a character would be exactly the kind
-      of composition rule D-10 rules out.
+    - It does **not** call `_refuse_unstorable`. That guard exists because
+      PostgreSQL's text types cannot hold NUL or an unpaired surrogate, and
+      `title`, `name` and `full_name` are stored verbatim. A password never
+      becomes a text column - only its Argon2 encoded hash is stored, and Argon2
+      hashes arbitrary bytes - so the guard would have nothing to protect here,
+      and refusing a character would be exactly the kind of composition rule
+      D-10 rules out.
     - Its bounds are the module constants above rather than an argument or an
       entity `ClassVar`, because there is no entity to put them on: `User` holds
       a hash and never sees plaintext. The rule about the number is unchanged -
@@ -150,7 +191,7 @@ def optional_text(value: str | None, *, field: str, max_length: int) -> str | No
         # An explicitly empty string clears the field. Storing "" alongside NULL
         # would give the same absence two representations to test for.
         return None
-    _refuse_nul(text, field=field)
+    _refuse_unstorable(text, field=field)
     if len(text) > max_length:
         raise ValidationError(
             f"{field} must be at most {max_length} characters long.",

@@ -220,6 +220,27 @@ async def test_the_duplicate_refusal_never_repeats_the_address() -> None:
     assert EMAIL not in str(excinfo.value.details)
 
 
+async def test_a_name_the_database_cannot_hold_never_reaches_the_hasher() -> None:
+    """WR-04: a lone surrogate is a 422, and it is refused before the Argon2 work.
+
+    `User.create` would refuse the same value, but only after the hash had been
+    paid for by an unauthenticated request - the same asymmetry T-5-07 removed
+    for passwords. The recorder is the assertion, exactly as in the password
+    test below.
+    """
+    unit_of_work = _uow()
+    hasher = FakePasswordHasher()
+    use_case = RegisterUser(unit_of_work, hasher, FrozenClock(LATER))
+
+    with pytest.raises(ValidationError) as excinfo:
+        await use_case.execute(_command(full_name="A" + chr(0xD800) + "B"))
+
+    assert excinfo.value.details == {"field": "full_name"}
+    assert hasher.hashed == []
+    assert unit_of_work.user_repository.added == []
+    assert unit_of_work.commits == 0
+
+
 @pytest.mark.parametrize(
     "length",
     [PASSWORD_MIN_LENGTH - 1, PASSWORD_MAX_LENGTH + 1],

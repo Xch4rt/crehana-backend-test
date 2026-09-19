@@ -47,6 +47,10 @@ FULL_NAME = "Ana Torres"
 PASSWORD = "a-long-enough-password"
 WRONG_PASSWORD = "not-the-right-password"
 UNKNOWN_EMAIL = "nobody@example.com"
+# Phase 5 review WR-01: an address no text column can hold. Written as an
+# escape so this file stays free of the character itself; it is what the form
+# field `a%00b@example.com` decodes to.
+UNSTORABLE_EMAIL = "a\x00b@example.com"
 
 # The same value `create_app` will pass from `jwt_expire_minutes`; fixed here so
 # the seconds assertion can name a number rather than restate the arithmetic.
@@ -187,6 +191,38 @@ async def test_the_two_refusals_are_indistinguishable() -> None:
     # And neither of them names the address that was submitted (T-5-04).
     assert UNKNOWN_EMAIL not in str(unknown_address.value)
     assert EMAIL not in str(wrong_password.value)
+
+
+async def test_an_address_the_database_cannot_hold_is_the_same_refusal() -> None:
+    """WR-01: a NUL in the address is an ordinary 401, not an unauthenticated 500.
+
+    The value used to reach psycopg, which refused the statement and echoed the
+    submitted address into the log. Here it is refused before the transaction,
+    with the same message as the unknown-address leg and the same throwaway
+    work - so the guard cannot become a third, distinguishable answer.
+    """
+    unit_of_work = _uow(registered=False)
+    hasher = FakePasswordHasher()
+
+    with pytest.raises(AuthenticationError) as refused:
+        await _login(unit_of_work, hasher).execute(
+            LoginCommand(email=UNSTORABLE_EMAIL, password=PASSWORD)
+        )
+    with pytest.raises(AuthenticationError) as unknown_address:
+        await _login(_uow(registered=False)).execute(
+            LoginCommand(email=UNKNOWN_EMAIL, password=PASSWORD)
+        )
+
+    assert str(refused.value) == str(unknown_address.value)
+    assert refused.value.code == unknown_address.value.code
+    assert refused.value.details == unknown_address.value.details
+    # The work was paid, and the repository was never asked. `rollbacks == 0`
+    # is what says the second part: the unknown-address leg leaves it at 1,
+    # because it enters the block to look the address up, and this leg refuses
+    # in front of it - so no connection is taken out for an impossible lookup.
+    assert hasher.dummy_verifications == [PASSWORD]
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 0
 
 
 async def test_the_unknown_address_leg_pays_the_hashing_work_anyway() -> None:

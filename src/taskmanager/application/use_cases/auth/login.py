@@ -28,6 +28,18 @@ block is also *left* before any hashing happens: a connection held across 23 ms
 of arithmetic is a pool slot spent for nothing, on the one unauthenticated
 endpoint an attacker can call as often as they like.
 
+**An address the database cannot hold is an address no account has.** The form
+behind this use case has no schema - OAuth2 fixes its shape - so a `username`
+containing a NUL or an unpaired surrogate used to reach psycopg, which refused
+the statement: an unauthenticated 500 any fuzzer finds in seconds, with the
+submitted address echoed into the log through the driver's message (Phase 5
+review WR-01). It is refused here instead, on the same terms and at the same
+cost as an address that merely does not exist - the same throwaway hashing, the
+same one refusal - and before the transaction, so no connection is taken out
+for a lookup that cannot succeed. The question is the domain's
+`is_storable_text`, the same predicate the entity guards ask, rather than a
+character test written a second time here.
+
 **On the field name.** OAuth2 fixes the login form's field to `username`, and
 this API's usernames are email addresses. The rename happens once, in the
 schema that reads the form (plan 05-11); everything from `LoginCommand` inward
@@ -47,6 +59,7 @@ from taskmanager.application.dto.results import AccessTokenResult
 from taskmanager.application.ports.security import PasswordHasher, TokenService
 from taskmanager.application.ports.unit_of_work import UnitOfWork
 from taskmanager.domain.exceptions import AuthenticationError
+from taskmanager.domain.validation import is_storable_text
 
 # The one message both refusals carry. See the module docstring: this being a
 # single object, referenced twice, is what makes the two legs identical by
@@ -83,6 +96,13 @@ class Login:
 
     async def execute(self, command: LoginCommand) -> AccessTokenResult:
         """Return a token, or raise the one refusal that covers both failures."""
+        if not is_storable_text(command.email):
+            # No row can hold this address, so no row can match it: the same
+            # answer the unknown-address leg gives, paid for with the same
+            # throwaway work and built from the same constant. Before the
+            # block, so the driver never sees the value (WR-01).
+            await self._hasher.dummy_verify(command.password)
+            raise AuthenticationError(_REFUSAL)
         async with self._uow:
             # The adapter folds case on both sides, so the address is found
             # however it was typed (D-10) - the same question registration's
