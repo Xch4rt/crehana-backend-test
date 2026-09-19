@@ -62,3 +62,21 @@ the module was re-run green before the commit:
 $ .venv/bin/pytest tests/integration/api/test_assignment.py -q --no-cov
 ...................                                                      [100%]
 19 passed in 0.66s
+
+=== Falsification 3 (NOTF-03): the write made non-durable ===
+
+Task 2's failure test claims that a re-read through the API is what proves the
+requirement, and that asserting the 200 alone would pass against an
+implementation which swallowed the notifier's exception *and* lost the write.
+That claim is checked by removing `await self._uow.commit()` from
+`AssignTask.execute`, which produces exactly such an implementation: the
+response is still 200 carrying the new assignee, and the row never changed.
+
+$ .venv/bin/pytest tests/integration/api/test_assignment.py -k notifier_failure -q --no-cov
+>       assert after.json()["assignee_id"] == str(ASSIGNEE_ID)
+E       AssertionError: assert None == '00000000-0000-4000-8000-000000000003'
+
+1 failed, 24 deselected
+
+The 200 and the response body both passed; the re-read is the assertion that
+failed, which is the whole reason it is there.

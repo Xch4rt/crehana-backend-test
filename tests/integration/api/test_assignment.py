@@ -35,16 +35,26 @@ oracle handed to a caller who cannot see the task (T-5-12). The comparison is
 over the serialised documents, `instance` included, through `anonymised`.
 """
 
+import json
+import logging
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
+from taskmanager.application.ports.notifications import EmailNotifier
+from taskmanager.application.use_cases.tasks.assign import logger as assignment_logger
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
+from taskmanager.infrastructure.logging import JsonFormatter
+from taskmanager.infrastructure.notifications.logging import LOGGER_NAME
+from taskmanager.presentation.api.dependencies import get_email_notifier
 
 # Imported rather than re-declared - the convention `test_task_lists.py`
 # states: the error contract has one home.
@@ -857,3 +867,319 @@ async def test_assigned_to_me_is_empty_for_a_caller_who_holds_nothing(
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+# --------------------------------------------------------------------------
+# The simulated invitation: one per real assignment, none for a no-op, and
+# never able to undo what it was told about (NOTF-01, NOTF-02, NOTF-03)
+# --------------------------------------------------------------------------
+
+# A task title carrying an embedded newline and a plausible-looking record of
+# its own: T-5-13's log-injection attempt, written once because two tests need
+# the identical string and a second copy is where they would disagree about
+# what was injected.
+INJECTED_TITLE = 'Buy milk\n{"level": "INFO", "event": "forged"}'
+
+
+class ExplodingNotifier:
+    """An `EmailNotifier` whose every send fails, for NOTF-03.
+
+    Declared here rather than in `tests/unit/application/fakes.py` because a
+    test double belongs beside the test that needs it, and this one is needed
+    by exactly one. Conformance to the port is structural, so there is nothing
+    to inherit - and the module-level binding below is what makes `mypy
+    --strict` check it: a double whose signature drifted from the port would
+    be a test that proved nothing about the real call site.
+    """
+
+    async def send_task_assigned(
+        self, *, recipient_email: str, task_title: str, task_id: uuid.UUID
+    ) -> None:
+        raise RuntimeError("the mail transport is down")
+
+
+_CONFORMS: EmailNotifier = ExplodingNotifier()
+
+
+@contextmanager
+def a_notifier_that_fails(app: FastAPI) -> Iterator[None]:
+    """Run the block with a broken notifier, and put the provider back after.
+
+    A context manager rather than a bare assignment, in the `acting_as` spirit:
+    the restoring half is the part that matters. A leaked override would make
+    every later test in the module run against a notifier that raises, and the
+    ones that assert an INFO record was emitted would fail pointing at the
+    logger rather than at the fixture that broke it.
+    """
+    previous = app.dependency_overrides.get(get_email_notifier)
+    app.dependency_overrides[get_email_notifier] = ExplodingNotifier
+    try:
+        yield
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_email_notifier, None)
+        else:
+            app.dependency_overrides[get_email_notifier] = previous
+
+
+def notifications(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """Only the records D-15 promises, filtered by the logger name it fixes."""
+    return [record for record in caplog.records if record.name == LOGGER_NAME]
+
+
+def extras(record: logging.LogRecord) -> dict[str, Any]:
+    """A record's `extra=` fields, read exactly where the formatter reads them.
+
+    `vars()` rather than attribute access, and the difference is not style.
+    The fields D-15 names are not declared members of `LogRecord`, so
+    `record.event` is a `mypy --strict` error and `getattr(record, "event")`
+    is a flake8-bugbear B009 violation - both gates were observed firing. The
+    record's `__dict__` is what `JsonFormatter` itself iterates, so reading it
+    here is the same question the application asks, asked the same way.
+    """
+    return vars(record)
+
+
+async def test_assigning_notifies_the_new_assignee_with_one_structured_record(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """NOTF-01 and NOTF-02: the invitation is observable from an HTTP request.
+
+    **`at_level` is load-bearing and is not decoration.** `caplog` captures at
+    WARNING by default, so a test that forgot it would assert on an empty list
+    and pass for the wrong reason - which is the single most common way this
+    kind of test is silently vacuous. It is spelled with the logger name D-15
+    fixes, imported from the adapter rather than typed out here.
+
+    The assertions are on the record's **structured attributes**, never on a
+    substring of the rendered message: the fields are what an operator filters
+    on, and a message that happened to contain the address while the `to`
+    field was missing would satisfy a substring check.
+    """
+    await given_three_people_and_an_unassigned_task(session_factory)
+    client, app = authenticated_client
+    owner = await headers_for(app, OWNER_ID)
+
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        response = await client.put(
+            assignee_url(LIST_ID, TASK_ID),
+            json={"assignee_id": str(ASSIGNEE_ID)},
+            headers=owner,
+        )
+
+    assert response.status_code == 200
+
+    sent = notifications(caplog)
+
+    assert len(sent) == 1
+    assert sent[0].levelno == logging.INFO
+
+    fields = extras(sent[0])
+
+    assert fields["event"] == "task_assigned_email"
+    assert fields["to"] == ASSIGNEE_EMAIL
+    assert fields["task_id"] == str(TASK_ID)
+    assert "Buy milk" in fields["body"]
+
+
+async def test_the_notification_renders_as_one_parseable_json_line(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-15 and D-24: what reaches `docker compose logs api` is one JSON object.
+
+    The record is rendered through the application's own formatter rather than
+    through a copy of its rules, so "the fields are there" and "the fields
+    survive serialisation" are one claim rather than two that can drift.
+    """
+    await given_three_people_and_an_unassigned_task(session_factory)
+    client, app = authenticated_client
+
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        response = await client.put(
+            assignee_url(LIST_ID, TASK_ID),
+            json={"assignee_id": str(ASSIGNEE_ID)},
+            headers=await headers_for(app, OWNER_ID),
+        )
+
+    assert response.status_code == 200
+
+    rendered = JsonFormatter().format(notifications(caplog)[0])
+    payload = json.loads(rendered)
+
+    assert rendered.splitlines() == [rendered]
+    assert payload["level"] == "INFO"
+    assert payload["logger"] == LOGGER_NAME
+    assert payload["event"] == "task_assigned_email"
+    assert payload["to"] == ASSIGNEE_EMAIL
+    assert payload["task_id"] == str(TASK_ID)
+    assert "exception" not in payload
+
+
+async def test_a_title_carrying_a_newline_still_notifies_on_a_single_line(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """T-5-13: a task title cannot forge a second log record.
+
+    The title is caller-supplied text that reaches the log line, so a
+    formatter that interpolated it raw would let anybody who can create a task
+    write arbitrary records into the operator's stream. The mitigation is
+    `json.dumps` in the formatter, which is a property of every field rather
+    than a special case for this one - and the assertion is that the rendered
+    output is exactly one line, not merely that it parses.
+    """
+    await seed(
+        session_factory,
+        users=[the_caller(), the_assignee(), the_stranger()],
+        task_lists=[a_task_list()],
+        tasks=[a_task_held_by(None, task_id=TASK_ID, title=INJECTED_TITLE)],
+    )
+    client, app = authenticated_client
+
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        response = await client.put(
+            assignee_url(LIST_ID, TASK_ID),
+            json={"assignee_id": str(ASSIGNEE_ID)},
+            headers=await headers_for(app, OWNER_ID),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == INJECTED_TITLE
+
+    sent = notifications(caplog)
+
+    assert len(sent) == 1
+
+    rendered = JsonFormatter().format(sent[0])
+    payload = json.loads(rendered)
+
+    assert "\n" not in rendered
+    assert rendered.splitlines() == [rendered]
+    # The forged object is *inside* a string value, which is the whole point:
+    # it survived as data rather than becoming a record of its own.
+    assert payload["body"].count(INJECTED_TITLE) == 1
+    assert payload["event"] == "task_assigned_email"
+
+
+async def test_assigning_the_same_user_again_notifies_nobody(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-07's other half: the no-op writes nothing **and** sends nothing.
+
+    The recorder is cleared after the first assignment rather than before the
+    second request, so the emptiness asserted below is emptiness across the
+    repeat alone - and `at_level` is still in force, so the assertion is not
+    the vacuous one a forgotten level would produce.
+    """
+    await given_three_people_and_an_unassigned_task(session_factory)
+    client, app = authenticated_client
+    owner = await headers_for(app, OWNER_ID)
+    payload = {"assignee_id": str(ASSIGNEE_ID)}
+
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        first = await client.put(
+            assignee_url(LIST_ID, TASK_ID), json=payload, headers=owner
+        )
+        assert first.status_code == 200
+        assert len(notifications(caplog)) == 1
+        caplog.clear()
+
+        again = await client.put(
+            assignee_url(LIST_ID, TASK_ID), json=payload, headers=owner
+        )
+
+    assert again.status_code == 200
+    assert notifications(caplog) == []
+
+
+async def test_unassigning_notifies_nobody(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-07: unassignment sends nothing at all, which is why it takes no port.
+
+    `UnassignTask`'s constructor takes no notifier, so this test is what makes
+    that absence a fact about the running system rather than a fact about a
+    signature - a handler that reached for the adapter directly would still
+    compile.
+    """
+    await given_a_task_the_assignee_holds(session_factory)
+    client, app = authenticated_client
+
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        response = await client.delete(
+            assignee_url(LIST_ID, TASK_ID), headers=await headers_for(app, OWNER_ID)
+        )
+
+    assert response.status_code == 200
+    assert response.json()["assignee_id"] is None
+    assert notifications(caplog) == []
+
+
+async def test_a_notifier_failure_leaves_the_assignment_committed(
+    authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """NOTF-03: the telling cannot undo what it was told about (D-16).
+
+    The re-read is the assertion that matters. "The response was 200" is
+    equally true of an implementation that swallowed the exception *and*
+    rolled the write back - the caller would be told their assignment
+    succeeded and the row would say otherwise, which is precisely the failure
+    this requirement exists to forbid. So the task is fetched again, through
+    the API, on a fresh session.
+
+    The WARNING is asserted too, and it names the task id and carries the
+    traceback: a failure swallowed in silence is an operational blind spot
+    even when the requirement is met. The logger is the use case's own object,
+    imported rather than named by a string that could drift from it.
+    """
+    await given_three_people_and_an_unassigned_task(session_factory)
+    client, app = authenticated_client
+    owner = await headers_for(app, OWNER_ID)
+
+    with caplog.at_level(logging.WARNING, logger=assignment_logger.name):
+        with a_notifier_that_fails(app):
+            response = await client.put(
+                assignee_url(LIST_ID, TASK_ID),
+                json={"assignee_id": str(ASSIGNEE_ID)},
+                headers=owner,
+            )
+
+    assert response.status_code == 200
+    assert response.json()["assignee_id"] == str(ASSIGNEE_ID)
+
+    after = await client.get(task_url(LIST_ID, TASK_ID), headers=owner)
+
+    assert after.status_code == 200
+    assert after.json()["assignee_id"] == str(ASSIGNEE_ID)
+
+    warnings = [
+        record
+        for record in caplog.records
+        if record.name == assignment_logger.name and record.levelno == logging.WARNING
+    ]
+
+    assert len(warnings) == 1
+    assert str(TASK_ID) in warnings[0].getMessage()
+    assert warnings[0].exc_info is not None
+    # The traceback reaches the log and nowhere else: `JsonFormatter` renders
+    # it into an `exception` field, and the response body above carries none
+    # of it.
+    assert (
+        "RuntimeError" in json.loads(JsonFormatter().format(warnings[0]))["exception"]
+    )
+    assert "RuntimeError" not in after.text
+
+    # The override was restored, so the next assignment notifies normally -
+    # which is what keeps a leak from this test out of every test after it.
+    assert app.dependency_overrides.get(get_email_notifier) is None
