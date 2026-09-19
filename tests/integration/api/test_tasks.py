@@ -86,6 +86,17 @@ TASK_MEMBERS = [
     "assignee_id",
 ]
 
+# Every move the state machine does not permit, derived from the machine itself
+# rather than listed: four pairs today, and a fourth status would extend this
+# automatically. The order is the enum's, so the parametrized ids below are
+# stable across runs.
+FORBIDDEN_TRANSITIONS: list[tuple[TaskStatus, TaskStatus]] = [
+    (starting, requested)
+    for starting in TaskStatus
+    for requested in TaskStatus
+    if requested not in ALLOWED_TRANSITIONS[starting]
+]
+
 
 def tasks_url(task_list_id: uuid.UUID) -> str:
     """The task collection of one list."""
@@ -1014,6 +1025,75 @@ async def test_an_invalid_transition_is_409_naming_the_transition(
     unchanged = await client.get(task_url(LIST_ID, TASK_ID))
 
     assert unchanged.json()["status"] == TaskStatus.COMPLETED.value
+
+
+@pytest.mark.parametrize(
+    ("starting", "requested"),
+    FORBIDDEN_TRANSITIONS,
+    ids=[f"{a.value}->{b.value}" for a, b in FORBIDDEN_TRANSITIONS],
+)
+async def test_the_complement_of_the_transition_table_is_driven_over_http(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    starting: TaskStatus,
+    requested: TaskStatus,
+) -> None:
+    """D-04, TEST-04: the complement of `ALLOWED_TRANSITIONS`, over HTTP.
+
+    The cases are *derived*, never listed: every `(a, b)` in `TaskStatus x
+    TaskStatus` where `b` is not in `ALLOWED_TRANSITIONS[a]`. Four today, and a
+    fourth status would add its cases here with no edit to this file - which is
+    the whole point, since the test above this one hard-codes the single move an
+    author happened to think of.
+
+    **The split on `starting is requested` is a decision, not a convenience.**
+    The complement is not uniformly a refusal. The three self-pairs are outside
+    the table because a status change to the status you already have is not a
+    move at all, and the domain answers it as a deliberate idempotent no-op
+    (Phase 2's D-02) - so a parametrization that asserted a 409 for the whole
+    complement would be asserting a refusal this API is designed never to make.
+    The cross-pairs are the real refusals, and they get the full RFC 9457 body.
+
+    Every leg re-reads the task with a `GET` afterwards, because "the request was
+    refused" and "nothing was persisted" are two claims, and the second is the one
+    a lost-update defect would break while the first stayed true (D-06).
+
+    The starting status is seeded directly rather than walked to through the API:
+    walking there would make the test depend on the very transitions it is the
+    complement of, and a table change would then break the setup instead of the
+    assertion.
+    """
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[a_task_list()],
+        tasks=[a_task_with(task_id=TASK_ID, title="Derived", status=starting)],
+    )
+    client, _ = api_client
+    assert requested not in ALLOWED_TRANSITIONS[starting]
+
+    response = await client.patch(
+        status_url(LIST_ID, TASK_ID), json={"status": requested.value}
+    )
+
+    if starting is requested:
+        assert response.status_code == 200
+        assert list(response.json()) == TASK_MEMBERS
+        assert response.json()["status"] == starting.value
+    else:
+        assert response.status_code == 409
+        assert response.headers["content-type"] == PROBLEM_JSON
+
+        body = response.json()
+
+        assert list(body) == [*MEMBERS, "errors"]
+        assert body["code"] == "invalid_status_transition"
+        assert body["title"] == "Invalid status transition"
+        assert body["errors"] == {"from": starting.value, "to": requested.value}
+
+    after = await client.get(task_url(LIST_ID, TASK_ID))
+
+    assert after.json()["status"] == starting.value
 
 
 async def test_the_status_endpoint_rejects_an_unknown_value(
