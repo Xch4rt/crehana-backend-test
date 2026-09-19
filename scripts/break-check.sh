@@ -7,6 +7,18 @@
 # care, asserted RED, and reverted. A break that comes back GREEN is this
 # script's failure, and it exits non-zero naming which one survived.
 #
+# RED is a claim about a *measurement*, so two rules guard it (ADR-093):
+#   * each selection is run once UNMUTATED first and must exit 0. Without that
+#     baseline a suite that is already failing - PostgreSQL down, a bad merge -
+#     "catches" all five breaks, and the one line this script prints says the
+#     opposite of the truth. It is why the run now takes about two minutes.
+#   * RED means pytest exit 1 AND at least one `FAILED` line. Exit 2 (collection
+#     error or interrupt), 3 (internal error), 4 (usage error - a renamed test
+#     path), 5 (nothing collected) and an exit 1 with only ERRORs are reported as
+#     ERROR and stop the script non-zero. Read as "non-zero, so the suite
+#     noticed", each of them used to print `red: 0 test(s) failed` and then a
+#     success line for a run that executed no test at all.
+#
 # The five breaks, and what each one is asking:
 #   1 completion.py   - the percentage formula inverted (the break the roadmap
 #                       mandates). Does anything check the number, or only its
@@ -34,7 +46,8 @@
 #
 # Deliberately in NO gate path (D-09): not in `make test`, not in
 # .pre-commit-config.yaml, not in .github/workflows/ci.yml. It runs the whole
-# relevant selection five times over, which costs about a minute; the normal
+# relevant selection ten times over - a baseline and a mutated run per break,
+# see above - which costs a couple of minutes; the normal
 # loop is ten seconds and stays that way. An evaluator runs it once, on demand.
 # Each break's tests are named per break rather than running the whole suite -
 # which is also what makes the report meaningful, since a break has to redden a
@@ -129,6 +142,28 @@ check_break() {
 	printf '\n--- break %s: %s\n' "$number" "$label"
 	printf '    %s\n' "$file"
 
+	# The baseline, and it is not ceremony: RED only means something relative to a
+	# GREEN. Without this run, a selection that is already failing - PostgreSQL
+	# down, a bad merge, a stale .env - "catches" every break, and this script's
+	# one line of output says the suite noticed a defect it never saw. It doubles
+	# the runtime, which is the whole cost.
+	baseline_log="$LOGDIR/baseline-$number.log"
+	# $PYTEST is deliberately unquoted: the override above may be several words.
+	set +e
+	$PYTEST "$@" --no-cov -p no:cacheprovider >"$baseline_log" 2>&1
+	baseline=$?
+	set -e
+	if [ "$baseline" -ne 0 ]; then
+		printf '    ERROR: not green BEFORE the break (pytest exit %s).\n' \
+			"$baseline" >&2
+		printf '    Nothing was mutated. A break cannot be judged against a\n' >&2
+		printf '    suite that is already red - is PostgreSQL up (make up)?\n' >&2
+		# Printed, never referenced: the EXIT trap removes $LOGDIR.
+		printf '    pytest said: ' >&2
+		sed -n '$p' "$baseline_log" >&2
+		exit 2
+	fi
+
 	# Recorded before the write, so an interrupted or refused mutation is still
 	# restored.
 	MUTATED="$MUTATED $file"
@@ -144,7 +179,6 @@ path.write_text(source.replace(old, os.environ["BREAK_NEW"]), encoding="utf-8")
 PY
 
 	log="$LOGDIR/break-$number.log"
-	# $PYTEST is deliberately unquoted: the override above may be several words.
 	set +e
 	$PYTEST "$@" --no-cov -p no:cacheprovider >"$log" 2>&1
 	status=$?
@@ -154,18 +188,45 @@ PY
 	assert_src_is_clean
 
 	checked=$((checked + 1))
-	if [ "$status" -eq 0 ]; then
+	# Three verdicts, not two, and the third is the one this script used to get
+	# wrong: pytest exits 2 on a collection error or an interrupt, 3 on an
+	# internal error, 4 on a usage error (a renamed test path) and 5 when it
+	# collected nothing. Read as "non-zero, so the suite noticed", every one of
+	# those printed `red: 0 test(s) failed` and then `All 5 breaks turned the
+	# suite red` - a success line for a run that executed no test at all. RED is
+	# exit 1 AND at least one FAILED line; anything else is an ERROR and stops
+	# the script.
+	case "$status" in
+	0)
 		survivors=$((survivors + 1))
 		printf '    SURVIVED: every test passed with the defect in place.\n'
 		printf '    Nothing in these files can tell the difference:\n'
 		for test_file in "$@"; do
 			printf '      %s\n' "$test_file"
 		done
-	else
+		;;
+	1)
 		red=$(grep -c '^FAILED ' "$log" || true)
+		if [ "$red" -eq 0 ]; then
+			printf '    ERROR: pytest exit 1 with no FAILED test - an error, not\n' >&2
+			printf '    a verdict (a fixture or collection failure reports ERROR).\n' >&2
+			printf '    pytest said: ' >&2
+			sed -n '$p' "$log" >&2
+			exit 2
+		fi
 		printf '    red: %s test(s) failed\n' "$red"
 		sed -n 's/^FAILED \([^ ]*\).*/      \1/p' "$log"
-	fi
+		;;
+	*)
+		printf '    ERROR: pytest exit %s is not a test failure - usage,\n' \
+			"$status" >&2
+		printf '    collection or internal error. src/ is restored; no verdict\n' >&2
+		printf '    can be read off this run.\n' >&2
+		printf '    pytest said: ' >&2
+		sed -n '$p' "$log" >&2
+		exit 2
+		;;
+	esac
 }
 
 check_break 1 "the completion percentage is inverted" \

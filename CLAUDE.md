@@ -469,6 +469,14 @@ phases and each one turned out to be partly untrue the first time it was checked
   `git reset --hard` is forbidden anywhere in this repository's tooling: it destroys uncommitted
   work the tool never touched, and Phase 6 produced a live example. Enforced by
   `tests/unit/test_break_check.py`, which drives the script in a throwaway repository (ADR-091).
+- **A break is RED only against a measured baseline.** The same script runs each break's selection
+  once **unmutated** first and refuses, non-zero, unless that run exits 0; then RED means pytest
+  exit **1 and at least one `FAILED` line**, while exit 2/3/4/5 — and an exit 1 whose failures are
+  `ERROR`s — are reported as an ERROR verdict and stop the run non-zero. Read as "non-zero, so the
+  suite noticed", a renamed test path or a database that was never started printed
+  `red: 0 test(s) failed` five times and then the success line (ADR-093, amending ADR-091). Every
+  one of those paths, the survivor path and the all-red path is driven by a stub through
+  `BREAK_CHECK_PYTEST` in `tests/unit/test_break_check.py`, which asserts `src/` is clean on each.
 
 ### Configuration
 

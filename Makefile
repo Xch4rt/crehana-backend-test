@@ -92,15 +92,17 @@ test-unit:
 
 # The answer to "your tests are green, but do they check anything?" - roadmap
 # SC-4. The script breaks src/ on purpose five times, runs the tests that should
-# care, asserts each break turns them RED, restores the file and reports; it
-# exits non-zero if any break survives. It refuses to start on a dirty src/,
-# because it restores with git.
+# care - once BEFORE the break, which must be green, and once with it - asserts
+# each break turns them RED, restores the file and reports; it exits non-zero if
+# any break survives, and also if pytest exits in any way that is not a test
+# failure (ADR-093). It refuses to start on a dirty src/, because it restores
+# with git.
 #
 # Deliberately in neither `test` above, nor .pre-commit-config.yaml, nor
-# .github/workflows/ci.yml (D-09): it runs a large selection five times over,
-# which costs about a minute, and the whole value of the ten-second commit loop
-# is that nobody is tempted to skip it. This is a spot check run on demand, not
-# a gate. It needs PostgreSQL up, since four of the five breaks reach the
+# .github/workflows/ci.yml (D-09): it runs a large selection ten times over,
+# which costs a couple of minutes, and the whole value of the ten-second commit
+# loop is that nobody is tempted to skip it. This is a spot check run on demand,
+# not a gate. It needs PostgreSQL up, since four of the five breaks reach the
 # integration tests.
 break-check:
 	sh scripts/break-check.sh

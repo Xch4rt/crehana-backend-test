@@ -3988,3 +3988,70 @@ the `orelse` of such an `if` deliberately not included, since code under the run
   was, through one public API — the gate should ask.
 
 ---
+
+## ADR-093: RED is exit 1 with a FAILED line, measured against a baseline (2026-09-19, amending ADR-091)
+
+**Context**
+`scripts/break-check.sh` prints one line, and that line is the evidence offered for roadmap SC-4.
+Its verdict was `if [ "$status" -eq 0 ]` survived, else red — so *any* non-zero pytest exit counted
+as "the suite noticed". pytest exits 2 on a collection error or interrupt, 3 on an internal error,
+4 on a usage error (a renamed test path), 5 when it collected nothing, and 1 with only `ERROR`
+entries when a fixture fails — `grep -c '^FAILED '` counts that last one as zero. Reproduced with a
+stub that prints pytest's "file or directory not found" and exits 4:
+
+```
+    red: 0 test(s) failed
+
+All 5 breaks turned the suite red. src/ is back as it was.
+exit=0
+```
+
+The same output appears with PostgreSQL down, when every integration test errors in
+`_require_database`. There was also no baseline: a selection already failing for an unrelated
+reason "caught" all five breaks. An evaluator who runs `make break-check` before `make up` was
+shown proof of a property nothing had measured — the failure mode the script's own header says it
+fears, reached from the other side.
+
+**Options**
+
+- **Require `FAILED` lines and treat everything else as red anyway.** Half the fix. A run that
+  collected nothing would still be a "catch", and the more likely accident by far — no database —
+  would still read as five caught breaks.
+- **Run the whole suite once at the start and require it green.** One baseline for five different
+  selections: cheaper than five, and it stops answering the question the moment a break's selection
+  is narrower than the suite (all of them are), because a selection can be red while the suite is
+  green only if... it cannot, but the reverse — a suite red in a file no break selects — would
+  refuse a run that was perfectly valid.
+- **A baseline per break, and a three-way verdict.**
+
+**Decision**
+The third. `check_break` now runs its own selection **unmutated** first and refuses, non-zero, with
+the last line of pytest's output, unless that run exits 0. Then, after the mutated run, exactly
+three outcomes: exit 0 is SURVIVED, exit 1 **with at least one `FAILED` line** is RED, and anything
+else — including exit 1 with none — is an ERROR that stops the script non-zero with the tail of the
+log. `src/` is restored before the verdict is read in every branch, so an abort cannot leave a
+mutation behind.
+
+**Consequences**
+
+- **The run costs about twice what it did**, ten selections rather than five, a couple of minutes
+  in total. That is the entire price, it is paid by a spot check nothing gates on (D-09), and the
+  alternative is a success line that can be printed by a run which executed no test.
+- **The unit test now covers the verdict, not only the safety.** ADR-091 recorded three tests, all
+  of which ended before a single `check_break` completed; the defect above shipped underneath them.
+  `tests/unit/test_break_check.py` plants all five mutation targets (parsed out of the script, never
+  restated) and drives: a survivor on every break (exit 1, `5 of 5 breaks SURVIVED`, clean tree), a
+  `FAILED` line on every break (exit 0, the success line, five `red: 1 test(s) failed`, clean tree),
+  the four non-failure exit codes and the FAILED-less exit 1 (non-zero, no success line, stopped at
+  the first break, clean tree), and a red baseline (refused, exactly one pytest invocation, and the
+  file that invocation saw was unmutated).
+- **The stub grew a parity seam.** A stand-in for pytest with one exit code can no longer reach the
+  mutated run at all, so `a_stub_green_on_the_baseline` counts its invocations in a file and answers
+  green on odd ones, the test's script on even ones. The count file is what turns "it refused before
+  mutating" and "it stopped at the first break" into assertions rather than inferences.
+- **Both new rules were driven red before being trusted**, by planting the old behaviour: the
+  baseline refusal disabled (`if false`) reddens the baseline test alone, and the `*)` ERROR branch
+  made unreachable reddens exactly the four exit-code rows and nothing else. Each edit was reverted
+  by its own inverse replacement, never a blanket checkout.
+
+---
