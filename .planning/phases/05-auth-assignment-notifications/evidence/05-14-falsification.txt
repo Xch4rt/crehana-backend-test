@@ -1,0 +1,64 @@
+Plan 05-14: the load-bearing assertions of tests/integration/api/test_assignment.py,
+observed failing against a deliberately broken implementation.
+
+Nothing in this plan is a TDD RED in the usual sense: plans 05-08 and 05-12 shipped
+the use cases and the routes, so every test written here is green the moment it is
+written. A green test over working code says nothing about whether the test could
+ever have gone red, so the two assertions the threat register leans on were
+falsified instead - each by breaking the one decision it exists to pin, running the
+module, and reverting.
+
+=== Falsification 1 (T-5-12): the ownership guard reordered after the user lookup ===
+
+src/taskmanager/application/use_cases/tasks/assign.py, `AssignTask.execute`: the
+`owned_task(...)` guard and the `self._uow.users.get(command.assignee_id)` lookup
+swapped, which is exactly the user-existence oracle the comment above them forbids.
+
+$ .venv/bin/pytest tests/integration/api/test_assignment.py -q --no-cov
+>       assert body["code"] == "task_not_found"
+E       AssertionError: assert 'user_not_found' == 'task_not_found'
+E
+E         - task_not_found
+E         ? ^^ ^
+E         + user_not_found
+E         ? ^ ^^
+
+tests/integration/api/test_tasks.py:148: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/api/test_assignment.py::test_a_stranger_naming_an_unknown_assignee_is_refused_as_an_absent_task
+1 failed, 18 passed in 0.73s
+
+=== Falsification 2 (D-07): the idempotent no-op removed ===
+
+The same module, `AssignTask.execute`: the two lines that return early when the
+requested assignee is already the task's assignee, deleted. The route still
+answers 200 with the right assignee, so a status assertion - and even an
+assertion on `assignee_id` - passes. `updated_at` is what moves.
+
+$ .venv/bin/pytest tests/integration/api/test_assignment.py -q --no-cov
+        assert again.status_code == 200
+>       assert again.json() == first.json()
+E       AssertionError: assert {'id': '00000...n': None, ...} == {'id': '00000...n': None, ...}
+E
+E         Omitting 10 identical items, use -vv to show
+E         Differing items:
+E         {'updated_at': '2026-09-19T17:44:56.853624Z'} != {'updated_at': '2026-09-19T17:44:56.848327Z'}
+E         Use -v to get more diff
+
+tests/integration/api/test_assignment.py:380: AssertionError
+----------------------------- Captured stdout call -----------------------------
+{"level": "INFO", "logger": "taskmanager.notifications", "message": "Task assignment invitation", "event": "task_assigned_email", "to": "assignee@example.com", "subject": "You have been assigned a task: Buy milk", "body": "You have been assigned the task \"Buy milk\". Open /api/v1/tasks/assigned-to-me to see every task assigned to you.", "task_id": "00000000-0000-4000-8000-000000000021"}
+{"level": "INFO", "logger": "taskmanager.notifications", "message": "Task assignment invitation", "event": "task_assigned_email", "to": "assignee@example.com", "subject": "You have been assigned a task: Buy milk", "body": "You have been assigned the task \"Buy milk\". Open /api/v1/tasks/assigned-to-me to see every task assigned to you.", "task_id": "00000000-0000-4000-8000-000000000021"}
+------------------------------ Captured log call -------------------------------
+INFO     taskmanager.notifications:logging.py:72 Task assignment invitation
+INFO     taskmanager.notifications:logging.py:72 Task assignment invitation
+=========================== short test summary info ============================
+FAILED tests/integration/api/test_assignment.py::test_assigning_the_same_user_again_is_a_no_op_that_does_not_move_updated_at
+1 failed, 18 passed in 0.70s
+
+Both files were restored with `git checkout` immediately after each capture, and
+the module was re-run green before the commit:
+
+$ .venv/bin/pytest tests/integration/api/test_assignment.py -q --no-cov
+...................                                                      [100%]
+19 passed in 0.66s
