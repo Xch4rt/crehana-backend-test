@@ -31,8 +31,18 @@ from taskmanager.domain.value_objects.task_status import TaskStatus
 
 @dataclass(frozen=True, slots=True)
 class ChangeTaskStatusCommand:
-    """Ask for a task to move to `new_status`, on behalf of `actor_id`."""
+    """Ask for a task to move to `new_status`, on behalf of `actor_id`.
+
+    `task_list_id` is the list the task was addressed *under*, which is not the
+    same thing as the task's own parent: the use case compares the two and
+    refuses a mismatch with the answer an absent task gets (D-14). It is part of
+    the request because D-11 nests the endpoint under `{list_id}`, and a nested
+    path whose parent segment never reaches the use case is a defect rather than
+    a simplification - it would let any list the actor owns stand in for the
+    real one, which is an ownership check that passes while checking nothing.
+    """
 
     actor_id: UUID
+    task_list_id: UUID
     task_id: UUID
     new_status: TaskStatus
