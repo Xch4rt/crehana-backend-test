@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 6 planned (4 plans, 4 sequential waves) — ready to execute Phase 6
-last_updated: 2026-09-19T20:45:02.699Z
-last_activity: 2026-09-19 -- Phase 06 planned (06-01..06-04, plan check passed, 15/15 decisions covered); suite baseline 1019 passed, 100% coverage
+status: executing
+stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — wave 1 (06-01) dispatched
+last_updated: 2026-09-19T20:48:16.740Z
+last_activity: 2026-09-19 -- Phase 06 execution started (06-01..06-04); suite baseline 1019 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 5
@@ -27,9 +27,9 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-19 -- Phase 06 planned (4 plans in 4 sequential waves); Phase 05 complete (17/17) after gap closure 05-17 and a passing re-verification (6/6)
+Plan: 1 of 4
+Status: Executing Phase 06
+Last activity: 2026-09-19 -- Phase 06 execution started (4 plans in 4 sequential waves); Phase 05 complete (17/17)
 
 Progress: [█████████░] 93%
 
