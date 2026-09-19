@@ -265,7 +265,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 05-09-PLAN.md — The auth, users and assignee schemas, and D-06/D-08 proven by absence
+- [x] 05-09-PLAN.md — The auth, users and assignee schemas, and D-06/D-08 proven by absence
 - [x] 05-10-PLAN.md — The real actor seam, the security providers, and the demo user's deletion
 
 **Wave 6** *(blocked on Wave 5 completion)*
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 9/16 | In Progress | - |
+| 5. Auth, Assignment & Notifications | 10/16 | In Progress | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 

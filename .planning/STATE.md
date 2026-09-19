@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-10-PLAN.md
-last_updated: "2026-09-19T16:41:37.076Z"
-last_activity: 2026-09-19 -- Phase 05 plan 10 complete
+stopped_at: Completed 05-09-PLAN.md
+last_updated: "2026-09-19T16:50:41.712Z"
+last_activity: 2026-09-19 -- Phase 05 plan 09 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 47
-  percent: 87
+  completed_plans: 48
+  percent: 89
 ---
 
 # Project State
@@ -27,17 +27,17 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 10 of 16
-Status: Executing Phase 05 (plans 01-08 and 10 complete; plan 09 still outstanding)
-Last activity: 2026-09-19 -- Phase 05 plan 10 complete
+Plan: 11 of 16
+Status: Executing Phase 05 (plans 01-10 complete; 05-11 next)
+Last activity: 2026-09-19 -- Phase 05 plan 09 complete
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 49
+- Total plans completed: 50
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -103,6 +103,7 @@ Progress: [█████████░] 87%
 | Phase 05 P07 | 16min | 3 tasks | 16 files |
 | Phase 05 P08 | 13min | 3 tasks | 13 files |
 | Phase 05 P10 | 14min | 3 tasks | 10 files |
+| Phase 05 P09 | 21min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -541,6 +542,28 @@ Recent decisions affecting current work:
   last claimant, the eleventh consecutive plan in this phase to make the same call: AUTH-05 has no
   route until 05-11 and AUTH-06's 403 cannot be produced over HTTP until 05-12
 
+- [Phase 05-09]: each new schema module joins REQUIRED_SCANNED_MODULES in the commit that CREATES
+  it, not in the plan's later gate task - RESEARCH Pitfall 14 states the rule that way, the plan's
+  own must_haves repeat it, and every acceptance criterion of the gate task still passes; the only
+  thing the split would have bought is two commits in which a presentation module was scanned by
+  luck rather than by assertion
+- [Phase 05-09]: SecretStr is unwrapped exactly once, in RegisterRequest.to_command, and the test
+  asserts `type(command.password) is str` rather than the annotation - the command is a frozen
+  dataclass with no runtime check, so forwarding the wrapper would break no contract, no type check
+  and no import-linter contract (pydantic is deliberately off the application layer's forbidden
+  list); that one assertion is the whole enforcement of Pitfall 7
+- [Phase 05-09]: UserSummaryResponse is a SECOND model rather than a reuse of UserResponse, and the
+  two member lists differing is the point - ASGN-03 asks for id, name, email in that order, the
+  directory publishes no created_at, and a shared model would move the directory's contract
+  whenever the profile's moved
+- [Phase 05-09]: the three proven-by-absence refusals are one parametrized table, and they were
+  FALSIFIED rather than assumed: both task request models were given an assignee_id field by hand
+  and the two new rows went red (evidence/05-09-absence-falsification.txt) - an absence assertion
+  that has never been driven red is indistinguishable from one asserting nothing
+- [Phase 05-09]: requirement ticks AUTH-01/AUTH-02/AUTH-05/ASGN-01/ASGN-02/ASGN-03 deliberately NOT
+  taken - 05-16 is the last claimant, the twelfth consecutive plan in this phase to make the same
+  call: a schema with no route above it proves no requirement
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -575,6 +598,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T16:41:37.069Z
-Stopped at: Completed 05-10-PLAN.md
+Last session: 2026-09-19T16:50:41.712Z
+Stopped at: Completed 05-09-PLAN.md
 Resume file: None
