@@ -63,6 +63,11 @@ THRESHOLD_FLAG: Final[str] = "--cov-fail-under="
 
 EXPECTED_SOURCE: Final[list[str]] = ["taskmanager"]
 
+# Both are required, and the reason is in `pyproject.toml`: dropping `greenlet`
+# hid 18 executed lines behind SQLAlchemy's async bridge, and a coverage error
+# that makes the number too LOW is the one nobody investigates.
+EXPECTED_CONCURRENCY: Final[list[str]] = ["thread", "greenlet"]
+
 # Exactly the four entries `pyproject.toml` carries today, compared as a list:
 # see the module docstring for why this is pinned by value and not by length.
 EXPECTED_EXCLUDE_ALSO: Final[list[str]] = [
@@ -187,12 +192,14 @@ def test_the_measurement_covers_the_whole_package() -> None:
     An `omit` entry is the cheapest way to raise the number without writing a
     test: the excluded file leaves the denominator entirely. Branch coverage
     matters for the same reason - with it off, a half-taken `if` counts as
-    fully covered.
+    fully covered. `concurrency` is the one entry here that defends against the
+    number being too *low*: see `pyproject.toml` and ADR-089.
     """
     run = _coverage_table("run")
 
     assert run["source"] == EXPECTED_SOURCE
     assert run["branch"] is True
+    assert run["concurrency"] == EXPECTED_CONCURRENCY
     assert "omit" not in run, (
         "Nothing is omitted from the coverage measurement: an omit entry "
         f"raises the number by shrinking the denominator. Found: {run['omit']}"

@@ -36,6 +36,18 @@ packages = ["taskmanager"]
 [tool.coverage.run]
 source = ["taskmanager"]
 branch = true
+# Not decoration, and not a performance knob. SQLAlchemy's async engine reaches
+# the driver through a greenlet, so every line of a router handler that runs
+# *after* its first `await` into the database executes in a frame coverage stops
+# following unless greenlet is declared here. Without this line, Python 3.13
+# reported 18 such lines missing - every `return XResponse.from_result(...)` and
+# every `Location` header in `presentation/api/routers/` - while the tests that
+# assert those very response bodies passed. That is a false negative, and it is
+# the one kind of coverage error that cannot be argued away: the number was too
+# LOW, so nobody would have gone looking. Measured and closed in plan 06-04,
+# which is when `make docker-test` was first run against a suite with routers in
+# it. See DECISION_LOG.md ADR-089.
+concurrency = ["thread", "greenlet"]
 
 # No `omit` entries and no `fail_under` here: the threshold lives in the
 # pytest.ini addopts so every invocation is gated identically.

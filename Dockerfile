@@ -124,6 +124,22 @@ COPY tests ./tests
 COPY alembic.ini ./
 COPY migrations ./migrations
 
+# `scripts/` and git, for two test modules that drive a shell script as a
+# program: `tests/unit/test_env_bootstrap.py` runs scripts/init-env.sh through
+# `sh` in a temporary directory, and `tests/unit/test_break_check.py` runs
+# scripts/break-check.sh inside a throwaway repository it builds with `git init`
+# in `tmp_path`. Neither can be answered with a skip - a skipped test here is a
+# green container run that exercised none of it, which is the same argument D-03
+# makes about the database. Both were collection errors in this stage until plan
+# 06-04 ran `make docker-test`.
+#
+# git is installed in THIS stage only. The runtime image receives nothing from
+# here, so the delivered container still carries no version-control tooling.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts ./scripts
+
 RUN useradd --system --create-home --shell /usr/sbin/nologin app \
     && chown -R app:app /app /opt/venv
 USER app
