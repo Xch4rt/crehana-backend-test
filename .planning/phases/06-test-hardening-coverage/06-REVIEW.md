@@ -503,3 +503,34 @@ anything `\d+` would reject, and `len(thresholds) == 1` is asserted there). `fou
 _Reviewed: 2026-09-19T22:20:42Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+## Fixes applied (2026-09-19)
+
+A scoped subset was fixed, one atomic commit each, with `make lint`, `make typecheck`, `make arch`
+and `make test` green before every commit and each new gate driven red before being trusted.
+
+| Finding | Commit | What was done |
+|---|---|---|
+| **CR-01** | `8a0439f` | `\.\.\.` removed from `[tool.coverage.report] exclude_also` and from `EXPECTED_EXCLUDE_ALSO`; the false docstring sentence is gone. New gate `test_no_exclusion_removes_a_real_statement` reads the exclusions back out of `coverage.Coverage.analysis2` for every module under `src/taskmanager` and fails on any excluded line carrying a statement outside a stub body or an `if TYPE_CHECKING:` block; `test_the_exclusion_scan_catches_an_unanchored_pattern` is its self-test. ADR-092 appended, CLAUDE.md updated. |
+| **CR-02** + **WR-09** | `142d64c` | `break-check.sh` runs each selection **unmutated** first and refuses non-zero unless it exits 0; the verdict is now three-way — exit 0 SURVIVED, exit 1 **with** a `FAILED` line RED, anything else (2/3/4/5, or exit 1 with only ERRORs) an ERROR that stops the script. `tests/unit/test_break_check.py` plants all five mutation targets and drives every path to the end: survivor, all-red, the four non-failure exit codes, the FAILED-less exit 1, and a red baseline — `src/` asserted clean on each. ADR-093 appended, Makefile and CLAUDE.md updated. |
+| **WR-01** | `f5b2474` | `trap on_signal HUP INT QUIT TERM`; the signal test is parametrized over all four signals **and** over `sh` plus `dash` when the host has it. ADR-094 appended, CLAUDE.md updated. |
+| **WR-04** (cheap half) | `54cd9cd` | `test_pyproject_is_the_only_coverage_configuration`: no `.coveragerc`, no `[coverage:*]` section in `setup.cfg`/`tox.ini`, no `--no-cov` and no `--cov-config` in the addopts; `--cov=` must appear exactly once. ADR-095 appended, CLAUDE.md updated. |
+
+**Measured after the fixes.** The three `execute` bodies and `DomainError.__reduce__` were being
+exercised all along, so nothing needed a new test to hold 100 %: the denominator grew instead.
+
+| | before | after |
+|---|---|---|
+| statements, host CPython 3.14 | 1643 | **1659** |
+| statements, container CPython 3.13 | 1796 | **1813** |
+| missing / partial branches | 0 / 0 | **0 / 0** |
+| coverage | 100 % | **100 %** |
+| tests passing | 1078 | **1096** |
+
+`make break-check`: all five breaks RED against a green baseline, exit 0,
+`git status --porcelain -- src/` empty.
+
+**Not fixed, still open** — reported as follow-up, untouched here: WR-02, WR-03, WR-04's pragma
+spelling half (recorded in ADR-095), WR-05, WR-06, WR-07, WR-08, WR-10, WR-11, and IN-01..IN-06.
+
+_Fixes applied: 2026-09-19 — Claude (gsd-code-fixer)_
