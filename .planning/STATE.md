@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-09-19T05:41:24.143Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-09-19T05:54:32.037Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 31
+  completed_plans: 32
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [████████░░] 82%
+Progress: [████████░░] 84%
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Progress: [████████░░] 82%
 | Phase 04 P03 | 12min | 2 tasks | 6 files |
 | Phase 04 P04 | 14min | 2 tasks | 3 files |
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
+| Phase 04 P06 | 11min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -268,6 +269,13 @@ Recent decisions affecting current work:
 - [Phase 04-05]: GetTaskList, ListTaskLists and DeleteTaskList take no Clock and make nothing durable; their SUCCESS path asserts commits == 0 AND rollbacks == 1, because commits == 0 is equally true of a transaction nobody ever closed
 - [Phase 04-05]: DeleteTaskList loads through visible_task_list and discards the entity - without the load a foreign list answers 204, the loudest possible way to tell a stranger their delete worked; the tasks go with it through ON DELETE CASCADE rather than a second cascade written in Python
 - [Phase 04-05]: requirement ticks LIST-01..LIST-06 deliberately NOT taken - 04-12 is the last claimant, and this plan ships orchestration with no endpoint above it
+- [Phase 04-06]: CreateTask refuses with the LIST-shaped error while its four siblings refuse with the task-shaped one - the caller addressed the list, no task exists yet, so there is no task identifier to answer with and nothing the list-shaped error can disclose that the request did not already contain; the module docstring argues the exception at length so a reader does not read it as an inconsistency with access.py
+- [Phase 04-06]: updated_at moves whenever a field is PROVIDED and therefore not at all when a command carries none - the plan's task text asks for a stamp in the all-omitted case, which is unreachable from the guarded shape the same plan specifies; the identical call 04-05 made, and D-06 refuses an empty body at the schema so the case never reaches the API
+- [Phase 04-06]: FakeTaskRepository.list_for_task_list gained the (created_at, id) sort the adapter has had since 03-07 - 04-PATTERNS section 11 scheduled it for both list methods and 04-02 applied it to the task-list side only; two ordering assertions were observed RED against the unsorted fake, capture in evidence/04-06-fake-ordering.txt, and the list fixture is now seeded in an order that is not the expected answer
+- [Phase 04-06]: the TASK-06 conjunction is pinned by TWO pairs - completed+high matching no row and completed+low matching exactly one - because the empty case alone passes against an implementation that narrows to nothing whenever two filters arrive, and the one-row case alone passes against an OR
+- [Phase 04-06]: test_the_filter_never_moves_the_statistics asserts the item counts DIFFER as well as the three counters matching, so it cannot pass vacuously against a filter that was silently dropped; D-08 is asserted from the command's dataclass fields AND from a source scan of update.py for the status mutator name, so status is unwritable by shape rather than by convention
+- [Phase 04-06]: grep -c visible_task_list on create.py prints 2, not the plan's 1 - the import line plus the call line is the floor for import-by-name, and collapsing them by importing the access module would satisfy a counter by abandoning a convention; the same call 04-03 made for the same criterion on access.py itself
+- [Phase 04-06]: requirement ticks TASK-01..TASK-08 deliberately NOT taken - 04-12 is the last claimant, and this plan ships orchestration with no endpoint above it
 
 ### Pending Todos
 
@@ -301,6 +309,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T05:41:24.137Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-09-19T05:54:32.031Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
