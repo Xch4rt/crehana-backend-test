@@ -43,14 +43,32 @@ def test_missing_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_short_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A JWT_SECRET below the 16-character floor is a boot-time failure."""
+    """A JWT_SECRET below the 32-character floor is a boot-time failure.
+
+    The boundary is asserted at 31 rather than at an obviously tiny value, so
+    the test still fails if the floor is quietly lowered back towards PyJWT's
+    32-byte HS256 threshold (D-26, T-5-02). There is deliberately no
+    `pytest.warns` block here: the point of the floor is that
+    `InsecureKeyLengthWarning` becomes unreachable, not that it is caught.
+    """
     monkeypatch.setenv("DATABASE_URL", ENV["DATABASE_URL"])
-    monkeypatch.setenv("JWT_SECRET", "short")
+    monkeypatch.setenv("JWT_SECRET", "a" * 31)
 
     with pytest.raises(ValidationError) as excinfo:
         Settings(_env_file=None)
 
-    assert "at least 16 characters" in str(excinfo.value)
+    assert "jwt_secret" in str(excinfo.value).lower()
+    assert "at least 32 characters" in str(excinfo.value)
+
+
+def test_a_secret_exactly_at_the_floor_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The floor is inclusive: 32 characters boots, which is what CI relies on."""
+    monkeypatch.setenv("DATABASE_URL", ENV["DATABASE_URL"])
+    monkeypatch.setenv("JWT_SECRET", "a" * 32)
+
+    assert Settings(_env_file=None).jwt_secret == "a" * 32
 
 
 def test_test_database_url_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:

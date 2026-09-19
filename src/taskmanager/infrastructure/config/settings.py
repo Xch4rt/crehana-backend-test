@@ -38,7 +38,17 @@ class Settings(BaseSettings):
     # `cp .env.example .env && docker compose up` in production, not just in
     # tests. `None` is the default, so no secret gains one.
     test_database_url: str | None = None
-    jwt_secret: str = Field(min_length=16)
+    # D-26, threat T-5-02. The floor was 16 and is now 32. RFC 7518 §3.2
+    # requires an HMAC key at least as long as the hash output, which for HS256
+    # is 32 bytes, and PyJWT enforces that by warning on both encode and decode
+    # below it. `pytest.ini` sets `filterwarnings = error`, so a shorter secret
+    # would not merely be weak: it would make an unrelated test fail with an
+    # `InsecureKeyLengthWarning` and no assertion anywhere in the traceback,
+    # which is the hardest kind of failure to read. Refusing it at boot turns
+    # that into one readable ValidationError naming this field. Every secret
+    # already in the repository clears the new floor (`tests/conftest.py` 32,
+    # `.env.example` 34, CI 36), so nothing had to be lengthened with it.
+    jwt_secret: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = Field(default=30, gt=0)
 
