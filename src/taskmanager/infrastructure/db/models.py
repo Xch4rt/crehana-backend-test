@@ -52,6 +52,13 @@ class UserRow(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True)
     email: Mapped[str] = mapped_column(String(320))
+    # No CHECK constraint on the length, and that is the project's pattern
+    # rather than an omission: text limits are enforced by the `VARCHAR(n)`
+    # width, bound to `User.FULL_NAME_MAX_LENGTH` by
+    # `test_string_lengths_match_the_entity_caps`. The only CHECK constraints
+    # in this schema guard the two enum columns and the completed_at/status
+    # invariant, none of which a width can express.
+    full_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(512))
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))

@@ -80,6 +80,7 @@ def user_to_row(user: User) -> UserRow:
     return UserRow(
         id=user.id,
         email=user.email,
+        full_name=user.full_name,
         password_hash=user.password_hash,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -91,6 +92,7 @@ def user_to_entity(row: UserRow) -> User:
     return User(
         id=row.id,
         email=row.email,
+        full_name=row.full_name,
         password_hash=row.password_hash,
         created_at=_aware(row.created_at, column="users.created_at"),
         updated_at=_aware(row.updated_at, column="users.updated_at"),
@@ -103,6 +105,7 @@ def apply_user_to_row(user: User, row: UserRow) -> None:
     # the session is tracking; writing to it would make SQLAlchemy emit an
     # UPDATE of the identity itself rather than of the record it names.
     row.email = user.email
+    row.full_name = user.full_name
     row.password_hash = user.password_hash
     row.created_at = user.created_at
     row.updated_at = user.updated_at

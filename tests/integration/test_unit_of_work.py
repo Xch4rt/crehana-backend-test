@@ -57,6 +57,7 @@ NOW = datetime(2026, 5, 4, 11, 30, 0, 123456, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 USER_EMAIL = "boundary@example.test"
 OTHER_USER_EMAIL = "second@example.test"
+FULL_NAME = "Boundary Owner"
 
 
 def a_user(
@@ -68,6 +69,7 @@ def a_user(
     return User(
         id=user_id,
         email=email,
+        full_name=FULL_NAME,
         password_hash=PASSWORD_HASH,
         created_at=NOW,
         updated_at=NOW,

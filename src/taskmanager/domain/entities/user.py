@@ -1,12 +1,20 @@
-"""The User entity: an identity and a credential the domain never learns.
+"""The User entity: an identity, a display name and a credential it never learns.
+
+Five fields, and the interesting ones are the two strings. `email` is the
+identity key: it is trimmed *and* lowercased, because `uq_users_email_lower`
+defends the rule that two spellings of one address are one account, and a lookup
+must not miss a row because the caller typed a capital letter. `full_name` is a
+display name (AUTH-01, ASGN-03): it is trimmed and nothing else. It keys no
+index, nothing is ever looked up by it, and case is information that belongs to
+the person who typed it - folding it would corrupt every name whose capitals do
+not follow English convention while buying no invariant at all. The two
+timestamps come from the `Clock` port, never from here.
 
 Two things this class deliberately does not do.
 
 It does not validate the *format* of an email address. Pydantic's `EmailStr`
 already does that at the HTTP boundary, and a second check here would put one
-limit in two layers - the defect D-04 exists to prevent. What the entity does
-own is the canonical *form*: an address is trimmed and lowercased, so a lookup
-cannot miss a row because the caller typed a capital letter.
+limit in two layers - the defect D-04 exists to prevent.
 
 It does not hold a plaintext password. The field is `password_hash`, produced by
 the `PasswordHasher` port before the entity is ever constructed, and no
@@ -25,10 +33,15 @@ from taskmanager.domain.validation import require_text, require_utc
 
 @dataclass(slots=True)
 class User:
-    """A registered account: an address, a stored hash and two timestamps."""
+    """A registered account: an address, a name, a stored hash, two timestamps."""
 
     # The RFC 5321 practical maximum for a full address (64 local + @ + 255).
     EMAIL_MAX_LENGTH: ClassVar[int] = 320
+    # Generous for a display name and still short enough that the column stays
+    # cheap. No composition rule and no character restriction beyond what
+    # `require_text` refuses for every string in the domain: a person's name is
+    # not the place to encode an alphabet this project happens to expect.
+    FULL_NAME_MAX_LENGTH: ClassVar[int] = 100
     # Not a policy, just a sanity bound. The real credential policy - a minimum
     # password length - applies to the plaintext, which never reaches here; an
     # Argon2id encoded hash is around a hundred characters, so this cap can only
@@ -37,6 +50,7 @@ class User:
 
     id: UUID
     email: str
+    full_name: str
     password_hash: str
     created_at: datetime
     updated_at: datetime
@@ -46,6 +60,11 @@ class User:
         self.email = require_text(
             self.email, field="email", max_length=self.EMAIL_MAX_LENGTH
         ).lower()
+        # Trimmed but deliberately not lower-cased, unlike the address above:
+        # the module docstring argues why a display name is not an identity key.
+        self.full_name = require_text(
+            self.full_name, field="full_name", max_length=self.FULL_NAME_MAX_LENGTH
+        )
         self.password_hash = require_text(
             self.password_hash,
             field="password_hash",
@@ -60,6 +79,7 @@ class User:
         *,
         user_id: UUID,
         email: str,
+        full_name: str,
         password_hash: str,
         now: datetime,
     ) -> "User":
@@ -72,6 +92,7 @@ class User:
         return cls(
             id=user_id,
             email=email,
+            full_name=full_name,
             password_hash=password_hash,
             created_at=now,
             updated_at=now,

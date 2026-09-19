@@ -57,6 +57,7 @@ def _user() -> User:
     return User(
         id=USER_ID,
         email="owner@example.com",
+        full_name="Ada Lovelace",
         password_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
         created_at=CREATED_AT,
         updated_at=UPDATED_AT,
@@ -263,6 +264,7 @@ def test_apply_writes_every_mutable_field_onto_an_existing_user_row() -> None:
     changed = User(
         id=USER_ID,
         email="new.owner@example.com",
+        full_name="Ada Byron",
         password_hash="$argon2id$v=19$m=65536,t=3,p=4$rotated",
         created_at=CREATED_AT,
         updated_at=UPDATED_AT + timedelta(hours=1),

@@ -42,6 +42,8 @@ EARLIER = datetime(2026, 3, 13, 9, 0, 0, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 EMAIL = "owner@example.test"
 OTHER_EMAIL = "other@example.test"
+FULL_NAME = "Ada Lovelace"
+OTHER_FULL_NAME = "Grace Hopper"
 
 
 def refused(session: AsyncSession) -> AsyncSessionTransaction:
@@ -58,12 +60,14 @@ def a_user(
     *,
     user_id: uuid.UUID = USER_ID,
     email: str = EMAIL,
+    full_name: str = FULL_NAME,
     created_at: datetime = NOW,
 ) -> User:
     """A valid user entity, differing from the default only where asked."""
     return User(
         id=user_id,
         email=email,
+        full_name=full_name,
         password_hash=PASSWORD_HASH,
         created_at=created_at,
         updated_at=created_at,
@@ -100,6 +104,7 @@ async def test_get_by_email_ignores_case_and_surrounding_whitespace(
         UserRow(
             id=USER_ID,
             email="Owner@Example.Test",
+            full_name=FULL_NAME,
             password_hash=PASSWORD_HASH,
             created_at=NOW,
             updated_at=NOW,
@@ -152,6 +157,7 @@ async def test_a_duplicate_email_differing_only_in_case_raises_the_same_error(
         UserRow(
             id=USER_ID,
             email="OWNER@EXAMPLE.TEST",
+            full_name=FULL_NAME,
             password_hash=PASSWORD_HASH,
             created_at=NOW,
             updated_at=NOW,
@@ -209,6 +215,7 @@ async def test_an_unrecognised_integrity_error_is_re_raised(
             session.add(
                 UserRow(
                     id=OTHER_USER_ID,
+                    full_name=FULL_NAME,
                     password_hash=PASSWORD_HASH,
                     created_at=NOW,
                     updated_at=NOW,

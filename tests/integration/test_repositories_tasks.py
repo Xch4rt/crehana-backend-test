@@ -88,6 +88,8 @@ PASSWORD_HASH = "argon2-placeholder-hash-value"
 OWNER_EMAIL = "owner@example.test"
 OTHER_OWNER_EMAIL = "other-owner@example.test"
 ASSIGNEE_EMAIL = "assignee@example.test"
+FULL_NAME = "Task Owner"
+OTHER_OWNER_FULL_NAME = "Other Owner"
 
 
 def refused(session: AsyncSession) -> AsyncSessionTransaction:
@@ -156,6 +158,7 @@ async def given_a_list_with_an_owner(session: AsyncSession) -> None:
                 User(
                     id=user_id,
                     email=email,
+                    full_name=FULL_NAME,
                     password_hash=PASSWORD_HASH,
                     created_at=NOW,
                     updated_at=NOW,
@@ -249,6 +252,7 @@ async def given_a_second_owner_with_a_list(session: AsyncSession) -> None:
             User(
                 id=OTHER_OWNER_ID,
                 email=OTHER_OWNER_EMAIL,
+                full_name=OTHER_OWNER_FULL_NAME,
                 password_hash=PASSWORD_HASH,
                 created_at=NOW,
                 updated_at=NOW,

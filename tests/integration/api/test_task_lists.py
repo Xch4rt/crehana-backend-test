@@ -68,6 +68,7 @@ NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 DEMO_EMAIL = "demo@example.test"
 OTHER_EMAIL = "other@example.test"
+DEMO_FULL_NAME = "Demo Person"
 
 TASK_LISTS = "/api/v1/task-lists"
 
@@ -93,6 +94,7 @@ def a_user(
     *,
     user_id: uuid.UUID = DEMO_USER_ID,
     email: str = DEMO_EMAIL,
+    full_name: str = DEMO_FULL_NAME,
 ) -> User:
     """A valid user entity, differing from the demo actor only where asked.
 
@@ -105,6 +107,7 @@ def a_user(
     return User.create(
         user_id=user_id,
         email=email,
+        full_name=full_name,
         password_hash=PASSWORD_HASH,
         now=NOW,
     )

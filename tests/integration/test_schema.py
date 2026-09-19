@@ -200,12 +200,15 @@ async def test_timestamps_round_trip_as_aware_utc(connection: AsyncConnection) -
     """
     await connection.execute(
         text(
-            "INSERT INTO users (id, email, password_hash, created_at, updated_at) "
-            "VALUES (:id, :email, :password_hash, :created_at, :updated_at)"
+            "INSERT INTO users "
+            "(id, email, full_name, password_hash, created_at, updated_at) "
+            "VALUES (:id, :email, :full_name, :password_hash, :created_at, "
+            ":updated_at)"
         ),
         {
             "id": USER_ID,
             "email": "aware@example.test",
+            "full_name": "Aware Person",
             "password_hash": "hashed-" + "x" * 20,
             "created_at": CREATED_AT,
             "updated_at": CREATED_AT,

@@ -379,6 +379,7 @@ async def test_list_all_is_ordered_by_created_at_then_id() -> None:
         User.create(
             user_id=TIED_HIGHER_USER_ID,
             email="tied-higher@example.test",
+            full_name="Tied Higher",
             password_hash=PASSWORD_HASH,
             now=NOW,
         )
@@ -387,6 +388,7 @@ async def test_list_all_is_ordered_by_created_at_then_id() -> None:
         User.create(
             user_id=OLDEST_USER_ID,
             email="oldest@example.test",
+            full_name="Oldest Account",
             password_hash=PASSWORD_HASH,
             now=EARLIER,
         )
@@ -395,6 +397,7 @@ async def test_list_all_is_ordered_by_created_at_then_id() -> None:
         User.create(
             user_id=TIED_LOWER_USER_ID,
             email="tied-lower@example.test",
+            full_name="Tied Lower",
             password_hash=PASSWORD_HASH,
             now=NOW,
         )

@@ -68,6 +68,7 @@ JWT_SECRET = "b" * 32
 USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000d1")
 USER_EMAIL = "dependency@example.test"
 PASSWORD_HASH = "argon2-placeholder-hash-value"
+FULL_NAME = "Dependency Probe"
 NOW = datetime(2026, 6, 1, 9, 15, 0, 500000, tzinfo=UTC)
 
 UnitOfWorkDependency = Annotated[UnitOfWork, Depends(get_uow)]
@@ -80,6 +81,7 @@ def a_user() -> User:
     return User(
         id=USER_ID,
         email=USER_EMAIL,
+        full_name=FULL_NAME,
         password_hash=PASSWORD_HASH,
         created_at=NOW,
         updated_at=NOW,

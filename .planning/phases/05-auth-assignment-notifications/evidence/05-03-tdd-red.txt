@@ -1,0 +1,54 @@
+05-03 TDD RED
+
+The RED step for plan 05-03, captured here rather than committed: the tests
+below name User.FULL_NAME_MAX_LENGTH and pass full_name= to User.create, and
+the pre-commit mypy (strict) hook refuses a test that names something no
+module exports yet, while --no-verify is forbidden (CLAUDE.md). The 02-01,
+04-02, 05-01 and 05-02 precedent.
+
+$ date -u
+Sat Sep 19 15:10:17 UTC 2026
+
+$ .venv/bin/pytest tests/unit/domain/test_user.py -q --no-cov
+email = 'person@example.com', full_name = 'Ada Lovelace'
+
+    def _user(
+        email: str = "person@example.com", full_name: str = FULL_NAME
+    ) -> User:
+        """Build the reference user every positive test starts from."""
+>       return User.create(
+            user_id=USER_ID,
+            email=email,
+            full_name=full_name,
+            password_hash=PASSWORD_HASH,
+            now=NOW,
+        )
+E       TypeError: User.create() got an unexpected keyword argument 'full_name'
+
+tests/unit/domain/test_user.py:28: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/domain/test_user.py::test_user_create_strips_and_lowercases_the_email
+FAILED tests/unit/domain/test_user.py::test_user_create_stamps_both_timestamps_with_the_supplied_moment
+FAILED tests/unit/domain/test_user.py::test_user_validation_rejects_a_blank_email
+FAILED tests/unit/domain/test_user.py::test_user_validation_rejects_an_over_length_email
+FAILED tests/unit/domain/test_user.py::test_user_create_trims_the_full_name_without_folding_its_case
+FAILED tests/unit/domain/test_user.py::test_user_validation_rejects_a_blank_full_name
+FAILED tests/unit/domain/test_user.py::test_user_validation_rejects_an_over_length_full_name
+FAILED tests/unit/domain/test_user.py::test_user_accepts_a_full_name_exactly_at_the_cap
+FAILED tests/unit/domain/test_user.py::test_user_validation_rejects_a_blank_password_hash
+FAILED tests/unit/domain/test_user.py::test_user_does_not_validate_the_email_format
+FAILED tests/unit/domain/test_user.py::test_user_rejects_a_naive_created_at
+FAILED tests/unit/domain/test_user.py::test_user_rejects_an_undeclared_attribute
+12 failed, 1 passed in 0.04s
+
+$ .venv/bin/mypy tests/unit/domain/test_user.py
+tests/unit/domain/test_user.py:28: note: "create" defined in "taskmanager.domain.entities.user"
+tests/unit/domain/test_user.py:78: error: "User" has no attribute "full_name"  [attr-defined]
+tests/unit/domain/test_user.py:92: error: "type[User]" has no attribute "FULL_NAME_MAX_LENGTH"  [attr-defined]
+tests/unit/domain/test_user.py:103: error: "type[User]" has no attribute "FULL_NAME_MAX_LENGTH"  [attr-defined]
+tests/unit/domain/test_user.py:105: error: "User" has no attribute "full_name"  [attr-defined]
+tests/unit/domain/test_user.py:111: error: Unexpected keyword argument "full_name" for "create" of "User"  [call-arg]
+tests/unit/domain/test_user.py:111: note: "create" defined in "taskmanager.domain.entities.user"
+tests/unit/domain/test_user.py:135: error: Unexpected keyword argument "full_name" for "create" of "User"  [call-arg]
+tests/unit/domain/test_user.py:135: note: "create" defined in "taskmanager.domain.entities.user"
+Found 7 errors in 1 file (checked 1 source file)

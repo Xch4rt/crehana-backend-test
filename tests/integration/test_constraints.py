@@ -54,10 +54,12 @@ OTHER_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000022")
 NOW = datetime(2026, 3, 14, 15, 9, 26, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 OWNER_EMAIL = "owner@example.test"
+FULL_NAME = "Owner Person"
 
 INSERT_USER = (
-    "INSERT INTO users (id, email, password_hash, created_at, updated_at) "
-    "VALUES (:id, :email, :password_hash, :created_at, :updated_at)"
+    "INSERT INTO users (id, email, full_name, password_hash, created_at, "
+    "updated_at) "
+    "VALUES (:id, :email, :full_name, :password_hash, :created_at, :updated_at)"
 )
 INSERT_TASK_LIST = (
     "INSERT INTO task_lists (id, owner_id, name, created_at, updated_at) "
@@ -79,6 +81,7 @@ def user_values(
     return {
         "id": user_id,
         "email": email,
+        "full_name": FULL_NAME,
         "password_hash": PASSWORD_HASH,
         "created_at": NOW,
         "updated_at": NOW,

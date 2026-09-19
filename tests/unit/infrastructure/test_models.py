@@ -198,11 +198,17 @@ def test_no_column_declares_a_server_default() -> None:
 
     A `server_default=now()` would also be permanent `alembic check` drift,
     because the models would keep describing a column the database has extended.
+
+    `users.full_name` is the one column a revision ever gave a default: `0002`
+    adds it `NOT NULL` over populated tables and needs something to fill the
+    existing rows with. The default is dropped in the same `upgrade()`, and this
+    assertion is one half of the proof it did not survive - `alembic check`,
+    which compares the live database against these models, is the other.
     """
     columns = [column for table in _tables() for column in _columns(table)]
 
-    # Vacuity guard: twenty-two columns across the three tables.
-    assert len(columns) == 22
+    # Vacuity guard: twenty-three columns across the three tables.
+    assert len(columns) == 23
 
     defaulted = [
         f"{column.table.name}.{column.name}"
@@ -220,6 +226,7 @@ def test_string_lengths_match_the_entity_caps() -> None:
     per layer; this test is what keeps the second statement true.
     """
     assert _string_length("users", "email") == User.EMAIL_MAX_LENGTH
+    assert _string_length("users", "full_name") == User.FULL_NAME_MAX_LENGTH
     assert _string_length("users", "password_hash") == User.PASSWORD_HASH_MAX_LENGTH
     assert _string_length("task_lists", "name") == TaskList.NAME_MAX_LENGTH
     assert (

@@ -176,6 +176,7 @@ async def database(
                     User.create(
                         user_id=OWNER_ID,
                         email="contended@example.com",
+                        full_name="Contended Owner",
                         password_hash="not-a-real-hash",
                         now=NOW,
                     )

@@ -73,6 +73,7 @@ LATER = datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 OWNER_EMAIL = "owner@example.test"
 OTHER_OWNER_EMAIL = "other@example.test"
+FULL_NAME = "List Owner"
 
 # Resolved through a typed `create_engine`, never `postgresql.dialect()`: mypy
 # strict reports the latter as `no-untyped-call`. The engine connects lazily, so
@@ -132,6 +133,7 @@ async def given_an_owner(
             User(
                 id=user_id,
                 email=email,
+                full_name=FULL_NAME,
                 password_hash=PASSWORD_HASH,
                 created_at=NOW,
                 updated_at=NOW,
