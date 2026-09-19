@@ -1,0 +1,76 @@
+# 05-11 falsification: a route shipped with no token requirement
+
+Recorded 2026-09-19T17:02:23Z.
+
+A throwaway GET /api/v1/auth/_falsification with no CurrentActor parameter was
+appended to routers/auth.py, the partition test run, and the route removed again.
+
+$ .venv/bin/pytest tests/unit/presentation/test_security_scheme.py -q --no-cov
+..F.F                                                                    [100%]
+=================================== FAILURES ===================================
+____ test_every_operation_either_requires_the_scheme_or_is_a_named_open_one ____
+
+    def test_every_operation_either_requires_the_scheme_or_is_a_named_open_one() -> None:
+        """The partition. A route shipped without a token requirement fails here.
+
+        Both directions are asserted in one pass, which is what makes the test
+        survive plan 05-12's three new routes without being edited: a secured route
+        added later is covered because it is not in the exemption set, and an open
+        one added later fails because it is not in the exemption set either. A
+        per-route loop over a list of expected secured routes would have said
+        nothing about either.
+        """
+        operations = _operations()
+        assert operations
+
+        secured = {
+            endpoint: operation.get("security")
+            for endpoint, operation in operations.items()
+            if endpoint not in OPEN_OPERATIONS
+        }
+
+>       assert all(requirement for requirement in secured.values()), [
+            endpoint for endpoint, requirement in secured.items() if not requirement
+        ]
+E       AssertionError: [('get', '/api/v1/auth/_falsification')]
+E       assert False
+E        +  where False = all(<generator object test_every_operation_either_requires_the_scheme_or_is_a_named_open_one.<locals>.<genexpr> at 0x10a512c20>)
+
+tests/unit/presentation/test_security_scheme.py:165: AssertionError
+_______ test_the_secured_operations_are_every_operation_but_those_three ________
+
+    def test_the_secured_operations_are_every_operation_but_those_three() -> None:
+        """The count, as the arithmetic statement of the same property.
+
+        Written as a subtraction rather than as a literal number so the phase's
+        remaining routes do not have to edit it. What it adds to the partition
+        above is a guard against the exemption set drifting out of the document
+        entirely: if a named open operation were renamed, the partition would
+        still pass - the renamed route would simply be secured - while this fails,
+        because three exemptions would no longer be three.
+        """
+        operations = _operations()
+
+        secured = [
+            endpoint for endpoint, operation in operations.items() if operation.get("security")
+        ]
+
+>       assert len(secured) == len(operations) - len(OPEN_OPERATIONS)
+E       assert 12 == (16 - 3)
+E        +  where 12 = len([('get', '/api/v1/auth/me'), ('get', '/api/v1/task-lists'), ('post', '/api/v1/task-lists'), ('get', '/api/v1/task-lists/{list_id}'), ('patch', '/api/v1/task-lists/{list_id}'), ('delete', '/api/v1/task-lists/{list_id}'), ...])
+E        +  and   16 = len({('get', '/health'): {'tags': ['health'], 'summary': 'Health', 'description': 'Liveness is answering at all; readiness... it there breaks the header rather than the import.", 'operationId': 'read_current_user_api_v1_auth_me_get', ...}, ...})
+E        +  and   3 = len(frozenset({('get', '/health'), ('post', '/api/v1/auth/login'), ('post', '/api/v1/auth/register')}))
+
+tests/unit/presentation/test_security_scheme.py:209: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/presentation/test_security_scheme.py::test_every_operation_either_requires_the_scheme_or_is_a_named_open_one
+FAILED tests/unit/presentation/test_security_scheme.py::test_the_secured_operations_are_every_operation_but_those_three
+2 failed, 3 passed in 0.18s
+exit=1
+
+The route removed, the same command again:
+
+$ .venv/bin/pytest tests/unit/presentation/test_security_scheme.py -q --no-cov
+.....                                                                    [100%]
+5 passed in 0.15s
+exit=0
