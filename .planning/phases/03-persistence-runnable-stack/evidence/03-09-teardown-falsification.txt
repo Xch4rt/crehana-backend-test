@@ -1,0 +1,48 @@
+03-09 Task 3 - falsification of test_the_dependency_does_not_commit_on_teardown
+================================================================================
+
+The claim under test is research Anti-Pattern 1 / ARC-08: `get_uow` constructs
+the unit of work and enters its block, and never makes that block's work durable
+in its own teardown. A green test alone cannot distinguish "the provider does not
+do it" from "the test could not have seen it if it did", because FastAPI runs the
+exit half of a `yield` dependency after the response has already been sent.
+
+So the provider was broken on purpose and the test was re-run.
+
+The only change, in src/taskmanager/presentation/api/dependencies.py::get_uow:
+
+    async with SqlAlchemyUnitOfWork(get_session_factory(request)) as unit:
+        yield unit
++       await unit.commit()
+
+RED - with the extra line present
+--------------------------------------------------------------------------------
+
+    $ .venv/bin/pytest \
+        tests/integration/test_dependencies.py::test_the_dependency_does_not_commit_on_teardown \
+        --no-cov -q
+
+        response = await probe_client.get("/_uow/write-without-finishing")
+
+        assert response.status_code == 200
+        assert response.json() == {"wrote": str(USER_ID)}
+    >   assert await _rows_in_users(database_url) == 0
+    E   assert 1 == 0
+
+    tests/integration/test_dependencies.py:170: AssertionError
+    1 failed in 0.18s
+
+The row written by a handler that never asked for it was still there, read back
+from a second, independent connection opened after the response had come back.
+
+GREEN - with the line removed again and nothing else changed
+--------------------------------------------------------------------------------
+
+    $ .venv/bin/pytest tests/integration/test_dependencies.py --no-cov -q
+    ....                                                                 [100%]
+    4 passed in 0.23s
+
+The one row the RED run committed was deleted from taskmanager_test afterwards;
+`SELECT count(*) FROM users` printed 0 before the suite was run again.
+
+Captured 2026-09-19 against postgres:18-alpine on localhost:5432.
