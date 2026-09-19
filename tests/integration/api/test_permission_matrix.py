@@ -71,10 +71,6 @@ from taskmanager.domain.exceptions import AuthenticationError
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.security.resources import SecurityResources
 from taskmanager.presentation.api.dependencies import get_engine
-
-# Imported rather than re-declared - the convention `test_task_lists.py`
-# states: the error contract has one home.
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
 from tests.integration.api.test_assignment import (
     a_task_held_by,
     assert_forbidden,
@@ -97,6 +93,10 @@ from tests.integration.api.test_users import (
     STRANGER_ID,
 )
 from tests.integration.conftest import OWNER_ID, bearer_header, seed
+
+# Imported rather than re-declared - the convention `test_task_lists.py`
+# states: the error contract has one home, `tests/problem_details.py`.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 pytestmark = pytest.mark.integration
 

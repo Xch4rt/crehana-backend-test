@@ -32,7 +32,6 @@ from httpx import AsyncClient, Response
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import ALLOWED_TRANSITIONS, TaskStatus
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
 from tests.integration.api.test_task_lists import (
     LIST_ID,
     MISSING_LIST_ID,
@@ -52,6 +51,10 @@ from tests.integration.api.test_task_lists import (
     moment,
 )
 from tests.integration.conftest import acting_as, seed
+
+# Imported rather than re-declared - the convention `test_task_lists.py`
+# states: the error contract has one home, `tests/problem_details.py`.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 pytestmark = pytest.mark.integration
 

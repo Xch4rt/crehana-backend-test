@@ -44,7 +44,7 @@ file, so counting the raise statements that name it settles how many ways this
 module can produce a 403 - and the answer is one. The mapping from that class
 onto a 403 problem body needs nothing here; it is resolved by MRO walk in
 `presentation/api/errors/mapping.py` and proven end to end by
-`tests/api/test_error_contract.py` (plan 02-04).
+`tests/unit/presentation/test_error_contract.py` (plan 02-04).
 
 The paragraph was rewritten in the commit that falsified it, not afterwards.
 A documented property this project asserts with a grep is worth exactly as much

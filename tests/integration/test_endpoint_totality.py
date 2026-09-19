@@ -52,7 +52,8 @@ route (`/docs`, `/openapi.json`) through either integration fixture would be
 recorded and would then fail the first check, because `app.openapi()["paths"]`
 does not publish those. No integration test makes one - the tests that read the
 document read it from the object - and a test that wants to fetch it over HTTP
-belongs in `tests/api/`, whose client is not wrapped.
+belongs under `tests/unit/presentation/`, whose client comes from the root
+`tests/conftest.py` and is not wrapped.
 
 This gate adds no hook to `.pre-commit-config.yaml` and no step to
 `.github/workflows/ci.yml`. CLAUDE.md's two-places rule applies to a gate that

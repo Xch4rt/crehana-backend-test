@@ -38,7 +38,7 @@ config = context.config
 #     logging.config.fileConfig() defaults to disable_existing_loggers=True,
 #     which switches off every logger created before it runs - including
 #     taskmanager's own. That was observed breaking the two caplog assertions in
-#     tests/api/test_error_contract.py as soon as a session fixture ran a
+#     tests/unit/presentation/test_error_contract.py as soon as a session fixture ran a
 #     migration first: the tests pass alone and fail in the full suite, pointing
 #     nowhere near Alembic. The `configure_logging` attribute lets a pytest
 #     fixture skip the call entirely; disable_existing_loggers=False makes the

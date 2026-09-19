@@ -46,11 +46,6 @@ from httpx import AsyncClient
 from taskmanager.domain.exceptions import AuthenticationError
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.infrastructure.security.resources import create_security_resources
-
-# Imported rather than re-declared, the convention `test_task_lists.py` states
-# in full: the media type and the six-member error body are Phase 2's contract
-# and `tests/api/test_error_contract.py` is where they live.
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
 from tests.integration.api.test_task_lists import (
     DEMO_EMAIL,
     DEMO_FULL_NAME,
@@ -59,6 +54,11 @@ from tests.integration.api.test_task_lists import (
     anonymised,
 )
 from tests.integration.conftest import OWNER_ID, bearer_header, seed
+
+# Imported rather than re-declared, the convention `test_task_lists.py` states
+# in full: the media type and the six-member error body are Phase 2's contract
+# and `tests/problem_details.py` is where they live.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 pytestmark = pytest.mark.integration
 

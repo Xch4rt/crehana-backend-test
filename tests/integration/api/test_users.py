@@ -41,12 +41,12 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from taskmanager.domain.entities.user import User
-
-# Imported rather than re-declared - the convention `test_task_lists.py`
-# states: the error contract has one home.
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
 from tests.integration.api.test_task_lists import SessionFactory
 from tests.integration.conftest import OWNER_ID, bearer_header, seed
+
+# Imported rather than re-declared - the convention `test_task_lists.py`
+# states: the error contract has one home, `tests/problem_details.py`.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 pytestmark = pytest.mark.integration
 

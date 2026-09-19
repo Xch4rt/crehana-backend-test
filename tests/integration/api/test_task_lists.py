@@ -34,16 +34,16 @@ from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
 
-# Imported rather than re-declared. The media type and the six-member list
-# are the error contract Phase 2 fixed, and `tests/api/test_error_contract.py`
-# is where they are stated; a second copy here would be the one that quietly
-# disagreed the first time the contract moved. A rename over there breaks this
-# import loudly, which is the failure mode to prefer.
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
-
 # `OWNER_ID` comes from the harness for the same reason: `api_client` installs
 # it as the caller, so the identifier and the override have to be one value.
 from tests.integration.conftest import OWNER_ID, acting_as, seed
+
+# Imported rather than re-declared. The media type and the six-member list
+# are the error contract Phase 2 fixed, and `tests/problem_details.py` is where
+# they are stated; a second copy here would be the one that quietly disagreed
+# the first time the contract moved. A rename over there breaks this import
+# loudly, which is the failure mode to prefer.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 # The `session_factory` fixture's type, spelled once: every seeding call below
 # takes it, and repeating the two-part annotation per test would add noise

@@ -72,7 +72,7 @@ What is already true of Phase 2:
   is why every mutator takes `now` as an argument and the domain reads no clock (D-13).
 - The RFC 9457 member set, its order, and the stable URN `type` scheme
   `urn:taskmanager:problem:{code}` (D-05, D-06), asserted by an exact list comparison in
-  `tests/api/test_error_contract.py` rather than described in prose.
+  `tests/unit/presentation/test_error_contract.py` rather than described in prose.
 - That an unexpected error returns one fixed body in every environment, with no branch on a
   debug flag (D-08). The handler cannot even see the settings object, because `presentation`
   does not import `infrastructure` — a layering rule doing security work.
@@ -1114,7 +1114,7 @@ and nine of them could not be satisfied by a correct implementation:
 - `grep -c "Unset"` required to print `1`, when the sentinel is imported as `UNSET` and `grep` is
   case-sensitive — the literal answer is `0` (04-07).
 - `grep -c "application/problem+json"` required to be at least `10`, when the media type already
-  has a single home in `tests/api/test_error_contract.py` (04-09).
+  has a single home in `tests/unit/presentation/test_error_contract.py` (04-09).
 - `pytest -k duplicate` required to collect at least 2, against two test names the same plan
   prescribed — neither of which contains the word (04-09); and `-k rejects` required to exit `0`,
   when pytest exits `5` on a selector that matches nothing (04-10).

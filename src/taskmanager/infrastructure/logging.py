@@ -14,8 +14,9 @@ Four decisions, each of which looks arbitrary until its consequence is named.
 
 **`propagate` is left alone, and must stay true.** pytest's `caplog` attaches
 its handler to the *root* logger, so a record that stops at `taskmanager` never
-reaches it. Two assertions in `tests/api/test_error_contract.py` read records
-off `caplog` today and both would break. There is no double printing to buy by
+reaches it. Two assertions in
+`tests/unit/presentation/test_error_contract.py` read records off `caplog`
+today and both would break. There is no double printing to buy by
 switching it off either: `logging.lastResort` fires only when no handler was
 found anywhere along the chain, and root has no handler of its own in the
 container, so once the handler below exists each record is written exactly

@@ -165,9 +165,10 @@ def alembic_config(database_url: str) -> Config:
     `logging.config.fileConfig()`, which defaults to switching off every logger
     that already exists - including the one
     `presentation/api/errors/handlers.py` emits its single ERROR record on. The
-    two `caplog` assertions in `tests/api/test_error_contract.py` then see zero
-    records the moment a migration has run earlier in the same session, and fail
-    pointing nowhere near Alembic. `env.py` carries the other belt
+    two `caplog` assertions in
+    `tests/unit/presentation/test_error_contract.py` then see zero records the
+    moment a migration has run earlier in the same session, and fail pointing
+    nowhere near Alembic. `env.py` carries the other belt
     (`disable_existing_loggers=False`); this attribute is the one that skips the
     call outright.
     """

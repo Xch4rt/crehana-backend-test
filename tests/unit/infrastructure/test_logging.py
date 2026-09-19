@@ -4,7 +4,7 @@ Every test here mutates process-wide state - the `taskmanager` logger's handler
 list, its level and its propagation flag are one object shared by the whole
 suite - so the autouse fixture below both clears that state before a test and
 puts back exactly what pytest left. Without the restore half, the two `caplog`
-assertions in `tests/api/test_error_contract.py` would start depending on
+assertions in `tests/unit/presentation/test_error_contract.py` would start depending on
 whether this module happened to run first; without the clear half, the
 idempotence assertion would be counting handlers somebody else attached.
 

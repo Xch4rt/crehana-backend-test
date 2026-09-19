@@ -33,7 +33,7 @@ so it would distinguish exactly the cases ADR-008 requires to be
 indistinguishable. The 403 leg of ADR-008 arrives in Phase 5 with the first
 resource an actor can see but may not change, and the mapping from
 `AuthorizationError` to a 403 problem body is already proven end to end by
-`tests/api/test_error_contract.py` (plan 02-04).
+`tests/unit/presentation/test_error_contract.py` (plan 02-04).
 
 That argument used to be implemented here, as a `get` plus an
 `is None or not permitted` guard. It now lives in

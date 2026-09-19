@@ -4,6 +4,12 @@ This suite is the proof required by roadmap success criterion 4: the single
 exception-handling point behaves correctly *before* the first real router
 exists. Every request below hits a throwaway route defined in `tests/probe.py`,
 so nothing here depends on a feature that has not been built yet.
+
+It lives with its presentation siblings and carries the `unit` marker because
+that is what it is: it touches no database, and the whole module runs inside the
+no-database slice `make test-unit` runs. Until plan 06-04 it sat alone under
+`tests/api/`, a third top-level bucket beside `unit` and `integration` that the
+marker partition has no name for.
 """
 
 import logging
@@ -14,10 +20,9 @@ from httpx import AsyncClient
 
 from taskmanager.domain.exceptions import BusinessRuleViolationError, DomainError
 from tests.probe import PROBE_TASK_ID
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
-PROBLEM_JSON = "application/problem+json"
-# The full D-06 member list, in the order the contract promises.
-MEMBERS = ["type", "title", "status", "detail", "instance", "code"]
+pytestmark = pytest.mark.unit
 
 
 async def test_domain_error_subclass_becomes_problem_json_409(

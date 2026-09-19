@@ -721,9 +721,9 @@ def test_create_app_configures_logging_once_however_often_it_runs(
     each run must not attach another handler and multiply every line.
 
     `propagate` is asserted deliberately: the assertions in
-    `tests/api/test_error_contract.py` read records off `caplog`, whose handler
-    sits on the root logger, so a record that stopped here would never reach
-    them.
+    `tests/unit/presentation/test_error_contract.py` read records off
+    `caplog`, whose handler sits on the root logger, so a record that stopped
+    here would never reach them.
     """
     logger = a_package_logger_with_no_handlers
     assert logger.handlers == []

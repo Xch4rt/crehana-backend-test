@@ -55,10 +55,6 @@ from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.logging import JsonFormatter
 from taskmanager.infrastructure.notifications.logging import LOGGER_NAME
 from taskmanager.presentation.api.dependencies import get_email_notifier
-
-# Imported rather than re-declared - the convention `test_task_lists.py`
-# states: the error contract has one home.
-from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
 from tests.integration.api.test_task_lists import (
     FOREIGN_LIST_ID,
     LIST_ID,
@@ -93,6 +89,10 @@ from tests.integration.api.test_users import (
     the_caller,
 )
 from tests.integration.conftest import OWNER_ID, bearer_header, seed
+
+# Imported rather than re-declared - the convention `test_task_lists.py`
+# states: the error contract has one home, `tests/problem_details.py`.
+from tests.problem_details import MEMBERS, PROBLEM_JSON
 
 pytestmark = pytest.mark.integration
 
