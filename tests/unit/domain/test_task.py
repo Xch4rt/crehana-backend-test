@@ -455,6 +455,43 @@ def test_task_reschedule_rejects_a_due_date_in_the_past() -> None:
     assert excinfo.value.details == {"field": "due_date"}
 
 
+# Phase 4 review WR-02: the reviewer's two request bodies, as the schema parses them.
+UNREPRESENTABLE_DUE_DATES = [
+    datetime.fromisoformat("9999-12-31T23:59:59-12:00"),
+    datetime.fromisoformat("0001-01-01T00:00:00+14:00"),
+]
+
+
+@pytest.mark.parametrize("due_date", UNREPRESENTABLE_DUE_DATES)
+def test_task_create_refuses_a_due_date_with_no_utc_form(due_date: datetime) -> None:
+    """TASK-08's neighbour: a deadline that overflows on conversion is a 422."""
+    with pytest.raises(ValidationError) as excinfo:
+        Task.create(
+            task_id=TASK_ID,
+            task_list_id=TASK_LIST_ID,
+            title="Out of range",
+            due_date=due_date,
+            now=NOW,
+        )
+
+    assert excinfo.value.details == {"field": "due_date"}
+
+
+@pytest.mark.parametrize("due_date", UNREPRESENTABLE_DUE_DATES)
+def test_task_reschedule_refuses_a_due_date_with_no_utc_form(
+    due_date: datetime,
+) -> None:
+    """The PATCH leg, and a refused call leaves the aggregate as it found it."""
+    task = _task()
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.reschedule(due_date, now=LATER)
+
+    assert excinfo.value.details == {"field": "due_date"}
+    assert task.due_date is None
+    assert task.updated_at == NOW
+
+
 def test_task_rejects_an_undeclared_attribute() -> None:
     """slots=True leaves no __dict__, so a typo cannot create a shadow field."""
     task = _task()

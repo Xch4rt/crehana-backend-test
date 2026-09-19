@@ -1,0 +1,199 @@
+WR-02 regression tests, driven red - Phase 4 review fix
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1
+
+WR-02: a due_date whose UTC conversion leaves the range datetime can represent raised OverflowError and answered 500 to a well-formed JSON body. One of the nine tests is a positive control (the last representable instant is still accepted) and passes in both runs.
+
+Method: the new tests were written beside the fix. For the red run the
+uncommitted changes under src/ were set aside with `git stash push -- src`
+(tests left in place), so the suite ran against the code the review read;
+`git stash pop` then restored the fix for the green run. Both runs use the
+same command. Captures are verbatim apart from trailing whitespace.
+The runs happened in an isolated git worktree of this repository under
+/private/tmp (the review-fix workflow never edits the main checkout in
+place), which is why source paths in a traceback begin there.
+
+Command:
+  .venv/bin/pytest tests/unit/domain/test_validation.py tests/unit/domain/test_task.py tests/integration/api/test_tasks.py -k "out_of_range or no_utc_form or last_representable" --tb=line --no-cov -q -p no:cacheprovider ; echo exit=$?
+
+================================================================================
+RED - src/ as reviewed, new tests in place
+================================================================================
+
+FF.FFFFFF                                                                [100%]
+=================================== FAILURES ===================================
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+------------------------------ Captured log call -------------------------------
+ERROR    taskmanager.presentation.api.errors.handlers:handlers.py:134 Unhandled exception while handling POST /api/v1/task-lists/00000000-0000-4000-8000-000000000011/tasks
+Traceback (most recent call last):
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/presentation/api/routers/tasks.py", line 129, in create_task
+    result = await CreateTask(uow, clock).execute(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        payload.to_command(actor_id=actor_id, task_list_id=list_id)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/application/use_cases/tasks/create.py", line 75, in execute
+    task = Task.create(
+        task_id=uuid4(),
+    ...<5 lines>...
+        now=now,
+    )
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/entities/task.py", line 117, in create
+    task = cls(
+        id=task_id,
+    ...<9 lines>...
+        assignee_id=assignee_id,
+    )
+  File "<string>", line 14, in __init__
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/entities/task.py", line 79, in __post_init__
+    self.due_date = require_utc(self.due_date, field="due_date")
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py", line 31, in require_utc
+    return value.astimezone(UTC)
+           ~~~~~~~~~~~~~~~~^^^^^
+OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+E   OverflowError: date value out of range
+------------------------------ Captured log call -------------------------------
+ERROR    taskmanager.presentation.api.errors.handlers:handlers.py:134 Unhandled exception while handling POST /api/v1/task-lists/00000000-0000-4000-8000-000000000011/tasks
+Traceback (most recent call last):
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/presentation/api/routers/tasks.py", line 129, in create_task
+    result = await CreateTask(uow, clock).execute(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        payload.to_command(actor_id=actor_id, task_list_id=list_id)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/application/use_cases/tasks/create.py", line 75, in execute
+    task = Task.create(
+        task_id=uuid4(),
+    ...<5 lines>...
+        now=now,
+    )
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/entities/task.py", line 117, in create
+    task = cls(
+        id=task_id,
+    ...<9 lines>...
+        assignee_id=assignee_id,
+    )
+  File "<string>", line 14, in __init__
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/entities/task.py", line 79, in __post_init__
+    self.due_date = require_utc(self.due_date, field="due_date")
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py", line 31, in require_utc
+    return value.astimezone(UTC)
+           ~~~~~~~~~~~~~~~~^^^^^
+OverflowError: date value out of range
+/private/tmp/sv-04-reviewfix-kkoDQl/src/taskmanager/domain/validation.py:31: OverflowError: date value out of range
+=========================== short test summary info ============================
+FAILED tests/unit/domain/test_validation.py::test_require_utc_refuses_a_value_whose_utc_form_is_out_of_range[value0]
+FAILED tests/unit/domain/test_validation.py::test_require_utc_refuses_a_value_whose_utc_form_is_out_of_range[value1]
+FAILED tests/unit/domain/test_task.py::test_task_create_refuses_a_due_date_with_no_utc_form[due_date0]
+FAILED tests/unit/domain/test_task.py::test_task_create_refuses_a_due_date_with_no_utc_form[due_date1]
+FAILED tests/unit/domain/test_task.py::test_task_reschedule_refuses_a_due_date_with_no_utc_form[due_date0]
+FAILED tests/unit/domain/test_task.py::test_task_reschedule_refuses_a_due_date_with_no_utc_form[due_date1]
+FAILED tests/integration/api/test_tasks.py::test_a_due_date_with_no_utc_form_is_a_domain_validation_error[9999-12-31T23:59:59-12:00]
+FAILED tests/integration/api/test_tasks.py::test_a_due_date_with_no_utc_form_is_a_domain_validation_error[0001-01-01T00:00:00+14:00]
+8 failed, 1 passed, 99 deselected in 0.34s
+exit=1
+
+================================================================================
+GREEN - the fix restored
+================================================================================
+
+.........                                                                [100%]
+9 passed, 99 deselected in 0.29s
+exit=0

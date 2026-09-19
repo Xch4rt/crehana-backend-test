@@ -28,7 +28,22 @@ def require_utc(value: datetime, *, field: str) -> datetime:
     # with no argument yields an offset-carrying value. Storing those unchanged
     # would leave `completed_at` comparisons and Phase 3's timestamptz round
     # trip dependent on whichever offset the caller happened to be in.
-    return value.astimezone(UTC)
+    try:
+        return value.astimezone(UTC)
+    except (OverflowError, ValueError) as error:
+        # Phase 4 review WR-02. `datetime` stops at year 1 and at year 9999, and
+        # a value within a day of either end carrying a non-zero offset has no
+        # UTC form inside that range: `9999-12-31T23:59:59-12:00` is noon on a
+        # day this type cannot name. CPython raises `OverflowError` for it (and
+        # documents `ValueError` for the same family), neither of which is a
+        # `DomainError` - so a well-formed ISO-8601 string in a JSON body
+        # reached the catch-all and answered 500. It is a rule about the value,
+        # so it is refused here, as every other rule about a value is, with the
+        # `field` a client needs in order to find it.
+        raise ValidationError(
+            f"{field} is outside the supported date range.",
+            details={"field": field},
+        ) from error
 
 
 def require_text(value: str, *, field: str, max_length: int) -> str:

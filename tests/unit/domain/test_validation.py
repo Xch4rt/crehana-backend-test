@@ -37,6 +37,39 @@ def test_require_utc_returns_an_already_utc_datetime_unchanged() -> None:
     assert require_utc(AWARE_UTC, field="created_at") == AWARE_UTC
 
 
+# Phase 4 review WR-02: both ends of the range `datetime` can represent, each with
+# the offset that pushes its UTC form over the edge. Built from ISO strings
+# because that is how they arrive - these are the reviewer's two request bodies.
+BEYOND_THE_LAST_YEAR = datetime.fromisoformat("9999-12-31T23:59:59-12:00")
+BEFORE_THE_FIRST_YEAR = datetime.fromisoformat("0001-01-01T00:00:00+14:00")
+
+
+@pytest.mark.parametrize("value", [BEYOND_THE_LAST_YEAR, BEFORE_THE_FIRST_YEAR])
+def test_require_utc_refuses_a_value_whose_utc_form_is_out_of_range(
+    value: datetime,
+) -> None:
+    """An aware datetime with no UTC form is a validation error, never a crash.
+
+    `astimezone` raises `OverflowError` here, which is not a `DomainError`, so it
+    used to reach the catch-all and answer 500 to a well-formed JSON body.
+    """
+    with pytest.raises(ValidationError) as excinfo:
+        require_utc(value, field="due_date")
+
+    assert excinfo.value.details == {"field": "due_date"}
+    assert "outside the supported date range" in str(excinfo.value)
+    # The driver-level cause is chained for whoever reads the traceback, and
+    # never reaches the message a client is shown.
+    assert isinstance(excinfo.value.__cause__, OverflowError)
+
+
+def test_require_utc_accepts_the_last_representable_instant() -> None:
+    """The guard refuses what overflows, not everything near the edge."""
+    last = datetime.fromisoformat("9999-12-31T23:59:59+00:00")
+
+    assert require_utc(last, field="due_date") == last
+
+
 def test_require_text_strips_surrounding_whitespace() -> None:
     """Leading and trailing spaces are noise, not content."""
     assert require_text("  hello  ", field="title", max_length=200) == "hello"

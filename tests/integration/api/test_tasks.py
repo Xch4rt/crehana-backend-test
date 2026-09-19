@@ -1423,6 +1423,39 @@ async def test_a_past_due_date_is_a_domain_validation_error(
     assert body["errors"] == {"field": "due_date"}
 
 
+@pytest.mark.parametrize(
+    "due_date", ["9999-12-31T23:59:59-12:00", "0001-01-01T00:00:00+14:00"]
+)
+async def test_a_due_date_with_no_utc_form_is_a_domain_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    due_date: str,
+) -> None:
+    """Phase 4 review WR-02: well-formed JSON must never reach the 500 leg.
+
+    Pydantic accepts any ISO-8601 datetime in years 1-9999 with any offset, and
+    converting these two to UTC leaves that range. Both verbs are driven, because
+    the value arrives through `Task.create` on one and `reschedule` on the other.
+    """
+    await given_a_task(session_factory)
+    client, _ = api_client
+
+    created = await client.post(
+        tasks_url(LIST_ID), json={"title": "Buy milk", "due_date": due_date}
+    )
+    patched = await client.patch(
+        task_url(LIST_ID, TASK_ID), json={"due_date": due_date}
+    )
+
+    for response in (created, patched):
+        assert response.status_code == 422
+        assert response.headers["content-type"] == PROBLEM_JSON
+        body = response.json()
+        assert body["code"] == "validation_error"
+        assert body["title"] == "Validation error"
+        assert body["errors"] == {"field": "due_date"}
+
+
 async def test_an_empty_patch_body_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
