@@ -315,7 +315,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — The four totality gates, the transition complement, and the two tests that passed for the wrong reason
+- [x] 06-01-PLAN.md — The four totality gates, the transition complement, and the two tests that passed for the wrong reason
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -357,7 +357,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
-| 6. Test Hardening & Coverage | 0/TBD | Not started | - |
+| 6. Test Hardening & Coverage | 1/4 | In progress | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
 ## Standing Rules

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — wave 1 (06-01) dispatched
-last_updated: 2026-09-19T20:48:16.740Z
-last_activity: 2026-09-19 -- Phase 06 execution started (06-01..06-04); suite baseline 1019 passed, 100% coverage
+stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — wave 1 (06-01) complete
+last_updated: 2026-09-19T21:05:00.000Z
+last_activity: 2026-09-19 -- 06-01 complete: four totality gates planted and driven red once each, two D-14 findings fixed; 1038 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 59
-  completed_plans: 55
-  percent: 93
+  completed_plans: 56
+  percent: 95
 ---
 
 # Project State
@@ -27,11 +27,13 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: 1 of 4
+Plan: 2 of 4 (06-01 complete)
 Status: Executing Phase 06
-Last activity: 2026-09-19 -- Phase 06 execution started (4 plans in 4 sequential waves); Phase 05 complete (17/17)
+Last activity: 2026-09-19 -- 06-01 complete: use-case, endpoint and error-leaf totality gates plus the
+derived transition complement, each driven red once; the expired-token case and DeleteTaskList's lock
+now fail for the reason they name
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 95%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
@@ -42,7 +44,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 
 **Velocity:**
 
-- Total plans completed: 55
+- Total plans completed: 56
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -56,6 +58,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
+| 06 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -118,6 +121,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | Phase 05 P15 | 20min | 2 tasks | 2 files |
 | Phase 05 P16 | 30min | 3 tasks | 6 files |
 | Phase 05 P17 | 25min | 5 tasks | 18 files |
+| Phase 06 P01 | 15min | 5 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -786,6 +790,35 @@ Recent decisions affecting current work:
   the ROADMAP Phase 5 checkbox, its status cell and its completion date are still untouched -
   only the seventeenth plan box and the 17/17 count were taken here
 
+- [Phase 06-01]: the use-case scan collects module-level `class`, `async def` AND plain `def`, and
+  `REQUIRED_USE_CASE_SYMBOLS` names 22 symbols rather than the 20 06-RESEARCH.md counts - the
+  research enumeration itself lists 22 and only its prose count was wrong
+- [Phase 06-01]: the plan's third falsification for the use-case gate does not falsify - renaming
+  `test_list_users.py` leaves it green because `test_write_paths_hold_what_they_change.py` also
+  imports and constructs `ListUsers`; only 8 of the 22 symbols have a single coverer, and
+  `test_login.py` was moved aside instead, which reported `Login` uncovered with its declaration site
+- [Phase 06-01]: `test_error_contract_totality.py` excludes ITSELF from the `tests/` scan. Written as
+  the plan specifies it passed while proving nothing, because its own `REQUIRED_RAISED_CODES` guard
+  names all nine codes as literals under `tests/` - a gate satisfied by its own non-vacuity guard, and
+  the strongest argument this phase has produced for driving every gate red before trusting it
+- [Phase 06-01]: docstrings are excluded from that gate's string-literal scan, and a companion test
+  asserts every `DomainError` subclass is declared in `domain/exceptions.py` - `__subclasses__()` sees
+  only imported modules, so a leaf declared in an adapter would be raisable and invisible
+- [Phase 06-01]: endpoint totality is recorded by a pure-ASGI wrapper at the TRANSPORT, never
+  `app.add_middleware`, so the application under test stays byte-for-byte the production one; the
+  check is two-sided and the total half skips on a partial selection, which is what keeps `-k` runs
+  from being falsely red
+- [Phase 06-01]: the new list-deletion concurrency case asserts the ANSWER, not the end state - the
+  list ends up gone either way, since a plain read passes the guard on a stale row and the `DELETE`
+  blocks on its own; what the plain read loses is that the second caller is told 204 for a list
+  another caller already removed
+- [Phase 06-01]: the comparative auth-body test is seeded as well as the parametrized one - unseeded
+  it compared six copies of the unknown-subject answer, so "all seven bodies are identical" was true
+  by construction rather than by design
+- [Phase 06-01]: STATE.md and ROADMAP.md were again updated by hand for the reason 05-16 records; the
+  ROADMAP Phase 6 checkbox and its completion date are untouched - only the 06-01 plan box and the
+  1/4 count were taken here
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -822,6 +855,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T20:06:05.418Z
-Stopped at: Phase 6 planned — ready to execute
-Resume file: .planning/phases/06-test-hardening-coverage/06-01-PLAN.md
+Last session: 2026-09-19T21:05:00.000Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: .planning/phases/06-test-hardening-coverage/06-02-PLAN.md
