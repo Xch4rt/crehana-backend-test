@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-09-19T06:19:21.017Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-09-19T06:31:59.677Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 34
+  completed_plans: 35
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Progress: [█████████░] 89%
 | Phase 04 P06 | 11min | 3 tasks | 12 files |
 | Phase 04 P07 | 10min | 3 tasks | 7 files |
 | Phase 04 P08 | 11min | 3 tasks | 7 files |
+| Phase 04 P09 | 10min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,13 @@ Recent decisions affecting current work:
 - [Phase 04-08]: the red capture's plant 1 adds the import AS WELL AS the raise (the plan names only the raise) - a raise of an unbound name is not a state the codebase could reach, and plant 2, the import alone, is the run that proves the two assertions are not redundant: raise check green, import check red
 - [Phase 04-08]: two grep criteria were met by rewording docstring prose rather than by changing code - "commit()" printed 1 and "response_class=Response" printed 2 from passages that spelled the forms they explained; the prose-not-literal convention since 01-03 exists precisely so these counters stay strict
 - [Phase 04-08]: requirement ticks ARC-05/LIST-01..06/TASK-01..08 deliberately NOT taken - 04-12 is the last claimant, the eighth consecutive plan in this phase to make the same call; these routes have no HTTP test above them until 04-09 and 04-10, and a tick taken from a route's existence rather than its behaviour proves nothing
+- [Phase 04-09]: the not-owned body is compared to the absent body with each response's own identifier tokenised out - STRONGER than the plan's 'identical apart from instance', which would leave the request path uncompared, since instance IS the path and therefore necessarily differs between the two requests
+- [Phase 04-09]: PROBLEM_JSON and MEMBERS are imported from tests/api/test_error_contract.py rather than re-declared, so grep -c 'application/problem+json' prints 0 while grep -c 'PROBLEM_JSON' prints 10 - a tenth copy of a constant that already has a single home would satisfy a counter by abandoning the reason the counter exists (the 04-03/04-06/04-07 call)
+- [Phase 04-09]: the two 409 tests are named ..._is_a_duplicate_409 rather than the plan's ..._is_409, because pytest -k matches the test id and the plan's own prescribed names contain no 'duplicate' - its own '-k duplicate collects at least 2' criterion would have collected 0
+- [Phase 04-09]: seed() commits - under join_transaction_mode=create_savepoint a session closed without committing rolls its savepoint back, so seeded rows vanish and the first request 404s; the commit releases the savepoint into the outer transaction the connection fixture still rolls back, so isolation is unchanged and only visibility is bought
+- [Phase 04-09]: api_client deliberately does NOT enter the lifespan - get_uow is overridden so the engine built against the fictional DSN is never dialled, and tests/integration/test_health.py stays the one place the engine's own lifecycle is proven
+- [Phase 04-09]: acting_as is a restoring context manager rather than a one-way as_actor(app, id) setter, because a test that proved a 404 as a stranger and then asserted the owner's view would otherwise still be the stranger and pass for the wrong reason
+- [Phase 04-09]: requirement ticks LIST-01..LIST-06 deliberately NOT taken - 04-12 is the last claimant, the ninth consecutive plan in this phase to make the same call, though the behaviour those ticks rest on is now proved over HTTP
 
 ### Pending Todos
 
@@ -325,6 +333,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:18:37.289Z
-Stopped at: Completed 04-08-PLAN.md
+Last session: 2026-09-19T06:31:59.671Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None
