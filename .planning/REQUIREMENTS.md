@@ -32,15 +32,15 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [ ] **ARC-05**: Pydantic v2 models type every HTTP boundary: request/response schemas and settings; application command/result DTOs are frozen dataclasses (ADR-020) [PDF 2.b]
 - [x] **ARC-06**: A `DomainError` hierarchy (not found, conflict, business-rule violation, authentication, authorization) carries a stable `code` and details; no `HTTPException` is raised outside `presentation` [PDF 2.c]
 - [x] **ARC-07**: One exception-handling point maps `DomainError`, request-validation errors and unexpected errors to RFC 9457 `application/problem+json` responses with a single shape [NL]
-- [ ] **ARC-08**: Transactions are owned by a UnitOfWork committed explicitly by the use case (never in a `yield` dependency teardown) [R]
+- [x] **ARC-08**: Transactions are owned by a UnitOfWork committed explicitly by the use case (never in a `yield` dependency teardown) [R]
 
 ### Persistence (DB)
 
-- [ ] **DB-01**: Data is stored in PostgreSQL via SQLAlchemy 2.0 async with psycopg 3 [PDF Requisitos]
-- [ ] **DB-02**: Schema is created and versioned by Alembic migrations; the container applies them on startup [R]
-- [ ] **DB-03**: ORM models are separate from domain entities with explicit mappers; relationships use `lazy="raise"` [R]
-- [ ] **DB-04**: Status and priority persist as VARCHAR + CHECK constraints; all timestamps are timezone-aware UTC [R]
-- [ ] **DB-05**: `task_lists.owner_id` exists from the first migration; deleting a list deletes its tasks [R]
+- [x] **DB-01**: Data is stored in PostgreSQL via SQLAlchemy 2.0 async with psycopg 3 [PDF Requisitos]
+- [x] **DB-02**: Schema is created and versioned by Alembic migrations; the container applies them on startup [R]
+- [x] **DB-03**: ORM models are separate from domain entities with explicit mappers; relationships use `lazy="raise"` [R]
+- [x] **DB-04**: Status and priority persist as VARCHAR + CHECK constraints; all timestamps are timezone-aware UTC [R]
+- [x] **DB-05**: `task_lists.owner_id` exists from the first migration; deleting a list deletes its tasks [R]
 
 ### Task Lists (LIST)
 
@@ -94,8 +94,8 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 ### Docker (DOCK)
 
 - [x] **DOCK-01**: A multistage `Dockerfile` builds a slim image that runs the app as a non-root user [PDF 5.a, 2.g]
-- [ ] **DOCK-02**: `docker-compose.yml` starts API + PostgreSQL with one command; the API waits for a healthy database (`pg_isready -h 127.0.0.1`) and applies migrations [PDF 5.a, 2.g]
-- [ ] **DOCK-03**: `/health` reports liveness and database readiness and backs the container healthcheck [R]
+- [x] **DOCK-02**: `docker-compose.yml` starts API + PostgreSQL with one command; the API waits for a healthy database (`pg_isready -h 127.0.0.1`) and applies migrations [PDF 5.a, 2.g]
+- [x] **DOCK-03**: `/health` reports liveness and database readiness and backs the container healthcheck [R]
 - [x] **DOCK-04**: The test suite can be run with one documented command without a local Python setup [R]
 - [ ] **DOCK-05**: A clean-clone rehearsal (fresh clone, `down -v`, `--no-cache` build, follow README verbatim) passes before delivery [NL]
 
@@ -171,12 +171,12 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | ARC-05 | Phase 4 | Pending |
 | ARC-06 | Phase 2 | Complete |
 | ARC-07 | Phase 2 | Complete |
-| ARC-08 | Phase 3 | Pending |
-| DB-01 | Phase 3 | Pending |
-| DB-02 | Phase 3 | Pending |
-| DB-03 | Phase 3 | Pending |
-| DB-04 | Phase 3 | Pending |
-| DB-05 | Phase 3 | Pending |
+| ARC-08 | Phase 3 | Complete |
+| DB-01 | Phase 3 | Complete |
+| DB-02 | Phase 3 | Complete |
+| DB-03 | Phase 3 | Complete |
+| DB-04 | Phase 3 | Complete |
+| DB-05 | Phase 3 | Complete |
 | LIST-01 | Phase 4 | Pending |
 | LIST-02 | Phase 4 | Pending |
 | LIST-03 | Phase 4 | Pending |
@@ -209,8 +209,8 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | TEST-04 | Phase 6 | Pending |
 | TEST-05 | Phase 6 | Pending |
 | DOCK-01 | Phase 1 | Complete |
-| DOCK-02 | Phase 3 | Pending |
-| DOCK-03 | Phase 3 | Pending |
+| DOCK-02 | Phase 3 | Complete |
+| DOCK-03 | Phase 3 | Complete |
 | DOCK-04 | Phase 1 | Complete |
 | DOCK-05 | Phase 7 | Pending |
 | DOC-01 | Phase 7 | Pending |

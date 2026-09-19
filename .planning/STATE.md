@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-10-PLAN.md
-last_updated: "2026-09-19T01:26:54.001Z"
+status: verifying
+stopped_at: Completed 03-11-PLAN.md
+last_updated: "2026-09-19T01:53:52.472Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 26
-  completed_plans: 25
-  percent: 96
+  completed_plans: 26
+  percent: 100
 ---
 
 # Project State
@@ -26,18 +26,18 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 ## Current Position
 
-Phase: 03 (persistence-runnable-stack) — EXECUTING
+Phase: 03 (persistence-runnable-stack) — COMPLETE
 Plan: 11 of 11
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-19
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 16
+- Total plans completed: 26
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -47,7 +47,7 @@ Progress: [██████████] 96%
 |-------|-------|-------|----------|
 | 01 | 8 | - | - |
 | 02 | 7 | - | - |
-| 03 | 1 | - | - |
+| 03 | 11 | - | - |
 
 **Recent Trend:**
 
@@ -80,6 +80,7 @@ Progress: [██████████] 96%
 | Phase 03 P08 | 13min | 3 tasks | 7 files |
 | Phase 03 P09 | 16min | 3 tasks | 11 files |
 | Phase 03 P10 | 19min | 3 tasks | 5 files |
+| Phase 03 P11 | 22min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,15 @@ Recent decisions affecting current work:
 - [Phase 03-10]: `docker compose down -v` does NOT remove containers of disabled profiles, so a `docker compose run test` without --rm survives a full reset; make down was left as plain `docker compose down` to match D-14
 - [Phase 03-10]: Requirement ticks DOCK-02/DOCK-03/DB-02 deliberately NOT taken - 03-11 is the last claimant, the tenth consecutive plan in this phase to make the same call
 
+- [Phase 03-11]: DECISION_LOG.md gains TWENTY-ONE ADRs (023-043), not the plan's twelve: the plan enumerates twelve decisions and the ten plan summaries handed forward nine more, and writing only twelve would have satisfied the acceptance criterion while pushing the debt into Phase 7 - which is exactly what this project's own AI_WORKFLOW thesis argues against
+- [Phase 03-11]: ADR-028 settles WR-05 and names ADR-021 as the entry it refines: D-14 is a locked 02-CONTEXT decision that was never numbered, and ADR-021 is where its HTTP consequence (a domain ValidationError is 422) was decided, so that is the ADR a refinement by scope has to name rather than inventing a reference
+- [Phase 03-11]: The log stays append-only mechanically, not by intention - `git diff DECISION_LOG.md | grep -c '^-'` prints 1, the diff header alone, and ADR-028/ADR-041 refine ADR-021/ADR-017/ADR-018 by id without editing them
+- [Phase 03-11]: CLAUDE.md gains a sixth rule beyond the plan's five - the Annotated[T, Depends(...)] injection form - because it meets the section's own bar (enforced by flake8-bugbear B008 in make lint) and a Phase 4 router written the other way fails that gate for a reason that reads as a linter misconfiguration
+- [Phase 03-11]: The AI_WORKFLOW entry names the two artifacts that were wrong: 03-10-PLAN.md forbidding the compose profile (both halves of its reasoning falsified live) and 03-RESEARCH.md Pattern 7 building the readiness engine inside the retry loop, which reintroduces the same document's Pitfall 2 from a second direction
+- [Phase 03-11]: The gate capture was written to a scratch path and copied in afterwards, because writing it into .planning/ first would have made STEP 1's `git status --porcelain` non-empty - the one line in the transcript that has to be blank
+- [Phase 03-11]: All eight requirement ticks taken (DB-01..DB-05, ARC-08, DOCK-02, DOCK-03), each re-verified against a named test or a named line of the gate capture rather than against a plan header - the 02-07 precedent, after ten consecutive plans deferred them
+- [Phase 03-11]: Roadmap SC-4's wording says `infrastructure/repositories/` while the shipped path is `infrastructure/db/repositories/`; the claim is true of the real path and the gate scans the real path, and the discrepancy is recorded rather than silently reinterpreted
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -235,9 +245,14 @@ None yet.
 
 [Issues that affect future work]
 
-- Phase 3 (async session lifecycle, transactional test fixtures, Alembic `env.py`) and Phase 5
-  (JWT/hashing libraries, 403-vs-404 matrix) are flagged by research as needing
-  `/gsd:plan-phase --research-phase`.
+- Phase 5 (JWT/hashing libraries, 403-vs-404 matrix) is flagged by research as needing
+  `/gsd:plan-phase --research-phase`. The same flag on Phase 3 (async session lifecycle,
+  transactional test fixtures, Alembic `env.py`) is discharged: the phase was planned with
+  `--research-phase` and all five of its open questions are resolved in `03-RESEARCH.md`.
+
+- `DECISION_LOG.md` ADR-019 still claims "the workflow has never run on a real runner", which
+  has been false since plan 01-08 (CI run 35301518310 concluded success on the first attempt).
+  The log is append-only, so Phase 7 owns the superseding entry.
 
 - `AI_WORKFLOW.md` must be appended to at the end of every phase; reconstructing it in Phase 7
   would undermine the project's own thesis.
@@ -252,6 +267,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T01:26:48.812Z
-Stopped at: Completed 03-10-PLAN.md
+Last session: 2026-09-19T01:53:52.465Z
+Stopped at: Completed 03-11-PLAN.md — Phase 3 complete, ready for verification
 Resume file: None
