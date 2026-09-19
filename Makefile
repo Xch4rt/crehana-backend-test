@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install lint format typecheck arch test docker-test up down
+.PHONY: install lint format typecheck arch test docker-test up down run
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -55,12 +55,19 @@ arch:
 test:
 	$(VENV)/bin/pytest
 
-# Runs the suite on Python 3.13 with no host Python involved. Phase 3 replaces
-# the body with a compose invocation; the target name stays, so no documentation
-# has to change.
+# Runs the suite on Python 3.13 with no host Python and no host PostgreSQL
+# involved. The target name is unchanged, exactly as Phase 1 promised when it was
+# still a two-line build-and-run; the body is now a compose invocation, which is
+# the whole difference: the container reaches the `db` service over the compose
+# network, so the *integration* tests run here too rather than being silently
+# skipped. That makes this the zero-host-setup path D-03 describes - the one an
+# evaluator with nothing but Docker can use.
+#
+# `run` rather than `up`: this service is invoked and exits with the suite's
+# status. `--rm` leaves no stopped container behind, `--build` guarantees the
+# image matches the working tree instead of whatever was built last.
 docker-test:
-	docker build --target test -t taskmanager-test .
-	docker run --rm taskmanager-test
+	docker compose run --rm --build test
 
 # The evaluator's path, and the reason it runs in the foreground: `up` streams
 # the database and API logs, so a failed migration or a refused connection is
@@ -74,3 +81,17 @@ up:
 # data directory.
 down:
 	docker compose down
+
+# The host-side fast loop, and the reason no docker-compose.override.yml exists.
+# `docker compose up` deliberately runs the production-like image (D-16): no bind
+# mount of src/, no auto-restart-on-edit watcher, non-root, real entrypoint, real
+# healthcheck. Reloading a container that was built to be immutable is a
+# different thing pretending to be the same thing, so the edit-run loop lives
+# here instead - the host virtualenv against the compose database, which
+# .env.example already points at on localhost.
+#
+# `make up` (or `docker compose up -d db`) must be running first, and the
+# explicit $(VENV)/bin/ path is used for the same reason as every other target:
+# nothing here assumes an activated virtualenv.
+run:
+	$(VENV)/bin/uvicorn --factory taskmanager.main:create_app --reload

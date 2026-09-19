@@ -1,0 +1,161 @@
+Plan 03-10 Task 3 - the cold-start rehearsal
+============================================
+
+Captured 2026-09-19 on macOS 15 / Docker Desktop, linux/arm64, against the
+committed docker-compose.yml with no override file of any kind.
+
+What this transcript proves, in order:
+
+  1. The volume is discarded first (`down -v`). /docker-entrypoint-initdb.d only
+     runs on an empty data directory (03-RESEARCH.md Pitfall 7), so a warm-volume
+     run would prove nothing about the evaluator's first command.
+  2. `docker compose up --build -d` starts db and api - and NOT test, which
+     carries a profile.
+  3. `api` reaches `healthy`, which under D-09 means the image's own HEALTHCHECK
+     got HTTP 200 from /health, which under D-08 means the database probe passed.
+  4. In `docker compose logs api`, the Alembic revision line appears BEFORE the
+     first uvicorn line. That is D-06's ordering, read off the log rather than
+     assumed: the entrypoint waited, migrated, and only then exec'd the server.
+  5. /health answers 200 with "database":"ok" on the published host port.
+  6. `docker compose run --rm --build test` - the body of `make docker-test` -
+     runs the whole suite, integration tests included, and meets the coverage
+     gate. No `--profile` flag: `run` enables the profiles of the service it
+     names.
+  7. `docker compose exec api id -u` prints a non-zero uid: the three new COPY
+     lines did not reintroduce root (T-3-30).
+  8. Falsification. With the database stopped, the container turns `unhealthy`
+     and /health answers 503 with the same body shape. Starting the database
+     returns it to `healthy`. This is what distinguishes a healthcheck wired to
+     the database probe from one that only proves the process is alive (T-3-33).
+
+The stack was left RUNNING at the end of this capture (db + api, api healthy).
+`make down` stops it; `docker compose down -v` also discards the volume.
+
+------------------------------------------------------------------------------
+
+$ test -f .env || cp .env.example .env
+
+$ docker compose down -v
+ Container test-api-1 Stopping
+ Container test-api-1 Stopped
+ Container test-api-1 Removing
+ Container test-api-1 Removed
+ Container test-db-1 Stopping
+ Container test-db-1 Stopped
+ Container test-db-1 Removing
+ Container test-db-1 Removed
+ Volume test_pgdata Removing
+ Network test_default Removing
+ Volume test_pgdata Removed
+ Network test_default Removed
+
+$ docker compose up --build -d
+ Image test-api Building
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Image test-api Built
+ Network test_default Creating
+ Network test_default Created
+ Volume test_pgdata Creating
+ Volume test_pgdata Created
+ Container test-db-1 Creating
+ Container test-db-1 Created
+ Container test-api-1 Creating
+ Container test-api-1 Created
+ Container test-db-1 Starting
+ Container test-db-1 Started
+ Container test-db-1 Waiting
+ Container test-db-1 Healthy
+ Container test-api-1 Starting
+ Container test-api-1 Started
+
+$ for i in $(seq 1 40); do docker compose ps --format "{{.Service}} {{.Health}}" | grep -q "api healthy" && break; sleep 3; done
+(api reached healthy after 3 poll(s), 3s apart)
+
+$ docker compose ps --format "{{.Service}} {{.Health}}"
+api healthy
+db healthy
+
+$ docker compose ps -a --format "{{.Service}} {{.State}}"   # `up` starts db and api only: `test` carries a profile
+api running
+db running
+
+$ docker compose logs api   # the Alembic revision runs BEFORE uvicorn starts (D-06)
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:46530 - "GET /health HTTP/1.1" 200 OK
+
+$ curl -s -o /dev/null -w "%{http_code}" localhost:8000/health
+200
+
+$ curl -s localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}
+
+$ docker compose exec api id -u   # still the non-root app account
+999
+
+$ docker compose run --rm --build test   # what `make docker-test` runs; no profile flag needed
+src/taskmanager/presentation/api/__init__.py                            0      0      0      0   100%
+src/taskmanager/presentation/api/dependencies.py                       16      0      0      0   100%
+src/taskmanager/presentation/api/errors/__init__.py                     0      0      0      0   100%
+src/taskmanager/presentation/api/errors/handlers.py                    35      0      6      0   100%
+src/taskmanager/presentation/api/errors/mapping.py                      5      0      0      0   100%
+src/taskmanager/presentation/api/errors/problem.py                      8      0      2      0   100%
+src/taskmanager/presentation/api/health.py                             32      0      2      0   100%
+---------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 772      0     74      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================= 287 passed in 2.16s ==============================
+
+--- Falsification: the healthcheck is wired to the database, not to mere liveness ---
+
+$ docker compose stop db
+ Container test-db-1 Stopping
+ Container test-db-1 Stopped
+
+$ poll docker compose ps until api is unhealthy (interval 10s, retries 3)
+(api reported unhealthy after 8 poll(s), 3s apart)
+api unhealthy
+
+$ curl -s -o /dev/null -w "%{http_code}" localhost:8000/health   # 503, and the body keeps its shape
+503
+{"status":"degraded","checks":{"database":"unavailable"},"version":"0.1.0"}
+
+$ docker compose start db
+ Container test-db-1 Starting
+ Container test-db-1 Started
+
+$ poll docker compose ps until api is healthy again
+(api returned to healthy after 5 poll(s), 3s apart)
+api healthy
+db healthy
+
+$ curl -s localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}

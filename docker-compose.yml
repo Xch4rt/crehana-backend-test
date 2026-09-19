@@ -94,6 +94,18 @@ services:
     build:
       context: .
       target: test
+    # A profile, and nothing else, is what keeps this service out of
+    # `docker compose up`. Without it `up` starts every declared service, so the
+    # evaluator's very first command would stream a full pytest run - coverage
+    # table included - into the same log as the API, then leave an `exited`
+    # container in `docker compose ps`. That reads like a failure and buries the
+    # two lines that matter.
+    #
+    # It costs no flag anywhere: `docker compose run test` enables the profiles
+    # of the service it names, so `make docker-test` stays
+    # `docker compose run --rm --build test` and the README explains nothing.
+    # (Verified here, not assumed - see evidence/03-10-cold-start.txt.)
+    profiles: ["test"]
     env_file: .env
     environment:
       # Both variables, and both pointing at taskmanager_test. DATABASE_URL is
@@ -113,8 +125,8 @@ services:
     #     command, and the stage deliberately does not carry
     #     docker/entrypoint.sh, because the pytest fixture owns the test schema
     #     and must not race an `alembic upgrade head` run beside it (D-06);
-    #   * no compose profile - `docker compose run test` names the service
-    #     explicitly, so a profile would only add a flag the README must explain.
+    #   * the `test` profile above, which is what keeps `docker compose up` from
+    #     starting it.
 
 volumes:
   pgdata:
