@@ -1,10 +1,10 @@
 """Hand a task to a user, and tell them - without letting the telling undo it.
 
 `AssignTask` is where four separate decisions meet, and none of them is visible
-from the route:
+from the route (`UnassignTask` below shares the first three):
 
-* **The door is owner-only (D-03).** It loads through
-  `owned_task(..., for_update=True)`, so the list's owner is answered, the
+* **The door is owner-only (D-03).** Both classes here load through
+  `owned_task`, with the locking flag set, so the list's owner is answered, the
   task's own assignee is refused with a 403 they can already disprove with a
   `GET`, and everybody else is refused exactly as an absent task is refused.
   `access.py` argues each leg; the point here is that the rule is entered
@@ -17,11 +17,15 @@ from the route:
 * **The notification happens after the write is durable, and cannot undo it
   (D-16, NOTF-01, NOTF-03).** It is attempted outside the transaction block,
   inside a `try`/`except` that records the failure and swallows it.
+
+Two classes in one module, the way `access.py` holds two functions: `PUT` and
+`DELETE` on the same URL are the two halves of one door (D-05), and splitting
+them across two files would put the shared reasoning above in neither.
 """
 
 import logging
 
-from taskmanager.application.dto.commands import AssignTaskCommand
+from taskmanager.application.dto.commands import AssignTaskCommand, UnassignTaskCommand
 from taskmanager.application.dto.results import TaskResult
 from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.notifications import EmailNotifier
@@ -47,7 +51,8 @@ class AssignTask:
         # nothing else is touched", and that sentence is exactly what justifies
         # the third argument rather than contradicting it: this use case *does*
         # touch something else. The constructor is the honest statement of it,
-        # which is the whole point of one class per operation.
+        # which is the whole point of one class per operation - and it is why
+        # `UnassignTask` below, which sends nothing, does not take a notifier.
         self._uow = uow
         self._clock = clock
         self._notifier = notifier
@@ -64,9 +69,11 @@ class AssignTask:
             # lists everyone (D-08) - but it must not be reachable by someone
             # the door has already refused.
             #
-            # `for_update=True` because this is read-validate-write, and it
+            # The lock is taken because this is read-validate-write, and it
             # holds the task only: a task's writer never holds its list
-            # (ADR-058).
+            # (ADR-058). The flag is spelled exactly twice in this module, once
+            # per write path, so "what does this file lock?" is a question a
+            # grep answers - the 04-05 convention.
             task = await owned_task(
                 self._uow,
                 command.task_list_id,
@@ -135,4 +142,50 @@ class AssignTask:
             )
         # Mapped outside the block: the result describes a transaction that has
         # already been made durable, never one still in flight.
+        return TaskResult.from_entity(task)
+
+
+class UnassignTask:
+    """Takes a task back off its assignee, for the list's owner only (ASGN-01)."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        # **No notifier, deliberately.** Unassigning sends nothing (D-07), so
+        # injecting the port would contradict the rule its sibling above just
+        # cited to justify taking it: a constructor states exactly what the
+        # operation touches, and a dependency accepted and never called is a
+        # claim this use case cannot back up.
+        self._uow = uow
+        self._clock = clock
+
+    async def execute(self, command: UnassignTaskCommand) -> TaskResult:
+        """Clear the assignee, or raise the refusal the caller has earned.
+
+        **An assignee may not unassign themselves.** They are refused with the
+        403 `owned_task` gives them, and that is ASGN-01's reading rather than
+        an omission: the requirement says the list owner assigns and unassigns,
+        and "an assignee declining a task" is a rule nobody asked for - it sits
+        in this phase's deferred ideas, not in its scope.
+        """
+        async with self._uow:
+            # The same owner-only door, and the same lock (ADR-058). There is
+            # no user lookup on this path, because there is no caller-supplied
+            # identifier to resolve: whoever is there is who gets cleared.
+            task = await owned_task(
+                self._uow,
+                command.task_list_id,
+                command.task_id,
+                command.actor_id,
+                for_update=True,
+            )
+            # D-07 again, the mirror of its sibling's: a `DELETE` on a task
+            # nobody holds is a 200 that writes nothing. `Task.unassign` still
+            # stamps an already-clear task - the entity has no no-op - so
+            # without this the second `DELETE` would move `updated_at` for no
+            # reason a client could see.
+            if task.assignee_id is None:
+                return TaskResult.from_entity(task)
+            task.unassign(now=self._clock.now())
+            await self._uow.tasks.update(task)
+            await self._uow.commit()
+        # Nothing is sent, so there is nothing after the block but the mapping.
         return TaskResult.from_entity(task)

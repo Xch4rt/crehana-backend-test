@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from taskmanager.application.dto.commands import (
+    AssignTaskCommand,
     ChangeTaskStatusCommand,
     DeleteTaskCommand,
     DeleteTaskListCommand,
@@ -33,6 +34,7 @@ from taskmanager.application.dto.commands import (
     ListAssignedTasksCommand,
     ListTasksCommand,
     ListUsersCommand,
+    UnassignTaskCommand,
     UpdateTaskCommand,
     UpdateTaskListCommand,
 )
@@ -40,6 +42,7 @@ from taskmanager.application.use_cases.access import visible_task, visible_task_
 from taskmanager.application.use_cases.task_lists.delete import DeleteTaskList
 from taskmanager.application.use_cases.task_lists.get import GetTaskList
 from taskmanager.application.use_cases.task_lists.update import UpdateTaskList
+from taskmanager.application.use_cases.tasks.assign import AssignTask, UnassignTask
 from taskmanager.application.use_cases.tasks.change_task_status import (
     ChangeTaskStatus,
 )
@@ -51,8 +54,13 @@ from taskmanager.application.use_cases.tasks.update import UpdateTask
 from taskmanager.application.use_cases.users.list import ListUsers
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
-from tests.unit.application.fakes import FakeUnitOfWork, FrozenClock
+from tests.unit.application.fakes import (
+    FakeEmailNotifier,
+    FakeUnitOfWork,
+    FrozenClock,
+)
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -141,7 +149,8 @@ async def test_the_assignees_status_change_holds_the_task_and_no_list() -> None:
     being kept is the lock-ordering rule, and it must survive a future change
     that makes the assignee's leg consult the list again.
 
-    Plan 05-08 adds the `AssignTask` and `UnassignTask` cases beside this one.
+    Plan 05-08 added the `AssignTask` and `UnassignTask` cases below, on that
+    invitation: they are the other two write paths the assignment door opened.
     """
     unit_of_work = _uow(assignee_id=ASSIGNEE_ID)
 
@@ -152,6 +161,54 @@ async def test_the_assignees_status_change_holds_the_task_and_no_list() -> None:
             task_id=TASK_ID,
             new_status=TaskStatus.IN_PROGRESS,
         )
+    )
+
+    assert unit_of_work.task_repository.held_for_update == [TASK_ID]
+    assert unit_of_work.task_list_repository.held_for_update == []
+
+
+async def test_assign_task_holds_the_task_it_hands_over() -> None:
+    """The phase's new write path, and the new IDOR surface with it (T-5-17).
+
+    Owner and assignee can now reach the same row from two directions, so the
+    assignment must hold it - and must hold nothing else: a task's writer never
+    holds its list, so a list deletion can never wait on a writer that waits on
+    it. Held exactly once, because a second hold would be a second statement on
+    the path this phase adds.
+    """
+    unit_of_work = _uow()
+    unit_of_work.user_repository.stored[ASSIGNEE_ID] = User.create(
+        user_id=ASSIGNEE_ID,
+        email="bruno@example.com",
+        full_name="Bruno Reyes",
+        password_hash="argon2-encoded-hash",
+        now=NOW,
+    )
+
+    await AssignTask(unit_of_work, FrozenClock(NOW), FakeEmailNotifier()).execute(
+        AssignTaskCommand(
+            actor_id=ACTOR_ID,
+            task_list_id=LIST_ID,
+            task_id=TASK_ID,
+            assignee_id=ASSIGNEE_ID,
+        )
+    )
+
+    assert unit_of_work.task_repository.held_for_update == [TASK_ID]
+    assert unit_of_work.task_list_repository.held_for_update == []
+
+
+async def test_unassign_task_holds_the_task_it_takes_back() -> None:
+    """The same claim for the other half of the door (D-05).
+
+    Asserted separately rather than folded into the case above, because the two
+    are different code paths through the same module: the one that looks a user
+    up and the one that does not.
+    """
+    unit_of_work = _uow(assignee_id=ASSIGNEE_ID)
+
+    await UnassignTask(unit_of_work, FrozenClock(NOW)).execute(
+        UnassignTaskCommand(actor_id=ACTOR_ID, task_list_id=LIST_ID, task_id=TASK_ID)
     )
 
     assert unit_of_work.task_repository.held_for_update == [TASK_ID]
