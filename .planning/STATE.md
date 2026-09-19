@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-09-19T15:22:34.443Z"
-last_activity: 2026-09-19 -- Phase 05 plan 03 complete
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-09-19T15:39:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 plan 05 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 42
-  percent: 78
+  completed_plans: 43
+  percent: 80
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 5 of 16
-Status: Executing Phase 05 (plans 01-04 complete; plan 05 next)
-Last activity: 2026-09-19 -- Phase 05 plan 03 complete
+Plan: 6 of 16
+Status: Executing Phase 05 (plans 01-05 complete; plan 06 next)
+Last activity: 2026-09-19 -- Phase 05 plan 05 complete
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Progress: [████████░░] 78%
 | Phase 05 P02 | 10min | 3 tasks | 9 files |
 | Phase 05 P04 | 12min | 3 tasks | 9 files |
 | Phase 05 P03 | 12min | 3 tasks | 21 files |
+| Phase 05 P05 | 14min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -399,6 +400,36 @@ Recent decisions affecting current work:
   last claimant, the sixth consecutive plan in this phase to make the same call, and this plan ships
   a column and an index with no use case and no route above them
 
+- [Phase 05-05]: the plan's own alg=none construction cannot be built - jwt.encode(claims, secret,
+  algorithm='HS256', headers={'alg':'none'}) raises InvalidKeyError at ENCODE time in PyJWT 2.14.0,
+  because the library prepares the key for the header's algorithm; the forgery an attacker actually
+  sends is jwt.encode(claims, None, algorithm='none'), which is what the refusal table and the
+  corrected acceptance run use. The plan's behaviour table row was right; only its construction was
+- [Phase 05-05]: the off-loop proof records the callable and the ARGUMENT TUPLE anyio's run_sync
+  received and then delegates to the real one, so it is simultaneously the transposed-argument
+  guard - pwdlib's recommended() docstring still shows verify(hash, password), a transposed call
+  raises UnknownHashError, and this adapter catches that into False, so a green round trip alone
+  cannot tell a correct call from one that always answers no
+- [Phase 05-05]: the throwaway password behind the dummy hash is generated with
+  secrets.token_urlsafe(32), one step beyond the plan, which forbids only a hard-coded ENCODED
+  Argon2 literal; generating the plaintext seed too means no string in the file reads as a
+  credential to anyone grepping the repository (T-5-03), at no cost since it is never compared
+- [Phase 05-05]: InvalidKeyError, PyJWTError and leeway=0 are argued in prose without being spelled
+  - the plan's own grep criteria require those literals to appear 1, 0 and 0 times - so tokens.py
+  says 'the library's own base exception class' and 'a leeway of zero'; the 01-03 prose-not-literal
+  convention applied to counters the plan itself wrote
+- [Phase 05-05]: SecurityResources' port annotations are pinned with typing.get_type_hints, because
+  annotating the fields with the concrete adapters would type-check and run identically - mypy
+  accepts them, they satisfy the ports - and the only thing it would break is the reason the
+  container exists; the no-I/O promise is likewise falsifiable, with socket and open replaced by
+  objects that raise and the builder called between them
+- [Phase 05-05]: both port bindings went to test_adapter_ports.py even though Task 1's <behavior>
+  lists the PasswordHasher one - that module's docstring already argues, about Clock, that asserting
+  a binding twice makes one port change look like two problems, and Task 3's <action> owns the file
+- [Phase 05-05]: requirement ticks AUTH-02/AUTH-04 deliberately NOT taken - 05-16 is the last
+  claimant, the seventh consecutive plan in this phase to make the same call, and this plan ships
+  two adapters and a container with no use case and no route above them
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -433,6 +464,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T15:20:49.136Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-09-19T15:39:00.000Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
