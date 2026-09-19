@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-09-PLAN.md
-last_updated: "2026-09-19T01:00:35.869Z"
+stopped_at: Completed 03-10-PLAN.md
+last_updated: "2026-09-19T01:26:54.001Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 24
-  percent: 92
+  completed_plans: 25
+  percent: 96
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 10 of 11
+Plan: 11 of 11
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█████████░] 92%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: [█████████░] 92%
 | Phase 03 P07 | 10min | 2 tasks | 3 files |
 | Phase 03 P08 | 13min | 3 tasks | 7 files |
 | Phase 03 P09 | 16min | 3 tasks | 11 files |
+| Phase 03 P10 | 19min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,15 @@ Recent decisions affecting current work:
 - [Phase 03-09]: The falsification run left a real row in taskmanager_test and had to be deleted by hand: test_dependencies.py deliberately runs OUTSIDE the D-01 rollback, which is the only arrangement in which an escaping write is visible
 - [Phase 03-09]: Requirement ticks DOCK-03/ARC-08/DB-01 deliberately NOT taken - 03-11 is the last claimant, the ninth consecutive plan in this phase to make the same call
 
+- [Phase 03-10]: The container readiness probe goes through SQLAlchemy's SYNC engine, never through libpq directly - DATABASE_URL carries a +psycopg driver token libpq reads as a connection-string syntax error, so the naive probe fails permanently on attempt 1 and the bounded loop then burns all thirty against a healthy database (Pitfall 2)
+- [Phase 03-10]: The probe's engine is built ONCE before the retry loop, against RESEARCH Pattern 7 - building it parses the URL, so inside the try a malformed DATABASE_URL is treated as transient and retried thirty times, which is Pitfall 2's own failure arriving from a second direction
+- [Phase 03-10]: ENTRYPOINT owns the program and CMD became the argument list (--host/--port): kept verbatim, the old full-command CMD would have been passed to the entrypoint and silently discarded, so `docker run <image> --port 9000` would have started on 8000 with no error
+- [Phase 03-10]: The `test` compose service carries profiles: ["test"], AGAINST the plan's explicit instruction - the plan's reason (a profile adds a flag the README must explain) was falsified live, since `docker compose run` enables the profiles of the service it names, while the cost of omitting it was observed: `docker compose up` started the whole pytest suite as a side effect of the evaluator's first command
+- [Phase 03-10]: The wait-for-database loop stays in the shell heredoc rather than becoming a module under src/taskmanager/ - that package's coverage has no omit and no pragma, so it would owe a unit test of a range(30) loop; the behaviour is proven instead by the cold-start rehearsal in evidence/03-10-cold-start.txt, which the entrypoint names by path
+- [Phase 03-10]: The healthcheck's wiring to the database was falsified, not asserted: `docker compose stop db` turns the container unhealthy and /health 503 within the retry window, and `start db` returns both to healthy - a liveness-only check would have stayed green throughout (T-3-33)
+- [Phase 03-10]: `docker compose down -v` does NOT remove containers of disabled profiles, so a `docker compose run test` without --rm survives a full reset; make down was left as plain `docker compose down` to match D-14
+- [Phase 03-10]: Requirement ticks DOCK-02/DOCK-03/DB-02 deliberately NOT taken - 03-11 is the last claimant, the tenth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -242,6 +252,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T00:58:00.000Z
-Stopped at: Completed 03-09-PLAN.md
+Last session: 2026-09-19T01:26:48.812Z
+Stopped at: Completed 03-10-PLAN.md
 Resume file: None
