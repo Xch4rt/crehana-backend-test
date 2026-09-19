@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-09-19T16:07:36.726Z"
-last_activity: 2026-09-19 -- Phase 05 plan 07 complete
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-09-19T16:25:41.339Z"
+last_activity: 2026-09-19 -- Phase 05 plan 08 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 45
-  percent: 83
+  completed_plans: 46
+  percent: 85
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 8 of 16
-Status: Executing Phase 05 (plans 01-07 complete; plan 08 next)
-Last activity: 2026-09-19 -- Phase 05 plan 07 complete
+Plan: 9 of 16
+Status: Executing Phase 05 (plans 01-08 complete; plan 09 next)
+Last activity: 2026-09-19 -- Phase 05 plan 08 complete
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -101,6 +101,7 @@ Progress: [████████░░] 83%
 | Phase 05 P05 | 14min | 3 tasks | 10 files |
 | Phase 05 P06 | 5min | 2 tasks | 7 files |
 | Phase 05 P07 | 16min | 3 tasks | 16 files |
+| Phase 05 P08 | 13min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -364,7 +365,6 @@ Recent decisions affecting current work:
 - [Phase 05-04]: requirement ticks AUTH-06/ASGN-01/ASGN-02 deliberately NOT taken - 05-16 is the
   last claimant, and this plan ships an application-layer rule with no route above it: nothing can
   set an assignee_id until 05-08, so no HTTP request yet produces this 403
-
 - [Phase 05-03]: full_name is trimmed but NOT lower-cased, the deliberate opposite of email - an
   address is an identity key uq_users_email_lower defends, while a display name keys nothing, is
   never looked up by, and its capitals belong to the person who typed them; no CHECK constraint on
@@ -401,7 +401,6 @@ Recent decisions affecting current work:
 - [Phase 05-03]: requirement ticks AUTH-01/ASGN-02/ASGN-03 deliberately NOT taken - 05-16 is the
   last claimant, the sixth consecutive plan in this phase to make the same call, and this plan ships
   a column and an index with no use case and no route above them
-
 - [Phase 05-05]: the plan's own alg=none construction cannot be built - jwt.encode(claims, secret,
   algorithm='HS256', headers={'alg':'none'}) raises InvalidKeyError at ENCODE time in PyJWT 2.14.0,
   because the library prepares the key for the header's algorithm; the forgery an attacker actually
@@ -431,7 +430,6 @@ Recent decisions affecting current work:
 - [Phase 05-05]: requirement ticks AUTH-02/AUTH-04 deliberately NOT taken - 05-16 is the last
   claimant, the seventh consecutive plan in this phase to make the same call, and this plan ships
   two adapters and a container with no use case and no route above them
-
 - [Phase 05-06]: JsonFormatter renders exc_info into an `exception` field, which neither the plan
   nor 05-RESEARCH Pattern 8 does - handlers.py logs the fixed 500 with exc_info=exc and its
   docstring promises the traceback reaches the log, exc_info is a RESERVED LogRecord attribute so
@@ -450,7 +448,6 @@ Recent decisions affecting current work:
 - [Phase 05-06]: requirement tick NOTF-02 deliberately NOT taken - 05-16 is the last claimant, the
   eighth consecutive plan in this phase to make the same call: nothing calls configure_logging()
   and nothing constructs LoggingEmailNotifier in production until 05-10 and 05-11
-
 - [Phase 05-07]: the 401 message moved onto AuthenticationError itself, as a ClassVar REFUSAL
   defaulted into __init__, and infrastructure/security/tokens.py lost its private _REFUSAL copy -
   D-11 requires a junk token and a token whose subject has no row to produce the same body, and
@@ -481,6 +478,35 @@ Recent decisions affecting current work:
 - [Phase 05-07]: requirement ticks AUTH-01/AUTH-02/AUTH-04/AUTH-05 deliberately NOT taken - 05-16
   is the last claimant, the ninth consecutive plan in this phase to make the same call, and these
   four use cases have no route above them until 05-11
+
+- [Phase 05-08]: NO noqa on the broad except in assign.py, against the plan and 05-RESEARCH - the
+  line was run with no suppression and flake8 exited 0, because the installed set (bugbear 26.9.9
+  + comprehensions + pep8-naming) has no check for the shape; BLE001 is a Ruff code and the one in
+  docker/entrypoint.sh sits in a heredoc flake8 never reads (evidence/05-08-broad-except-lint.txt)
+- [Phase 05-08]: the NOTF-01 ordering is proven from a shared event list, never from two counts of
+  one - a fake unit of work and a notifier that both append, asserting ['commit', 'send'], because
+  one commit and one send is equally true of a send that ran first, which is the outcome D-16 puts
+  the send outside the block to prevent
+- [Phase 05-08]: _ClosingUnitOfWork swaps in a user repository that raises on every method as its
+  block ends, so 'the address is captured INSIDE the block' is a failing test rather than a comment
+  - the dictionary fakes cannot otherwise model the port's documented RuntimeError after exit
+- [Phase 05-08]: the T-5-12 guard-ordering test produces BOTH stranger refusals and compares them
+  on class, code, details and message; a single assertion that an invented assignee id yields
+  TaskNotFoundError passes against an implementation that leaked the difference through a code the
+  assertion never read (the 04-09 / 05-04 comparative shape)
+- [Phase 05-08]: both no-op tests assert updated_at UNCHANGED as well as commits == 0 - Task.assign
+  and Task.unassign stamp unconditionally by design (05-01), so an implementation that returned
+  early after calling the mutator satisfies every counter while moving the timestamp
+- [Phase 05-08]: test_dtos.py gained a gate the plan did not ask for - the set of commands carrying
+  an assignee_id is derived from the whole table and must equal {AssignTaskCommand}; T-5-10's
+  mitigation rests on that uniqueness and the existing test asserted it of UpdateTaskCommand alone,
+  so a NEW command growing the field would have passed
+- [Phase 05-08]: for_update=True is spelled exactly twice in assign.py, one per write path, and the
+  two prose mentions that made the plan's counter print 4 were reworded rather than the counter
+  reinterpreted (the 04-05 precedent); list_for_assignee prints 1 and commit prints 0 in both reads
+- [Phase 05-08]: requirement ticks ASGN-01/ASGN-02/ASGN-03/NOTF-01/NOTF-03 deliberately NOT taken -
+  05-16 is the last claimant, the tenth consecutive plan in this phase to make the same call, and
+  these four use cases have no route above them until 05-11 and 05-12
 
 ### Pending Todos
 
@@ -516,6 +542,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T16:07:36.718Z
-Stopped at: Completed 05-07-PLAN.md
+Last session: 2026-09-19T16:25:41.333Z
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None
