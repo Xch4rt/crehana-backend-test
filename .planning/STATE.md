@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-09-19T06:31:59.677Z"
+stopped_at: Completed 04-11-PLAN.md
+last_updated: "2026-09-19T06:40:33.242Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 35
+  completed_plans: 36
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█████████░] 92%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Progress: [█████████░] 92%
 | Phase 04 P07 | 10min | 3 tasks | 7 files |
 | Phase 04 P08 | 11min | 3 tasks | 7 files |
 | Phase 04 P09 | 10min | 3 tasks | 3 files |
+| Phase 04 P11 | 14min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -300,6 +301,11 @@ Recent decisions affecting current work:
 - [Phase 04-09]: api_client deliberately does NOT enter the lifespan - get_uow is overridden so the engine built against the fictional DSN is never dialled, and tests/integration/test_health.py stays the one place the engine's own lifecycle is proven
 - [Phase 04-09]: acting_as is a restoring context manager rather than a one-way as_actor(app, id) setter, because a test that proved a 404 as a stranger and then asserted the owner's view would otherwise still be the stranger and pass for the wrong reason
 - [Phase 04-09]: requirement ticks LIST-01..LIST-06 deliberately NOT taken - 04-12 is the last claimant, the ninth consecutive plan in this phase to make the same call, though the behaviour those ticks rest on is now proved over HTTP
+- [Phase 04-11]: the seed step is numbered 2b and the entrypoint header was rewritten from 'Three steps' to name it - renumbering exec uvicorn to 4 would rename a step that has been step 3 since Phase 3 for the sake of a block Phase 5 deletes, so the letter carries the information instead
+- [Phase 04-11]: the comment banner DESCRIBES the rejected targeted conflict form rather than spelling it - the plan's own acceptance criteria require grep -c of that form to print 0, and a comment quoting it would have failed the gate while explaining itself perfectly (the 01-03 prose-not-literal convention)
+- [Phase 04-11]: the idempotence evidence carries a SECOND run the plan did not ask for - the same three executions against a targeted clause, where the third raises IntegrityError on uq_users_email_lower; executions 1 and 2 are byte-identical between the two forms, so a proof that only restarted with the same id would have passed against the form that aborts the container
+- [Phase 04-11]: the seed proof ran against taskmanager_test, never taskmanager - its third execution deliberately attempts a second row and its cleanup deletes by email, so pointing it at the database docker compose up serves would have put a destructive statement beside an evaluator's data for no gain
+- [Phase 04-11]: requirement tick LIST-01 deliberately NOT taken despite this plan's own frontmatter naming it - 04-12 is the last claimant of LIST-01..06 and TASK-01..08, the tenth consecutive plan in this phase to make the same call
 
 ### Pending Todos
 
@@ -333,6 +339,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:31:59.671Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-09-19T06:40:25.538Z
+Stopped at: Completed 04-11-PLAN.md
 Resume file: None
