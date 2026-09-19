@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — all four plans complete, awaiting phase verification
-last_updated: 2026-09-19T23:05:00.000Z
-last_activity: 2026-09-19 -- 06-04 complete: the coverage configuration is pinned by a test (each of seven weakenings falsified), tests/api/ folded into the two marker buckets, the partition made total and guarded at collection, ADR-085..091 written, TEST-01..05 ticked; make docker-test fixed after two phases broken and its 18-line coverage false negative closed with concurrency=[thread,greenlet]; 1078 passed, 100% on both interpreters
+stopped_at: Phase 6 executing (5 plans, 5 sequential waves) — the 06-VERIFICATION gap on SC-3 is closed by 06-05, awaiting phase re-verification
+last_updated: 2026-09-20T00:40:00.000Z
+last_activity: 2026-09-19 -- 06-05 complete (gap closure): the assertion-quality gate now resolves client.request(<verb>, ...) and treats a verb it cannot read as a mutation, so the 76-cell permission matrix is inside half (b) instead of invisible to it; every successful cell asserts the document its status promises and each of the ten mutating rows re-reads its change through the API, guarded both ways by ROWS_THAT_CONFIRM; ADR-096, one CLAUDE.md bullet, one incident entry; 1101 passed, 100.00% over 1659 statements, no src/ change
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 59
-  completed_plans: 59
+  total_plans: 60
+  completed_plans: 60
   percent: 100
 ---
 
@@ -27,28 +27,32 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: 4 of 4 complete (06-01, 06-02, 06-03, 06-04)
-Status: Executing Phase 06
-Last activity: 2026-09-19 -- 06-04 complete: the coverage number is defended by a test rather
-than by prose, every collected test sits in exactly one of the two marker buckets with a
-collection-time guard keeping it that way, ADR-085..091 and the CLAUDE.md Test quality section
-record every gate this phase added, and TEST-01..05 are ticked against named passing tests. The
-plan's own docker-test run found two defects nothing on the host could see: the test image had
-never received scripts/ (broken since 05-17), and coverage was under-reporting 18 executed
-router lines on Python 3.13 until greenlet was declared to it
+Plan: 5 of 5 complete (06-01, 06-02, 06-03, 06-04, 06-05)
+Status: Executing Phase 06 -- gap closed, awaiting re-verification
+Last activity: 2026-09-19 -- 06-05 complete, the gap closure 06-VERIFICATION.md asked for: the
+assertion-quality gate matched the attribute name, so the permission matrix's seventy-six
+mutations - all issued through client.request(cell.row.method, ...) - sat outside half (b) while
+the gate reported zero offenders, and the matrix's successful mutating cells asserted only that a
+challenge header was absent. The verb is now resolved from the call's first argument or its
+method= keyword and an unreadable verb counts as a mutation; every 2xx cell asserts the document
+its status promises; each of the ten mutating rows re-reads its change through the API, with
+ROWS_THAT_CONFIRM / ROWS_THAT_MUTATE_NOTHING compared both ways. Proved by removal: with the
+re-reads gone the widened gate names test_permission_matrix.py:704, where the same tree was green
+before. No src/ change - the gap was in what the suite proved, not in what the product did
 
 Progress: [██████████] 100%
 
 The ROADMAP phase checkbox for Phase 6, its Progress-table status cell and its completion
-date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phase 7 is not yet planned, so 59/59 means
+date are deliberately untouched: they belong to the orchestrator after RE-verification, which
+this plan does not perform and does not pre-empt.
+`total_plans` counts planned plans only - phase 7 is not yet planned, so 60/60 means
 "every plan written so far has been executed", not a finished milestone.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 59
+- Total plans completed: 60
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -62,7 +66,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
-| 06 | 4 | - | - |
+| 06 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -129,6 +133,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | Phase 06 P02 | 30min | 4 tasks | 7 files |
 | Phase 06 P03 | 22min | 4 tasks | 4 files |
 | Phase 06 P04 | 48min | 4 tasks | 12 files |
+| Phase 06 P05 | 25min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -883,6 +888,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T23:05:00.000Z
-Stopped at: Completed 06-04-PLAN.md
-Resume file: None - Phase 6 awaits verification
+Last session: 2026-09-20T00:40:00.000Z
+Stopped at: Completed 06-05-PLAN.md (gap closure)
+Resume file: None - Phase 6 awaits RE-verification of SC-3

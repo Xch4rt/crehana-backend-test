@@ -331,7 +331,7 @@ Plans:
 
 **Wave 5** *(gap closure, blocked on Wave 4 completion)*
 
-- [ ] 06-05-PLAN.md — The `client.request` blind spot in half (b), the matrix's success-cell body assertions and per-row re-reads, ADR-096 (closes the 06-VERIFICATION gap on SC-3)
+- [x] 06-05-PLAN.md — The `client.request` blind spot in half (b), the matrix's success-cell body assertions and per-row re-reads, ADR-096 (closes the 06-VERIFICATION gap on SC-3)
 
 ### Phase 7: Documentation & Delivery
 

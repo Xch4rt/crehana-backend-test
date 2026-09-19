@@ -4148,3 +4148,80 @@ section, or if the addopts contain `--no-cov` or `--cov-config`; and
   spellings by effect, which is why this is a message-quality gap rather than a hole.
 
 ---
+
+## ADR-096: a verb the assertion gate cannot read is a mutation, and the permission matrix confirms its own writes (2026-09-19, amending ADR-088)
+
+**Context**
+ADR-088's half (b) recognised a mutation by the *attribute name* — `post`, `put`, `patch`,
+`delete`. `tests/integration/api/test_permission_matrix.py` issues all of its mutations through
+one call, `client.request(cell.row.method, ...)`, which was recorded as the verb `"request"`: in
+`REQUEST_VERBS`, so the test counted as an HTTP test in scope, and in nothing the re-read check
+looked at. Every POST, PATCH, PUT and DELETE in a seventy-six-cell table was invisible to the rule
+while the gate reported zero offenders. The same test was thin where it succeeded: for the ten
+mutating rows the 2xx branch of `assert_the_body_the_status_promises` called only
+`assert_no_challenge_was_issued`, which asserts that a header and a content type are **absent** —
+a `DELETE` that answered 204 and deleted nothing passed, and so would a rename that renamed
+nothing.
+
+The phase's own code review found it (WR-02) and left it open; the phase's own verification
+confirmed it live and scored the phase 4/5 on it. A gate that is green while a real, unregistered
+offender exists is the exact failure mode ADR-088's module docstring warns about, and it was the
+first one this repository produced.
+
+**Options**
+
+- **Register a `no_reread` exemption for the matrix**, on the reading that its job is "who may
+  reach this route" and that persistence is proved next door. Rejected, and it could not have
+  worked anyway: the marker exempts only half (b), and half (a) — the body assertion — has no
+  exemption mechanism at all by design (D-07, ADR-088). Half of the gap was never exemptible. The
+  re-read half would have bought three lines and left the destructive rows proving only that
+  nothing complained.
+- **Resolve the verb, and add the assertions.** The matrix is parametrized over a table, so a
+  re-read keyed on the row is one field on `Row` plus one block in the test — and it turns ten rows
+  of "the handler said 201" into ten rows of "the row is in the database".
+
+**Decision**
+The second, both halves.
+
+`_verb_of(call, attribute)` resolves `client.request(...)` from its first positional argument or
+its `method=` keyword when that argument is a string literal in `REQUEST_VERBS`, so
+`request("GET", ...)` is a read and `request("DELETE", ...)` is a mutation. Anything else — an
+expression, a name, an f-string, an unrecognised spelling — stays `UNRESOLVED_VERB`, and
+`_mutates(verb)` treats it as a mutation. The asymmetry is the rule: a wrongly-mutating
+classification costs a re-read that was already the standard, a wrongly-reading one is a hole. Four
+planted-snippet self-tests pin the literal-mutating, literal-GET (including a generic GET used as
+the re-read after a `patch`), non-literal and unrecognised-verb cases on every run.
+
+In the matrix, `assert_the_success_document_says_what_was_asked_for` asserts that a 204 carries no
+body, that every field the request sent comes back equal, and that a `SECRET_FIELDS` value or any
+`form` value is absent from the whole response text; `Confirmation(path, shows)` and
+`Row.confirmation` attach one named re-read to each of the ten mutating rows, run as the caller
+that mutated (the owner standing in only for row 2, whose caller may be anonymous).
+`ROWS_THAT_CONFIRM` and `ROWS_THAT_MUTATE_NOTHING = {3}` — login, which writes no resource — are
+compared both ways by a guard test, with a published-path check and a non-vacuity check.
+
+**Consequences**
+
+- **A table-driven test can no longer hide from the gate.** Proved rather than asserted: with the
+  matrix's re-read block removed, the widened gate reports
+  `Offending tests: ['tests/integration/api/test_permission_matrix.py:704']`. Before the widening
+  the same tree was green.
+- **A new mutating row must say what a `GET` should show.** Adding one to `MATRIX` without a
+  `confirmation` fails `test_every_mutating_row_confirms_its_change_or_says_it_changes_nothing`,
+  which is the per-row granularity the gate itself cannot have: the gate's rule is per *test*, and
+  this module is one test parametrized seventy-six times.
+- **The rejected-mutation leg of D-06 is still the per-route modules'**, and is stated as a limit
+  rather than smoothed over: a refused cell reads nothing back, because the before-and-after pair
+  that says "unchanged" already lives in `test_task_lists.py`, `test_tasks.py` and
+  `test_assignment.py`. The matrix confirms only what succeeded.
+- **WR-03 is still open and is named as such.** A re-read whose result is discarded still satisfies
+  half (b): the gate sees the `client.get(...)` call, not whether its value reaches an `assert`.
+  Closing it means binding the call's target name, accepting the inline
+  `(await client.get(...)).json()` form only inside an `assert`, and re-auditing the 29 re-reads
+  the 06-02 sweep added for false positives. That is a gate redesign, no test in today's suite uses
+  the shape, and it is recorded in `06-REVIEW.md` rather than half-done here.
+- **No `src/` change.** Every one of the ten confirmations passed against the running API on the
+  first attempt, which is the outcome the per-route modules predicted and is worth recording: the
+  gap was in what the suite *proved*, not in what the product *did*.
+
+---

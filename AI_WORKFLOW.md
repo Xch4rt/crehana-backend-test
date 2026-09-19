@@ -1862,6 +1862,50 @@ This log is appended to at the end of every subsequent phase.
 
 ---
 
+### 2026-09-19 — The gate built to catch unread mutations could not see seventy-six of them
+
+**What happened.** Plan 06-02 shipped `tests/architecture/test_assertion_quality.py` with the claim
+that a test which issues POST, PUT, PATCH or DELETE and never reads the resource back fails the
+build. It passed, 28 tests, zero offenders. Phase verification then read the gate's own source
+against that claim and found a live counter-example already in the tree:
+`tests/integration/api/test_permission_matrix.py` drives every mutation of a seventy-six-cell table
+through a single call, `client.request(cell.row.method, ...)`, and the gate classified a request by
+the **attribute name** — so the verb it recorded was `"request"`. That string is in `REQUEST_VERBS`,
+so the test counted as an in-scope HTTP test; it is in nothing the re-read check looks at, so every
+mutation the table makes was invisible. The test carried no exemption marker and was not in
+`REQUIRED_NO_REREAD`. It was simply outside the rule's field of view.
+
+The second half was worse in kind, because it needed no blind spot to hide. For the ten mutating
+rows, the success branch of the matrix's assertion helper called only
+`assert_no_challenge_was_issued` — a check that a `WWW-Authenticate` header and a `problem+json`
+content type are **absent**. A `DELETE` that answered 204 and deleted nothing satisfies that
+exactly as well as one that worked, and so does a rename that renamed nothing.
+
+**Why it was missed.** Twenty of the gate's twenty-eight tests are planted snippets, which is the
+practice this project adopted precisely so that a gate's rules get tested like code. Every one of
+those twenty planted a verb spelled as an attribute — `client.post`, `client.patch`,
+`client.delete`. The suite's one generic caller was never planted, so the rule was exercised
+thoroughly against the shape its author had in mind and not once against the shape that existed
+three directories away. The plan's own summary even lists `test_permission_matrix.py` in the
+offender table with "1 offender, 1 exempt", which is true of the login test and says nothing about
+the parametrized one.
+
+**What changed.** The gate resolves `client.request(...)` from its first positional argument or its
+`method=` keyword, and treats a verb it cannot read as a **mutation** rather than as nothing — a
+non-literal verb must never be a way out of a gate. The matrix now asserts its success documents
+and attaches a named re-read to each of its ten mutating rows, with a totality guard so a row added
+later without one fails. Both are proved by removal: with the re-reads taken out, the widened gate
+names `tests/integration/api/test_permission_matrix.py:704`, where before the widening the same
+tree was green. No `src/` change was needed — every confirmation passed against the real API first
+time, so the defect was entirely in what the suite proved, never in what the product did.
+
+**The rule:** a gate's blind spot is defined by the shapes it was tested against, not by the shapes
+it claims to cover. Planted snippets are what make a rule executable, and they are also where its
+author's assumptions go to hide — so the shapes to plant are the ones the real tree uses, found by
+grepping for them, not the ones that came to mind while writing the rule.
+
+---
+
 ## What I Did Not Do
 
 The scope that was deliberately left out, and the shortcuts that were considered and rejected —

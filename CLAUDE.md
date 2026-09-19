@@ -464,11 +464,23 @@ phases and each one turned out to be partly untrue the first time it was checked
 - **Assertion quality.** Every test under `tests/integration/api/` that issues a request must
   assert on something the API said — a response member, a name tainted from one, a named
   `Response`-taking helper, or a recorded side-effect fixture it declares — and every test that
-  mutates must read the resource back with a `GET` after its last mutation. The only exemption is
-  from the second half: `@pytest.mark.no_reread("<reason>")`, whose node id must appear in
-  `REQUIRED_NO_REREAD`, and which fails the build the moment it stops being *necessary*. Enforced
-  by `tests/architecture/test_assertion_quality.py` (ADR-088). The rule is per **test**, not per
-  **response**.
+  mutates must read the resource back with a `GET` after its last mutation. A mutation is
+  recognised by its **verb**, not by the attribute name: `client.request(<verb>, ...)` is resolved
+  from its first positional argument or its `method=` keyword, and a verb the gate cannot read — an
+  expression, a name, an unrecognised spelling — counts as a mutation, because a non-literal verb
+  must never be a way *out* of the rule (that is how a seventy-six-cell table of mutations once sat
+  outside it while the gate reported zero offenders). The only exemption is from the second half:
+  `@pytest.mark.no_reread("<reason>")`, whose node id must appear in `REQUIRED_NO_REREAD`, and
+  which fails the build the moment it stops being *necessary*. Enforced by
+  `tests/architecture/test_assertion_quality.py` (ADR-088, ADR-096). The rule is per **test**, not
+  per **response** — the one honest limit, kept. In `test_permission_matrix.py` the standard is
+  applied per **row**: every successful cell asserts the document the status promises (the fields
+  the request sent come back, a 204 carries no body, a submitted credential never appears in the
+  response text) and every mutating row carries a `Confirmation` that re-reads the resource and
+  asserts the end state, including the 404 a deleted one answers. A mutating row added without one
+  fails `test_every_mutating_row_confirms_its_change_or_says_it_changes_nothing`, and
+  `ROWS_THAT_MUTATE_NOTHING` — the login row, which writes no resource — is the only named
+  exception. The refused cells read nothing back: the "unchanged" leg stays the per-route modules'.
 - **The spot check may write to `src/`, and nothing else may.** `scripts/break-check.sh` refuses to
   start unless `git status --porcelain -- src/` is empty, restores through a trap installed before
   the first mutation — `trap cleanup EXIT` **plus every signal by name**, `HUP INT QUIT TERM`,
