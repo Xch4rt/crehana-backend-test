@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from taskmanager.domain.entities.user import User
-from taskmanager.domain.exceptions import EmailAlreadyRegisteredError
+from taskmanager.domain.exceptions import EmailAlreadyRegisteredError, ValidationError
 from taskmanager.infrastructure.db.constraints import UQ_USERS_EMAIL_LOWER
 from taskmanager.infrastructure.db.models import UserRow
 from taskmanager.infrastructure.db.repositories.users import SqlAlchemyUserRepository
@@ -35,6 +35,12 @@ pytestmark = pytest.mark.integration
 USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 OTHER_USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
 MISSING_USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000ff")
+# Three accounts for the ordering test, named for their expected places rather
+# than for the order they are written in: the two tied ids differ only in their
+# last digit, which is what the `id` tie-break has to notice.
+OLDEST_USER_ID = uuid.UUID("00000000-0000-4000-8000-00000000000a")
+TIED_LOWER_USER_ID = uuid.UUID("00000000-0000-4000-8000-00000000000b")
+TIED_HIGHER_USER_ID = uuid.UUID("00000000-0000-4000-8000-00000000000c")
 
 NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
 EARLIER = datetime(2026, 3, 13, 9, 0, 0, tzinfo=UTC)
@@ -42,8 +48,8 @@ EARLIER = datetime(2026, 3, 13, 9, 0, 0, tzinfo=UTC)
 PASSWORD_HASH = "argon2-placeholder-hash-value"
 EMAIL = "owner@example.test"
 OTHER_EMAIL = "other@example.test"
+THIRD_EMAIL = "third@example.test"
 FULL_NAME = "Ada Lovelace"
-OTHER_FULL_NAME = "Grace Hopper"
 
 
 def refused(session: AsyncSession) -> AsyncSessionTransaction:
@@ -260,6 +266,76 @@ async def test_list_all_returns_every_user_in_creation_order(
     stored = await repository.list_all()
 
     assert [user.email for user in stored] == [OTHER_EMAIL, EMAIL]
+
+
+async def test_a_full_name_round_trips_through_both_read_paths(
+    session: AsyncSession,
+) -> None:
+    """AUTH-01: the stored name is the trimmed one, read back from the server.
+
+    Asserted through `get` and through `get_by_email` rather than off the
+    entity `add()` was handed: the entity trims in `__post_init__`, so checking
+    the object that went in would pass against a column that was never written
+    and against a mapper that silently dropped the field. Both read paths are
+    exercised because each builds its own entity out of its own row.
+    """
+    repository = SqlAlchemyUserRepository(session)
+
+    await repository.add(a_user(full_name="  Ada  Lovelace  "))
+
+    by_id = await repository.get(USER_ID)
+    by_email = await repository.get_by_email(EMAIL)
+
+    assert by_id is not None
+    assert by_email is not None
+    assert by_id.full_name == "Ada  Lovelace"
+    assert by_email.full_name == "Ada  Lovelace"
+
+
+async def test_an_over_length_full_name_never_reaches_the_database(
+    session: AsyncSession,
+) -> None:
+    """The entity is the gate and `VARCHAR(100)` is only the backstop (T-5-13).
+
+    A 101-character name raises before a repository is even asked, so no
+    statement is issued and no savepoint is needed - which is the whole
+    difference between a value refused by this application and a value refused
+    by PostgreSQL. The database would truncate nothing and raise a
+    `StringDataRightTruncation` that reaches a client as the fixed 500; the
+    entity answers a 422 naming the field instead.
+    """
+    with pytest.raises(ValidationError) as raised:
+        a_user(full_name="x" * (User.FULL_NAME_MAX_LENGTH + 1))
+
+    assert raised.value.details == {"field": "full_name"}
+
+
+async def test_list_all_orders_three_users_by_created_at_then_id(
+    session: AsyncSession,
+) -> None:
+    """The adapter-side counterpart of 05-02's fake fix (D-25, ASGN-03).
+
+    Three accounts, two of them sharing an instant to the microsecond, written
+    in an order that disagrees with the expected answer on both axes - so
+    neither insertion order nor a sort on `created_at` alone can produce it.
+    The two-row tests above and below each pin one axis; only three rows with a
+    tie in the middle pin the composite, and the user directory ASGN-03 serves
+    is paged off exactly this order.
+    """
+    repository = SqlAlchemyUserRepository(session)
+    await repository.add(a_user(user_id=TIED_HIGHER_USER_ID, email=EMAIL))
+    await repository.add(
+        a_user(user_id=OLDEST_USER_ID, email=OTHER_EMAIL, created_at=EARLIER)
+    )
+    await repository.add(a_user(user_id=TIED_LOWER_USER_ID, email=THIRD_EMAIL))
+
+    stored = await repository.list_all()
+
+    assert [user.id for user in stored] == [
+        OLDEST_USER_ID,
+        TIED_LOWER_USER_ID,
+        TIED_HIGHER_USER_ID,
+    ]
 
 
 async def test_list_all_breaks_a_tie_on_created_at_with_the_id(

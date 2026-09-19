@@ -137,6 +137,16 @@ alembic upgrade head
 # installs the `taskmanager` package into /opt/venv, and importing from
 # `presentation` is legal for a consumer at the `main` level of the layer order.
 #
+# Why `full_name` is listed. Revision 0002 added it `NOT NULL` (AUTH-01), and a
+# column list that omits it makes this INSERT a NotNullViolation - which, under
+# `set -eu`, aborts the container before it ever serves. The conflict clause
+# cannot save it either: PostgreSQL checks NOT NULL while building the candidate
+# row, before the arbiter index is consulted, so even a restart whose row is
+# already present fails. Observed live against the compose database, captured in
+# .planning/phases/05-auth-assignment-notifications/evidence/05-03-live-upgrade.txt,
+# and this is the fix. The value is a label rather than a name, for the same
+# reason the hash below is `!`: this identity is scaffolding.
+#
 # Why the password hash is not a credential. The value stored is `!`, which is
 # not a valid Argon2 encoded hash, so a pwdlib verification against it can never
 # succeed - this identity cannot become a live account when the login endpoint
@@ -155,8 +165,9 @@ from taskmanager.presentation.api.actor import DEMO_USER_ID
 
 SEED = text(
     """
-    INSERT INTO users (id, email, password_hash, created_at, updated_at)
-    VALUES (:id, :email, :password_hash, :now, :now)
+    INSERT INTO users
+        (id, email, full_name, password_hash, created_at, updated_at)
+    VALUES (:id, :email, :full_name, :password_hash, :now, :now)
     ON CONFLICT DO NOTHING
     """
 )
@@ -169,6 +180,7 @@ with engine.begin() as connection:
         {
             "id": DEMO_USER_ID,
             "email": "demo@taskmanager.local",
+            "full_name": "Demo User",
             "password_hash": "!",
             "now": now,
         },

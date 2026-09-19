@@ -1,0 +1,170 @@
+05-03: revision 0002 applied to a POPULATED database
+
+The integration suite proves 0002 against taskmanager_test, which
+migrated_database empties (downgrade base) before every session - so the
+suite never exercises the one case the transient server_default exists for:
+a NOT NULL column arriving in a table that already holds rows. The compose
+database does hold one, the Phase 4 demo-seed account, and it was still at
+0001. This is that run, through the container's own entrypoint
+(docker/entrypoint.sh -> alembic upgrade head), not through a hand-typed
+statement. Nothing was dropped and no volume was removed.
+
+$ date -u
+Sat Sep 19 15:17:53 UTC 2026
+
+=== BEFORE ===
+$ docker compose exec -T db psql -U taskmanager -d taskmanager
+ version_num
+-------------
+ 0001
+(1 row)
+
+                  id                  |         email          |          created_at
+--------------------------------------+------------------------+-------------------------------
+ 00000000-0000-4000-8000-00000000de00 | demo@taskmanager.local | 2026-09-19 06:37:25.267848+00
+(1 row)
+
+                           Table "public.users"
+    Column     |           Type           | Collation | Nullable | Default
+---------------+--------------------------+-----------+----------+---------
+ id            | uuid                     |           | not null |
+ email         | character varying(320)   |           | not null |
+ password_hash | character varying(512)   |           | not null |
+ created_at    | timestamp with time zone |           | not null |
+ updated_at    | timestamp with time zone |           | not null |
+Indexes:
+    "pk_users" PRIMARY KEY, btree (id)
+    "uq_users_email_lower" UNIQUE, btree (lower(email::text))
+Referenced by:
+    TABLE "task_lists" CONSTRAINT "fk_task_lists_owner_id_users" FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "tasks" CONSTRAINT "fk_tasks_assignee_id_users" FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+
+
+=== UPGRADE ===
+$ docker compose up -d api   # entrypoint runs: alembic upgrade head
+ Container test-db-1 Healthy
+ Container test-api-1 Starting
+ Container test-api-1 Started
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, full_name and the assignee index
+
+=== AFTER ===
+ version_num
+-------------
+ 0002
+(1 row)
+
+                  id                  |         email          | full_name
+--------------------------------------+------------------------+-----------
+ 00000000-0000-4000-8000-00000000de00 | demo@taskmanager.local | Unnamed
+(1 row)
+
+                           Table "public.users"
+    Column     |           Type           | Collation | Nullable | Default
+---------------+--------------------------+-----------+----------+---------
+ id            | uuid                     |           | not null |
+ email         | character varying(320)   |           | not null |
+ password_hash | character varying(512)   |           | not null |
+ created_at    | timestamp with time zone |           | not null |
+ updated_at    | timestamp with time zone |           | not null |
+ full_name     | character varying(100)   |           | not null |
+Indexes:
+    "pk_users" PRIMARY KEY, btree (id)
+    "uq_users_email_lower" UNIQUE, btree (lower(email::text))
+Referenced by:
+    TABLE "task_lists" CONSTRAINT "fk_task_lists_owner_id_users" FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "tasks" CONSTRAINT "fk_tasks_assignee_id_users" FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+
+                           Table "public.tasks"
+    Column    |           Type           | Collation | Nullable | Default
+--------------+--------------------------+-----------+----------+---------
+ id           | uuid                     |           | not null |
+ task_list_id | uuid                     |           | not null |
+ title        | character varying(200)   |           | not null |
+ description  | character varying(2000)  |           |          |
+ status       | character varying(16)    |           | not null |
+ priority     | character varying(16)    |           | not null |
+ due_date     | timestamp with time zone |           |          |
+ assignee_id  | uuid                     |           |          |
+ created_at   | timestamp with time zone |           | not null |
+ updated_at   | timestamp with time zone |           | not null |
+ completed_at | timestamp with time zone |           |          |
+Indexes:
+    "pk_tasks" PRIMARY KEY, btree (id)
+    "ix_tasks_assignee_id" btree (assignee_id)
+    "ix_tasks_task_list_id" btree (task_list_id)
+Check constraints:
+    "ck_tasks_completed_at_matches_status" CHECK ((status::text = 'completed'::text) = (completed_at IS NOT NULL))
+    "ck_tasks_priority" CHECK (priority::text = ANY (ARRAY['low'::character varying, 'medium'::character varying, 'high'::character varying]::text[]))
+    "ck_tasks_status" CHECK (status::text = ANY (ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying]::text[]))
+Foreign-key constraints:
+    "fk_tasks_assignee_id_users" FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+    "fk_tasks_task_list_id_task_lists" FOREIGN KEY (task_list_id) REFERENCES task_lists(id) ON DELETE CASCADE
+
+
+The existing row survived and was filled by the transient default, which is
+itself gone: the Default column of users.full_name above is empty, so
+alembic check sees no drift against models.py. The api container answered
+/health afterwards, so the schema the application runs on is this one.
+
+$ curl -s localhost:8000/health
+
+
+=== THE BUG THIS RUN FOUND, AND ITS FIX ===
+
+The first restart after the upgrade did NOT reach healthy. Step 2b of
+docker/entrypoint.sh - the Phase 4 demo seed - names its columns by hand,
+and full_name was not among them:
+
+  sqlalchemy.exc.IntegrityError: (psycopg.errors.NotNullViolation) null
+  value in column "full_name" of relation "users" violates not-null
+  constraint
+  DETAIL:  Failing row contains (00000000-0000-4000-8000-00000000de00,
+  demo@taskmanager.local, !, 2026-09-19 15:18:04.798065+00,
+  2026-09-19 15:18:04.798065+00, null).
+
+ON CONFLICT DO NOTHING did not absorb it, and could not have: PostgreSQL
+checks NOT NULL while building the candidate row, before the arbiter index is
+consulted, so the clause never runs. The container aborted under set -eu and
+docker compose up was broken - the project's core value, in one column.
+
+No test in the suite could have caught this. The suite migrates
+taskmanager_test and never runs the entrypoint, and the entrypoint is a
+heredoc rather than a module under src/taskmanager (ADR-037), so nothing
+imports its INSERT. This is the cold-start rehearsal doing the job ADR-037
+says it is there for.
+
+$ docker compose build api && docker compose up -d api   # with the fix
+api Up 24 seconds (healthy)
+db Up 9 hours (healthy)
+
+$ curl -s localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}
+
+$ docker compose exec -T db psql -U taskmanager -d taskmanager
+ version_num
+-------------
+ 0002
+(1 row)
+
+                  id                  |         email          | full_name
+--------------------------------------+------------------------+-----------
+ 00000000-0000-4000-8000-00000000de00 | demo@taskmanager.local | Unnamed
+(1 row)
+
+
+The seeded row still reads 'Unnamed', not 'Demo User', and that is correct:
+the row already existed, so ON CONFLICT DO NOTHING absorbed the insert and
+the value is the one revision 0002's transient default wrote. A fresh volume
+gets 'Demo User'. Both paths end with a healthy container, which is the
+property that matters.
+
+$ docker compose exec -T api alembic check   # against the live app database
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.defaults
+INFO  [alembic.runtime.plugins] setting up autogenerate plugin alembic.autogenerate.comments
+No new upgrade operations detected.
+
+$ docker compose restart api   # step 2b runs a second time
+api Up 12 seconds (healthy)
+db Up 9 hours (healthy)
