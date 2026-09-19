@@ -1,0 +1,22 @@
+TDD RED - plan 05-07, Task 1: the four auth commands and the two auth results
+Run at 2026-09-19T15:52:49Z, with the four commands and the two results absent
+from src/taskmanager/application/dto/.
+
+$ .venv/bin/pytest tests/unit/application/test_dtos.py -q --no-cov
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/unit/application/test_dtos.py _____________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/application/test_dtos.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/application/test_dtos.py:35: in <module>
+    from taskmanager.application.dto.commands import (
+E   ImportError: cannot import name 'AuthenticateActorCommand' from 'taskmanager.application.dto.commands' (/Users/xch4rt/work/myself/crehana/test/src/taskmanager/application/dto/commands.py)
+=========================== short test summary info ============================
+ERROR tests/unit/application/test_dtos.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.10s
+exit status: 2

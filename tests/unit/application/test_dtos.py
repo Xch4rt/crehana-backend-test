@@ -12,7 +12,12 @@ slotted dataclass raises `FrozenInstanceError` for an undeclared name on CPython
 
 *The `actor_id` convention*: `commands.py` states that every command names the
 actor first. A test reads that back off `dataclasses.fields`, so the convention
-is a gate rather than a paragraph.
+is a gate rather than a paragraph. Phase 5 adds the first three commands that
+cannot honour it - the two unauthenticated ones and the one whose whole job is
+to *produce* an actor - so the gate now runs over every command except a named
+exemption set, and a second test derives that set from the table and compares
+it to the declaration. Adding a fourth actor-less command is therefore a
+deliberate edit in two places rather than a test that quietly stops covering it.
 
 *The sentinel*: the two update commands must be able to say "omitted" and "set
 to null" and be believed differently (D-05). mypy proves the narrowing; these
@@ -28,25 +33,32 @@ from uuid import UUID
 import pytest
 
 from taskmanager.application.dto.commands import (
+    AuthenticateActorCommand,
     CreateTaskCommand,
     CreateTaskListCommand,
     DeleteTaskCommand,
     DeleteTaskListCommand,
+    GetProfileCommand,
     GetTaskCommand,
     GetTaskListCommand,
     ListTaskListsCommand,
     ListTasksCommand,
+    LoginCommand,
+    RegisterUserCommand,
     UpdateTaskCommand,
     UpdateTaskListCommand,
 )
 from taskmanager.application.dto.results import (
+    AccessTokenResult,
     TaskCollectionResult,
     TaskListResult,
     TaskResult,
+    UserResult,
 )
 from taskmanager.application.dto.unset import UNSET
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.completion import CompletionStats
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
@@ -59,11 +71,24 @@ ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 
+# The auth vocabulary's fixtures. `PASSWORD` is a literal in a test table and
+# nowhere else: no command stores it, no result carries it, and the only thing
+# asserted about it is that the frozen dataclass refuses to have it rewritten.
+EMAIL = "ana@example.com"
+FULL_NAME = "Ana Torres"
+PASSWORD = "a-long-enough-password"
+TOKEN = "header.payload.signature"
+HASH = "argon2-encoded-hash"
+
 # Attribute names live in constants so mypy does not reject the very assignment
-# the immutability tests exist to observe failing at runtime.
+# the immutability tests exist to observe failing at runtime - and so
+# flake8-bugbear's B010 does not reject the `setattr` call for having a
+# constant name, which it would if the string were written inline.
 UNDECLARED_FIELD = "actor"
 DECLARED_RESULT_FIELD = "name"
 DECLARED_COLLECTION_FIELD = "total_tasks"
+DECLARED_USER_FIELD = "email"
+DECLARED_TOKEN_FIELD = "access_token"
 
 # Each case is one command instance and the name of a field the immutability
 # test tries to overwrite. The tuple is annotated `Any` because the ten commands
@@ -126,9 +151,31 @@ COMMAND_CASES: Final[tuple[tuple[Any, str], ...]] = (
         ),
         "task_id",
     ),
+    (
+        RegisterUserCommand(email=EMAIL, full_name=FULL_NAME, password=PASSWORD),
+        "email",
+    ),
+    (LoginCommand(email=EMAIL, password=PASSWORD), "password"),
+    (AuthenticateActorCommand(token=TOKEN), "token"),
+    (GetProfileCommand(actor_id=ACTOR_ID), "actor_id"),
 )
 
 COMMAND_IDS: Final[list[str]] = [type(case[0]).__name__ for case in COMMAND_CASES]
+
+# The three commands `commands.py` exempts from the actor-first rule, declared
+# here as types rather than inferred, so the exemption is something a reader can
+# find and a fourth one cannot arrive by accident: the test below derives the
+# same set from the table and fails if the two disagree.
+ACTORLESS_COMMANDS: Final[frozenset[type]] = frozenset(
+    {RegisterUserCommand, LoginCommand, AuthenticateActorCommand}
+)
+
+ACTOR_FIRST_CASES: Final[tuple[tuple[Any, str], ...]] = tuple(
+    case for case in COMMAND_CASES if type(case[0]) not in ACTORLESS_COMMANDS
+)
+ACTOR_FIRST_IDS: Final[list[str]] = [
+    type(case[0]).__name__ for case in ACTOR_FIRST_CASES
+]
 
 
 @pytest.mark.parametrize(("command", "declared_field"), COMMAND_CASES, ids=COMMAND_IDS)
@@ -159,7 +206,9 @@ def test_a_command_rejects_an_undeclared_attribute(
     assert not hasattr(command, "__dict__")
 
 
-@pytest.mark.parametrize(("command", "declared_field"), COMMAND_CASES, ids=COMMAND_IDS)
+@pytest.mark.parametrize(
+    ("command", "declared_field"), ACTOR_FIRST_CASES, ids=ACTOR_FIRST_IDS
+)
 def test_a_command_names_the_actor_first(command: Any, declared_field: str) -> None:
     """The `commands.py` convention, read back off the dataclass rather than
     off the docstring that states it.
@@ -167,10 +216,50 @@ def test_a_command_names_the_actor_first(command: Any, declared_field: str) -> N
     It comes first because everything a use case may see or change derives from
     it: a command that acquired the actor later, or from a body, would be a
     command that could authorize itself (T-4-18).
+
+    The three commands of `ACTORLESS_COMMANDS` are excluded, and the test below
+    is what keeps that exclusion honest.
     """
     field_names = [field.name for field in fields(type(command))]
 
     assert field_names[0] == "actor_id"
+
+
+def test_only_the_three_unauthenticated_commands_omit_the_actor() -> None:
+    """The exemption set, derived from the table and compared to the declaration.
+
+    Without this, a later command that simply forgot `actor_id` could be added
+    to `ACTORLESS_COMMANDS` - or the filter could silently start skipping it -
+    and the convention would decay one command at a time. Here the two have to
+    agree, so an exemption is a decision someone wrote down.
+    """
+    without_actor = {
+        type(command)
+        for command, _ in COMMAND_CASES
+        if "actor_id" not in {field.name for field in fields(type(command))}
+    }
+
+    assert without_actor == ACTORLESS_COMMANDS
+    # And the one that carries a credential-adjacent value carries nothing else:
+    # `AuthenticateActorCommand` exists to *produce* an actor, so a second field
+    # would be something the caller got to assert about themselves.
+    assert [field.name for field in fields(AuthenticateActorCommand)] == ["token"]
+
+
+def test_no_auth_command_can_nominate_an_identity_it_was_not_given() -> None:
+    """T-5-09: registration's surface is exactly three caller-supplied fields.
+
+    No `id`, no `created_at`, no role and no `password_hash`: the identifier
+    comes from `uuid4()` in the use case and the timestamps from the `Clock`
+    port, so a body cannot choose either. Asserted as a whole field list rather
+    than one absent name at a time, because a mass-assignment surface is a set.
+    """
+    assert [field.name for field in fields(RegisterUserCommand)] == [
+        "email",
+        "full_name",
+        "password",
+    ]
+    assert [field.name for field in fields(LoginCommand)] == ["email", "password"]
 
 
 def test_the_task_patch_command_cannot_express_a_status_change() -> None:
@@ -453,3 +542,96 @@ def test_an_empty_task_collection_reports_zero_percent() -> None:
 
     assert result.items == ()
     assert result.completion_percentage == 0.0
+
+
+def _user() -> User:
+    """One registered account, with a hash that must not reach a result."""
+    return User(
+        id=ACTOR_ID,
+        email=EMAIL,
+        full_name=FULL_NAME,
+        password_hash=HASH,
+        created_at=NOW,
+        updated_at=LATER,
+    )
+
+
+def test_a_user_result_copies_the_four_public_fields() -> None:
+    """D-09's profile shape: id, email, full_name, created_at, and nothing else."""
+    user = _user()
+
+    result = UserResult.from_entity(user)
+
+    assert result.id == user.id
+    assert result.email == user.email
+    assert result.full_name == user.full_name
+    assert result.created_at == user.created_at
+    assert [field.name for field in fields(UserResult)] == [
+        "id",
+        "email",
+        "full_name",
+        "created_at",
+    ]
+
+
+def test_a_user_result_has_no_field_a_password_hash_could_travel_in() -> None:
+    """T-5-04, asserted against `dataclasses.fields` rather than `hasattr`.
+
+    `hasattr` would pass against a result that kept the hash under any other
+    name, and against a slotted class carrying it as a non-field attribute. The
+    field list is the thing a response schema maps from, so the field list is
+    what has to be free of it - and `updated_at` is absent too, because the
+    profile answer never had a reason to publish it.
+    """
+    field_names = {field.name for field in fields(UserResult)}
+
+    assert "password_hash" not in field_names
+    assert "password" not in field_names
+    assert "updated_at" not in field_names
+
+
+def test_a_user_result_cannot_be_edited_on_its_way_out() -> None:
+    """frozen and slotted, exactly like every other result (ADR-020)."""
+    result = UserResult.from_entity(_user())
+
+    with pytest.raises(FrozenInstanceError) as excinfo:
+        setattr(result, DECLARED_USER_FIELD, "someone.else@example.com")
+
+    assert DECLARED_USER_FIELD in str(excinfo.value)
+    assert not hasattr(result, "__dict__")
+
+    with pytest.raises((AttributeError, TypeError)):
+        setattr(result, UNDECLARED_FIELD, ACTOR_ID)
+
+
+def test_an_access_token_result_carries_the_three_wire_fields() -> None:
+    """The login answer, in the shape OAuth2 clients and Swagger expect.
+
+    `token_type` is the lowercase literal `bearer`; `expires_in` is a number of
+    seconds. Both are wire-format obligations, so both are asserted here rather
+    than left to the route that builds the response.
+    """
+    result = AccessTokenResult(access_token=TOKEN, token_type="bearer", expires_in=1800)
+
+    assert result.access_token == TOKEN
+    assert result.token_type == "bearer"
+    assert result.expires_in == 1800
+    assert [field.name for field in fields(AccessTokenResult)] == [
+        "access_token",
+        "token_type",
+        "expires_in",
+    ]
+
+
+def test_an_access_token_result_cannot_be_edited_on_its_way_out() -> None:
+    """Frozen and slotted: a token cannot be swapped after the use case built it."""
+    result = AccessTokenResult(access_token=TOKEN, token_type="bearer", expires_in=1800)
+
+    with pytest.raises(FrozenInstanceError) as excinfo:
+        setattr(result, DECLARED_TOKEN_FIELD, "another.token.entirely")
+
+    assert DECLARED_TOKEN_FIELD in str(excinfo.value)
+    assert not hasattr(result, "__dict__")
+
+    with pytest.raises((AttributeError, TypeError)):
+        setattr(result, UNDECLARED_FIELD, ACTOR_ID)

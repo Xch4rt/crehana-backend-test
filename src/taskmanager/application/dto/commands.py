@@ -9,6 +9,15 @@ case is allowed to see or change derives from that one field, which is why it
 comes first: a command missing it would fail construction rather than quietly
 authorize itself.
 
+Phase 5 introduces the only three exceptions, all of them in the auth section
+at the bottom of this file: `RegisterUserCommand` and `LoginCommand` run before
+an identity exists, and `AuthenticateActorCommand` is the one whose result *is*
+the actor. They are exceptions to the field, never to the rule - none of them
+lets a caller name an identity they were not given - and each says so in its
+own docstring. `test_dtos.py` holds the same three in an exemption set and
+derives that set back off the command table, so the convention stays a gate for
+the other eleven rather than decaying into a preference.
+
 The use case, never the router, then decides visibility versus permission per
 ADR-008 - 404 for a resource the actor cannot see, 403 for one they can see but
 may not change. Putting that in the router would scatter the rule across every
@@ -203,3 +212,94 @@ class ChangeTaskStatusCommand:
     task_list_id: UUID
     task_id: UUID
     new_status: TaskStatus
+
+
+# ---------------------------------------------------------------------------
+# Auth
+#
+# Three of the four commands below carry no `actor_id`, which the module
+# docstring above declares as the universal rule. They are the only exceptions
+# in the project and each one states its own reason: two of them run before an
+# identity exists, and the third is the one whose entire job is to produce the
+# identity every other command starts with. `test_dtos.py` names the same three
+# in an exemption set and derives that set back off the command table, so a
+# fourth cannot join them by being forgotten.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class RegisterUserCommand:
+    """Ask for a new account (AUTH-01).
+
+    **No `actor_id`, and no way to add one.** This is the operation that
+    *creates* an identity, so there is no authenticated caller to name: the
+    endpoint is open by definition and everything here is attacker-controlled.
+    The three fields are the whole surface a request gets to influence - there
+    is no `id`, no `created_at` and no role - because the identifier comes from
+    `uuid4()` in the use case and the timestamps from the `Clock` port (T-5-09).
+
+    `password` is a plain `str` rather than Pydantic's redacting secret-string
+    type, and that is worth writing down because nothing would fail if it were
+    not: `.importlinter` deliberately leaves `pydantic` off this layer's
+    forbidden list, as a convention rather than a gate. The convention is
+    ADR-020's - every DTO is a frozen dataclass and the application layer names
+    no validation library - so the wrapper stays on the schema side, where
+    `to_command()` unwraps it on the way in. The plaintext lives for exactly as long
+    as it takes `RegisterUser` to hand it to the `PasswordHasher` port; the
+    domain never sees it and no result carries it.
+    """
+
+    email: str
+    full_name: str
+    password: str
+
+
+@dataclass(frozen=True, slots=True)
+class LoginCommand:
+    """Ask for an access token in exchange for a credential (AUTH-02).
+
+    **No `actor_id`** for the same reason `RegisterUserCommand` has none: the
+    caller has not been identified yet, and this is the operation that
+    identifies them. A command that carried an actor here would be a command
+    that authenticated itself.
+
+    `email` rather than `username`, deliberately: OAuth2 fixes the *form field*
+    name to `username` and this API's usernames are email addresses, so the
+    rename happens once, in the schema that reads the form (plan 05-11), and the
+    application layer is left saying what it means.
+
+    `password` travels as a plain `str`, for the reason above.
+    """
+
+    email: str
+    password: str
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticateActorCommand:
+    """Ask who a bearer token belongs to (D-11).
+
+    **No `actor_id`, necessarily**: its single field is the raw token, and this
+    is the command whose result *is* the `actor_id` every other command starts
+    with. Naming one here would be circular.
+
+    It stays a one-field command rather than a bare `str` argument to
+    `execute`, following the argument `ListTaskListsCommand` makes above: a
+    uniform signature across every use case means a later field - a token type,
+    an audience, a scope - is an addition rather than a change of shape.
+    """
+
+    token: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetProfileCommand:
+    """Ask for the authenticated caller's own profile (AUTH-05).
+
+    One field, and it is the actor - so unlike its three neighbours this one
+    follows the rule. A profile request can only ever be about the caller:
+    there is no `user_id` field, so `GET /auth/me` cannot be pointed at somebody
+    else's account by editing a path.
+    """
+
+    actor_id: UUID

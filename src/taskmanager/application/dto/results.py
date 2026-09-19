@@ -27,6 +27,7 @@ from uuid import UUID
 
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.completion import CompletionStats
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
@@ -165,3 +166,70 @@ class TaskCollectionResult:
             completed_tasks=stats.completed,
             completion_percentage=stats.percentage,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class UserResult:
+    """One account, as every profile answer in the API shows it (D-09).
+
+    Four fields, and the interesting thing about this class is the fifth one it
+    does not have. `User` holds a `password_hash`, and it is deliberately not
+    copied below - which is the field-by-field rule of `TaskResult.from_entity`
+    earning its keep rather than a style preference. A `**vars(user)` splat or
+    a `dataclasses.asdict` would carry the stored Argon2 hash into an API
+    response the moment anybody wrote one, and nothing between here and the
+    wire would object: a response schema built from this type would simply have
+    a field to fill. `test_dtos.py` asserts the absence against
+    `dataclasses.fields`, so a rename cannot smuggle it back (T-5-04).
+
+    `updated_at` is absent for a duller reason: AUTH-05 and AUTH-01 both
+    describe the profile as `{id, email, full_name, created_at}`, and a field
+    published once is a field that has to keep being published.
+    """
+
+    id: UUID
+    email: str
+    full_name: str
+    created_at: datetime
+
+    @classmethod
+    def from_entity(cls, user: User) -> "UserResult":
+        """Copy the four public fields, naming each one explicitly.
+
+        The one field of `User` that is missing here is `password_hash`, and
+        its omission is the whole design of this class - see the docstring
+        above. `updated_at` is omitted too, because the published profile shape
+        has never carried it.
+        """
+        return cls(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            created_at=user.created_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AccessTokenResult:
+    """The answer to a successful login (AUTH-02).
+
+    There is no `from_entity` because there is no entity: a token is minted by
+    the `TokenService` port and assembled by `Login`, so nothing was read that
+    this could map from.
+
+    Both of the fields beside the token are wire-format obligations rather than
+    internal choices, which is why they are spelled out here:
+
+    * `token_type` carries the literal lowercase `bearer`. OAuth2 says the value
+      is case-insensitive, but Swagger UI's Authorize button and a good many
+      clients build the header by concatenation, so `Bearer` and `bearer` are
+      not interchangeable in practice - and the header this produces is what
+      `OAuth2PasswordBearer` parses on the way back in.
+    * `expires_in` is a number of **seconds**, not minutes: the setting is
+      `jwt_expire_minutes`, so the use case multiplies, and the name of this
+      field is the only place that says which unit crossed the boundary.
+    """
+
+    access_token: str
+    token_type: str
+    expires_in: int
