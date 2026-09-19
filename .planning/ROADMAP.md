@@ -191,7 +191,41 @@ Plans:
   4. Listing a list's tasks filtered by `status` and/or `priority` returns only matching tasks, rejects invalid filter values with 422, and always reports `completion_percentage`, `total_tasks` and `completed_tasks` for the whole list — unchanged by the filter, `0.0` when empty, and produced by a single SQL aggregate.
   5. Pydantic v2 models type every HTTP boundary crossed in this slice (request and response schemas), application command/result DTOs are frozen dataclasses per ADR-020, and no router imports SQLAlchemy or raises `HTTPException` for a business failure.
 
-**Plans**: TBD
+**Plans**: 12 plans (7 waves)
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Hermetic settings test, the four domain mutators and the typed Unset sentinel
+- [ ] 04-02-PLAN.md — list_for_owner_with_stats across port/fake/adapter, the grouped LIST-03 statement, and D-15's import-linter contract
+- [ ] 04-03-PLAN.md — ChangeTaskStatusCommand gains task_list_id (D-14) and the shared access.py guard
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-04-PLAN.md — The ten Phase 4 commands and the TaskListResult / TaskCollectionResult DTOs
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-05-PLAN.md — The five task-list use cases and their two-actor unit proofs
+- [ ] 04-06-PLAN.md — The five task use cases, the filter conjunction and the D-07 overdue rule
+- [ ] 04-07-PLAN.md — The actor seam, the Clock provider and every Pydantic request/response schema
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-08-PLAN.md — The two routers, the composition-root wiring and D-15's AST gate
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 04-09-PLAN.md — The HTTP integration harness and the task-list routes over real PostgreSQL
+- [ ] 04-11-PLAN.md — The idempotent demo-user seed and the cold-start rehearsal
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 04-10-PLAN.md — The task routes over HTTP and the D-17 no-N+1 statement counter
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 04-12-PLAN.md — Phase 4 ADRs, the AI_WORKFLOW entries, the fifteen requirement ticks and the full phase gate
 
 ### Phase 5: Auth, Assignment & Notifications
 
@@ -249,7 +283,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
-| 4. Task Lists & Tasks | 0/TBD | Not started | - |
+| 4. Task Lists & Tasks | 0/12 | Planned | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
