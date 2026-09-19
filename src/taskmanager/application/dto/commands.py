@@ -214,6 +214,85 @@ class ChangeTaskStatusCommand:
     new_status: TaskStatus
 
 
+@dataclass(frozen=True, slots=True)
+class AssignTaskCommand:
+    """Ask for `task_id` to be handed to `assignee_id`, on behalf of `actor_id`.
+
+    It mirrors `ChangeTaskStatusCommand` field for field, with `assignee_id`
+    where that one carries `new_status`, and for the same D-11 reason:
+    assignment has its own door (D-05) nested under `{list_id}`, so the parent
+    segment has to reach the use case or any list the actor owns would stand in
+    for the real one.
+
+    **This is the only command in the project with a field naming somebody other
+    than the actor**, and that is what makes T-5-10 checkable rather than
+    conventional: `UpdateTaskCommand` has no `assignee_id`, so a generic PATCH
+    has nothing to write the field through even if a router tried. `test_dtos.py`
+    asserts that uniqueness across the whole command table.
+
+    `actor_id` still comes first, and the two identifiers are not
+    interchangeable: `actor_id` is the authenticated caller, filled from the
+    token's subject, while `assignee_id` is attacker-controlled input that
+    `AssignTask` resolves against the users table *after* the ownership guard
+    has already run (T-5-12).
+    """
+
+    actor_id: UUID
+    task_list_id: UUID
+    task_id: UUID
+    assignee_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class UnassignTaskCommand:
+    """Ask for one task to lose its assignee, on behalf of `actor_id`.
+
+    Identical in shape to `DeleteTaskCommand`, because the request is: the
+    `DELETE` of D-05 carries no body, so there is nothing to name but the task
+    and the list it was addressed under. Whose assignment is being cleared is
+    never a field - the list owner unassigns whoever is there (ASGN-01), and a
+    command that named the current assignee would invite a caller to guess.
+    """
+
+    actor_id: UUID
+    task_list_id: UUID
+    task_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ListAssignedTasksCommand:
+    """Ask for every task assigned to `actor_id`, across every list (D-02).
+
+    One field, and it is the actor - deliberately, for the reason
+    `GetProfileCommand` gives about `/auth/me`. There is no `assignee_id` here,
+    so `GET /tasks/assigned-to-me` cannot be pointed at somebody else's
+    workload by editing a query string: the only id the query can filter on is
+    the one presentation read off the token (T-5-11).
+    """
+
+    actor_id: UUID
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ListUsersCommand:
+    """Ask for the user directory, on behalf of any authenticated caller.
+
+    It carries the actor and nothing else, following `ListTaskListsCommand`'s
+    argument that a one-field command keeps every `execute` signature uniform.
+    The actor is not a filter here - D-13 makes this endpoint the same answer
+    for everyone - but it is still required, because the field is what says the
+    caller was authenticated at all. `ListUsers`' docstring argues that
+    trade-off in full.
+    """
+
+    actor_id: UUID
+
+
 # ---------------------------------------------------------------------------
 # Auth
 #

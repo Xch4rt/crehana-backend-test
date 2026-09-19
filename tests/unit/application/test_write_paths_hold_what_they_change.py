@@ -30,7 +30,9 @@ from taskmanager.application.dto.commands import (
     DeleteTaskListCommand,
     GetTaskCommand,
     GetTaskListCommand,
+    ListAssignedTasksCommand,
     ListTasksCommand,
+    ListUsersCommand,
     UpdateTaskCommand,
     UpdateTaskListCommand,
 )
@@ -44,7 +46,9 @@ from taskmanager.application.use_cases.tasks.change_task_status import (
 from taskmanager.application.use_cases.tasks.delete import DeleteTask
 from taskmanager.application.use_cases.tasks.get import GetTask
 from taskmanager.application.use_cases.tasks.list import ListTasks
+from taskmanager.application.use_cases.tasks.list_assigned import ListAssignedTasks
 from taskmanager.application.use_cases.tasks.update import UpdateTask
+from taskmanager.application.use_cases.users.list import ListUsers
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.value_objects.task_status import TaskStatus
@@ -206,10 +210,14 @@ async def test_delete_task_list_holds_the_list_it_removes() -> None:
 async def test_no_read_use_case_ever_holds_anything() -> None:
     """The other direction: a GET that waited on a PATCH would be a regression.
 
-    All three addressed-resource reads in one test, because the claim is about
-    the set - "reads do not hold" - and a fourth read added later belongs here.
+    All five reads in one test, because the claim is about the set - "reads do
+    not hold" - and a sixth read added later belongs here. Plan 05-08 added the
+    last two, the collections of D-02 and D-13, on that invitation: neither
+    addresses a single resource, which makes "holds nothing" true of them for a
+    second reason, and the assertion is kept anyway so a future implementation
+    that started locking rows it merely listed fails here.
     """
-    unit_of_work = _uow()
+    unit_of_work = _uow(assignee_id=ASSIGNEE_ID)
 
     await GetTask(unit_of_work).execute(
         GetTaskCommand(actor_id=ACTOR_ID, task_list_id=LIST_ID, task_id=TASK_ID)
@@ -220,6 +228,10 @@ async def test_no_read_use_case_ever_holds_anything() -> None:
     await ListTasks(unit_of_work).execute(
         ListTasksCommand(actor_id=ACTOR_ID, task_list_id=LIST_ID)
     )
+    await ListAssignedTasks(unit_of_work).execute(
+        ListAssignedTasksCommand(actor_id=ASSIGNEE_ID)
+    )
+    await ListUsers(unit_of_work).execute(ListUsersCommand(actor_id=ACTOR_ID))
 
     assert unit_of_work.task_repository.held_for_update == []
     assert unit_of_work.task_list_repository.held_for_update == []

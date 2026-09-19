@@ -33,6 +33,7 @@ from uuid import UUID
 import pytest
 
 from taskmanager.application.dto.commands import (
+    AssignTaskCommand,
     AuthenticateActorCommand,
     CreateTaskCommand,
     CreateTaskListCommand,
@@ -41,10 +42,13 @@ from taskmanager.application.dto.commands import (
     GetProfileCommand,
     GetTaskCommand,
     GetTaskListCommand,
+    ListAssignedTasksCommand,
     ListTaskListsCommand,
     ListTasksCommand,
+    ListUsersCommand,
     LoginCommand,
     RegisterUserCommand,
+    UnassignTaskCommand,
     UpdateTaskCommand,
     UpdateTaskListCommand,
 )
@@ -70,6 +74,11 @@ LATER = datetime(2026, 6, 1, 9, 30, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
+# The user an assignment names, distinct from the actor: `AssignTaskCommand` is
+# the only command in the project carrying a second person's identifier, so a
+# fixture that reused `ACTOR_ID` would make the field indistinguishable from the
+# actor it must never be confused with (T-5-10).
+ASSIGNEE_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 # The auth vocabulary's fixtures. `PASSWORD` is a literal in a test table and
 # nowhere else: no command stores it, no result carries it, and the only thing
@@ -91,7 +100,7 @@ DECLARED_USER_FIELD = "email"
 DECLARED_TOKEN_FIELD = "access_token"
 
 # Each case is one command instance and the name of a field the immutability
-# test tries to overwrite. The tuple is annotated `Any` because the ten commands
+# test tries to overwrite. The tuple is annotated `Any` because the commands
 # share no base class on purpose - there is no `Command` supertype to inherit a
 # field from, which is what keeps `actor_id` a per-class declaration the field
 # order test can check.
@@ -151,6 +160,23 @@ COMMAND_CASES: Final[tuple[tuple[Any, str], ...]] = (
         ),
         "task_id",
     ),
+    (
+        AssignTaskCommand(
+            actor_id=ACTOR_ID,
+            task_list_id=TASK_LIST_ID,
+            task_id=TASK_ID,
+            assignee_id=ASSIGNEE_ID,
+        ),
+        "assignee_id",
+    ),
+    (
+        UnassignTaskCommand(
+            actor_id=ACTOR_ID, task_list_id=TASK_LIST_ID, task_id=TASK_ID
+        ),
+        "task_id",
+    ),
+    (ListAssignedTasksCommand(actor_id=ACTOR_ID), "actor_id"),
+    (ListUsersCommand(actor_id=ACTOR_ID), "actor_id"),
     (
         RegisterUserCommand(email=EMAIL, full_name=FULL_NAME, password=PASSWORD),
         "email",
@@ -276,6 +302,31 @@ def test_the_task_patch_command_cannot_express_a_status_change() -> None:
     assert "owner_id" not in field_names
     assert "assignee_id" not in field_names
     assert "completed_at" not in field_names
+
+
+def test_assignment_is_the_only_command_that_can_name_an_assignee() -> None:
+    """T-5-10, counted across the whole table rather than per command.
+
+    D-05 gives assignment its own door, and the reason that holds is that no
+    other command has a field an `assignee_id` could arrive in - so a router
+    wiring the value onto the generic PATCH would have nothing to wire it to.
+    The neighbouring test asserts the absence on `UpdateTaskCommand` alone;
+    this one makes the same claim about every command there is, so a *new*
+    command that quietly grew the field fails here rather than at review.
+    """
+    carrying_an_assignee = {
+        type(command)
+        for command, _ in COMMAND_CASES
+        if "assignee_id" in {field.name for field in fields(type(command))}
+    }
+
+    assert carrying_an_assignee == {AssignTaskCommand}
+    assert [field.name for field in fields(AssignTaskCommand)] == [
+        "actor_id",
+        "task_list_id",
+        "task_id",
+        "assignee_id",
+    ]
 
 
 def test_an_omitted_list_patch_field_is_the_sentinel_and_not_none() -> None:
