@@ -52,19 +52,28 @@ code review: CR-01 + 5 warnings fixed, WR-02/WR-05 deliberately left open (see 0
 - [x] Explicit transaction boundary — `SqlAlchemyUnitOfWork` implements the application port,
       repositories never `commit()` (AST-enforced), use cases own `async with uow:`
 
+Validated in Phase 4: Task Lists & Tasks (2026-09-19) — 5/5 success criteria and 15/15
+requirements verified against the live stack, 599 tests, 100% host coverage, eleven routes;
+code review: CR-01 (lost update under concurrent writes) + 5 warnings open (see 04-REVIEW.md
+and the STATE.md blocker).
+- [x] Create, get, update and delete task lists — five routes under `/api/v1/task-lists`,
+      not-owned answers 404 exactly like absent (ADR-008), duplicate name answers 409
+- [x] Create, get, update and delete tasks inside a list — nested routes, wrong-list 404 on
+      every verb, merge-patch semantics through the typed `Unset` sentinel
+- [x] Change the status of a task — dedicated status endpoint, forbidden transitions answer
+      409 naming `from`/`to`, `status` proven not writable through the generic PATCH
+- [x] List all tasks of a list with filters by status or priority, plus an extra field with
+      the completion percentage — statistics cover the whole list whatever the filter; no N+1,
+      asserted by a statement counter
+- [x] Strong typing with Pydantic — every HTTP boundary has request and response models
+      (`extra="forbid"`); application DTOs are frozen dataclasses per ADR-020
+
 ### Active
 
 **Mandatory — stack (PDF "Requisitos")**
 - [ ] Python + FastAPI
 - [ ] Tests with pytest
 - [ ] flake8 as linter, black as formatter
-
-**Mandatory — use cases (PDF 1.a)**
-- [ ] Create, get, update and delete task lists
-- [ ] Create, get, update and delete tasks inside a list
-- [ ] Change the status of a task
-- [ ] List all tasks of a list with filters by status or priority, plus an extra field with
-      the completion percentage
 
 **Bonus — use cases (PDF 1.b), all in scope**
 - [ ] Login and authentication with JWT protecting endpoints
@@ -73,7 +82,6 @@ code review: CR-01 + 5 warnings fixed, WR-02/WR-05 deliberately left open (see 0
 
 **Mandatory — project structure (PDF 2)**
 - [ ] Clean layered structure: Domain, Application/UseCases, Infrastructure
-- [ ] Strong typing with Pydantic
 - [ ] Business validations
 - [ ] Unit and integration testing with pytest
 - [ ] Complete README + DECISION_LOG.md explaining technical decisions
@@ -172,4 +180,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-19 after Phase 3 (Persistence & Runnable Stack) completion*
+*Last updated: 2026-09-19 after Phase 4 (Task Lists & Tasks) completion*
