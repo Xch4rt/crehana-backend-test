@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-09-19T05:13:00.706Z"
+last_updated: "2026-09-19T05:13:26.635Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
@@ -241,6 +241,12 @@ Recent decisions affecting current work:
 - [Phase 04-01]: Task.DEFAULT_PRIORITY is the single copy of TASK-01's medium and Task.create reads it; a test binds inspect.signature(Task.create) to the ClassVar so 04-07's schema default cannot drift from the entity's
 - [Phase 04-01]: the Unset sentinel is a single-member enum confined to application/dto/ - the docstring records the measured cost of the rejected Pydantic variant (a _Unset component in /openapi.json, the explicit-null error split across body.title.str and body.title.enum[_Unset]), and the narrowing was proven by deleting the guard and observing mypy report return-value
 - [Phase 04-01]: requirement ticks LIST-04/TASK-01/TASK-03/TASK-08 deliberately NOT taken - 04-12 is the last claimant of all four and this plan ships only their domain-side preconditions, no endpoint
+- [Phase ?]: [Phase 04-02]: Tasks 1 and 2 shipped as ONE commit - adding a method to a Protocol breaks every implementation at once, so the tree between them fails mypy strict, and CLAUDE.md forbids committing red with --no-verify; the red step is captured in evidence/04-02-port-change-red.txt, the same compromise 02-01 recorded
+- [Phase ?]: [Phase 04-02]: The D-15 violation is planted TWICE - in application the import also breaks the pre-existing application-framework-free contract, so only the infrastructure planting (exactly ONE contract BROKEN) proves the new contract earns its place
+- [Phase ?]: [Phase 04-02]: list_for_owner_with_stats sorts its own pairs rather than delegating to list_for_owner, mirroring the adapter's two separate ORDER BY clauses - a delegation would keep the test green if the grouped statement lost its ORDER BY
+- [Phase ?]: [Phase 04-02]: FakeTaskListRepository takes the sibling FakeTaskRepository through its constructor and FakeUnitOfWork hands over the one it already builds, so the fake counts what a use case stored and can disagree with a wrong implementation
+- [Phase ?]: [Phase 04-02]: The compiled-SQL test asserts count(*) ABSENT as well as count(tasks.id) present - the two render almost identically and differ only on the null-extended row an empty list produces
+- [Phase ?]: [Phase 04-02]: Requirement tick LIST-03 deliberately NOT taken - 04-12 is the last claimant and this plan ships the repository capability with no endpoint above it
 
 ### Pending Todos
 
