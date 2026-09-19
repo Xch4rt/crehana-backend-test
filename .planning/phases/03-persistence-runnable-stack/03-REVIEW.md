@@ -66,6 +66,26 @@ findings:
   warning: 7
   info: 8
   total: 16
+fixed: 6
+fixed_at: 2026-09-19T02:50:29Z
+fixed_findings:
+  - CR-01
+  - WR-01
+  - WR-03
+  - WR-04
+  - WR-06
+  - WR-07
+open_findings:
+  - WR-02
+  - WR-05
+  - IN-01
+  - IN-02
+  - IN-03
+  - IN-04
+  - IN-05
+  - IN-06
+  - IN-07
+  - IN-08
 status: issues_found
 ---
 
@@ -74,7 +94,27 @@ status: issues_found
 **Reviewed:** 2026-09-19T02:08:15Z
 **Depth:** standard
 **Files Reviewed:** 57
-**Status:** issues_found
+**Status:** issues_found -- 6 of 16 fixed on 2026-09-19
+
+## Fix Round 1 (2026-09-19)
+
+CR-01 and five Warnings were fixed, one atomic commit each, with
+`make lint && make typecheck && make arch && make test` green before every
+commit. The suite went from 287 to 293 tests and coverage stayed at 100.00%
+over `src/taskmanager`.
+
+| Finding | Commit | Kind |
+|---------|--------|------|
+| CR-01 | `f3747a5` | behaviour + tests |
+| WR-01 | `94ccc43` | behaviour + test |
+| WR-07 | `3aee2e5` | rename, no behaviour change |
+| WR-03 | `c2ebc84` | query + tests |
+| WR-04 | `c4594ed` | docstring only |
+| WR-06 | `1e36557` | test only |
+
+Still open, and deliberately so: **WR-02** (needs a schema change and a new
+migration), **WR-05** (compose port binding, locked decision D-15) and every
+Info finding.
 
 ## Summary
 
@@ -124,6 +164,10 @@ teardown raised: This unit of work is not open. Every repository call and every 
 
 `test_dependencies.py` does not catch this because its probe handlers call `unit.users.get(...)` directly, never through `async with unit:` - the shape no use case will ever have. `FakeUnitOfWork.__aenter__` tolerates re-entry (it only resets a flag), so the Phase 2 unit tests hide the difference as well.
 
+**Status:** FIXED
+**fixed_in:** `f3747a5`
+**Resolution:** Taken as written. `get_uow` is a plain `def` returning a closed `SqlAlchemyUnitOfWork` typed as the port, and `__aenter__` raises `RuntimeError("This unit of work is already open...")` when `_session` is not `None`. Sequential blocks on the same object stay allowed, which `tests/integration/conftest.py`'s `uow` fixture relies on. The `/_uow/*` probe handlers now open the block themselves, a third probe (`/_uow/write-and-commit`) proves the committing half of ARC-08 from a second connection, and two unit tests in `tests/unit/infrastructure/test_adapter_ports.py` pin the refusal and the reuse. Falsified: restoring the `yield` provider turns four of the five tests in `test_dependencies.py` red with the new message.
+
 **Fix:** Pick one owner of the block and make the other side incapable of entering it. The port already says the owner is the use case, so the provider must hand over a *closed* unit of work and the adapter must refuse a second entry:
 
 ```python
@@ -152,6 +196,10 @@ Then change the two probe handlers in `tests/integration/test_dependencies.py` t
 
 **File:** `src/taskmanager/infrastructure/db/unit_of_work.py:74-78`, `src/taskmanager/infrastructure/db/unit_of_work.py:101-108`
 **Issue:** `tasks`, `task_lists` and `users` are created in `__aenter__` and never cleared. After `__aexit__`, `self._session` is `None` (so `commit()` gets the friendly guard) but `uow.tasks._session` still points at the closed `AsyncSession`. SQLAlchemy sessions are reusable after `close()`, so `await uow.tasks.get(...)` outside the block silently autobegins a fresh transaction on a new pooled connection that nothing will ever roll back or close - the exact "dirty session handed back to the pool" the port docstring forbids. Before `__aenter__`, the same attributes do not exist at all, so `uow.tasks` is an `AttributeError` about a missing attribute instead of the sentence `_open_session` was written to provide.
+**Status:** FIXED
+**fixed_in:** `94ccc43`
+**Resolution:** Fixed by the second of the two suggested shapes rather than the first. The three names are now bare class-level annotations, assigned in `__aenter__` and deleted in `__aexit__`'s `finally`, so a repository call outside the block raises `AttributeError` immediately instead of autobeginning a transaction on a pooled connection nobody will close. The read-only `property` was rejected because `UnitOfWork` declares the three as *mutable* members and mypy checks those invariantly - a property would stop `SqlAlchemyUnitOfWork` from satisfying the port and break `tests/unit/infrastructure/test_adapter_ports.py`. A `__getattr__` carrying the friendlier `_open_session` sentence was rejected too: mypy resolves every unknown attribute through `__getattr__` once it exists, which would turn a typo on the object every use case holds into a runtime error instead of a type error. `tests/integration/test_unit_of_work.py::test_the_repositories_are_unreachable_outside_the_block` asserts both sides of the block.
+
 **Fix:** Make the repositories go through the same guard as `commit()`:
 
 ```python
@@ -166,6 +214,7 @@ def tasks(self) -> TaskRepository:
 
 **File:** `src/taskmanager/infrastructure/db/mappers.py:89-97`, `src/taskmanager/infrastructure/db/mappers.py:130-137`, `src/taskmanager/infrastructure/db/mappers.py:170-185`, `migrations/versions/0001_baseline.py:48-137`
 **Issue:** The mapper docstring states the WR-05 principle - a value that violates the schema's promise is an infrastructure fault and must become the fixed 500, never a validation error naming a field the caller did not send - but implements it for datetimes only. `to_entity` calls the entity constructor, and `__post_init__` runs `require_text` on `title`, `name`, `email` and `password_hash`. `VARCHAR` accepts `''` and whitespace-only strings, and the baseline has no `CHECK (btrim(title) <> '')`. A row written by a seed script, a raw `UPDATE`, or a future bulk operation with a blank title makes `SqlAlchemyTaskRepository.get()` raise `ValidationError("title must not be blank.", details={"field": "title"})`, which Phase 2's handler renders as a 422 telling the client their request had a bad `title`. The completed/`completed_at` pair is protected (CK), the enums are protected (CK), the timestamps are protected (`_aware`); the text columns are not.
+**Status:** OPEN -- deferred. The stronger of the two fixes needs three `CHECK` constraints, matching `CheckConstraint`s in `models.py`, new names in `constraints.py` and a new Alembic revision, which is a schema change rather than a code fix and belongs to a planned migration rather than to a review-fix pass.
 **Fix:** Either back the invariants in the schema so the mapper cannot see the bad row -
 
 ```python
@@ -180,6 +229,9 @@ sa.CheckConstraint("btrim(email) <> ''", name=op.f("ck_users_email_not_blank")),
 
 **File:** `src/taskmanager/infrastructure/db/repositories/task_lists.py:128-132`, `src/taskmanager/infrastructure/db/repositories/users.py:84`
 **Issue:** `SqlAlchemyTaskRepository.list_for_task_list` orders by `(created_at, id)` and its docstring explains why `created_at` alone makes a first-element assertion flaky. The two sibling list queries do not apply the same rule. A use case that creates two lists in one request reads the clock once (D-13), so both rows share an instant and PostgreSQL may return them either way round on different runs. `test_list_for_owner_returns_only_that_owners_lists_in_creation_order` passes only because its two rows are one day apart.
+**Status:** FIXED
+**fixed_in:** `c2ebc84`
+**Resolution:** Taken as written: both queries now order by `(created_at, id)`, matching `list_for_task_list`. Each gained a test that seeds a same-instant group. The task-list one needed a second attempt and the detail is worth keeping: with names that sorted the same way the identifiers do, PostgreSQL answered from `uq_task_lists_owner_id_name` and the test passed against the *unfixed* query. It now uses names whose alphabetical order matches neither the insertion order nor the expected order, and both tests are confirmed red with the tie-break removed.
 **Fix:**
 
 ```python
@@ -194,6 +246,9 @@ and give each integration test a same-instant pair, as `given_a_mixed_list` alre
 
 **File:** `src/taskmanager/main.py:15-16`, `docker/entrypoint.sh:91`
 **Issue:** The docstring says moving `alembic upgrade head` out of the application means "several replicas started at the same moment cannot race each other through the same migration". Moving the call to the entrypoint does not remove the race - every replica's entrypoint runs `alembic upgrade head` concurrently against the same database, and Alembic takes no advisory lock by default. Two concurrent `CREATE TABLE users` on an empty database is a real failure (`duplicate key value violates unique constraint "pg_type_typname_nsp_index"` or a plain "relation already exists"). The compose file runs one replica, so nothing breaks today, but the sentence is the kind an evaluator reads and checks.
+**Status:** FIXED
+**fixed_in:** `c4594ed`
+**Resolution:** The first of the two options: the docstring now states what is true. It says the entrypoint runs `alembic upgrade head` once per container start, that this buys the no-database-at-import property and nothing more, that Alembic's version-table transaction is the only thing between two concurrent replicas and is the database resolving a race rather than the project preventing one, and that a multi-replica deployment must serialise the upgrade itself. The advisory lock in `migrations/env.py` was not added: migrations are out of scope for this pass, and one replica is the deployment the compose file describes.
 **Fix:** Either correct the docstring to "one replica, one migration run, by construction of the compose file; a multi-replica deployment must serialise `upgrade head` (advisory lock or a one-shot migration job)", or make the claim true by wrapping the upgrade in `pg_advisory_lock` inside `migrations/env.py`'s `run_migrations_online`:
 
 ```python
@@ -206,6 +261,7 @@ with engine.connect() as open_connection:
 
 **File:** `docker-compose.yml:42`
 **Issue:** `"5432:5432"` binds to `0.0.0.0` on the host. The database authenticates as `taskmanager:taskmanager` and `postgres:18-alpine` defaults `POSTGRES_HOST_AUTH_METHOD` to password auth for all addresses, so on a laptop attached to a shared network (or a CI runner with a public interface) the evaluator's `docker compose up` exposes a writable database with a guessable password to the LAN. The reason for publishing (host-side `make test` against the same container) only needs loopback.
+**Status:** OPEN -- not accepted. The compose port binding is locked by decision D-15 and was left untouched deliberately; changing it is a decision to revisit, not a defect to patch in a fix pass.
 **Fix:**
 
 ```yaml
@@ -219,6 +275,9 @@ ports:
 
 **File:** `tests/unit/test_app_factory.py:66-68`, `tests/integration/test_dependencies.py:59-98`
 **Issue:** `test_production_app_has_no_probe_routes` asserts that no route path starts with `/_probe`. The router this phase adds for `get_uow` mounts `/_uow/report` and `/_uow/write-without-finishing`. If someone moved `app.include_router(uow_probe_router)` into `create_app` by mistake - the exact regression the test exists to catch - it would stay green. The guard is only as wide as the prefixes it knows.
+**Status:** FIXED
+**fixed_in:** `1e36557`
+**Resolution:** Fixed, and the finding understated the problem. The guard was not merely too narrow: FastAPI wraps an included router in a single opaque object carrying no `path` attribute, so `getattr(route, "path", "")` answered `""` for precisely the routes the test existed to find - including `/_probe/*`. Including *either* probe router in `create_app` would have left it green, so the prefix tuple suggested here would not have worked either. The test now asks the production application to route every endpoint both probe routers declare (derived from the routers, under the declared method so a 405 cannot stand in for a 404) and expects 404, plus an assertion that the derived list is non-empty. Confirmed red by including `uow_probe_router` in `create_app`. The `include_in_schema=True` variant was rejected: FastAPI's own `/docs`, `/redoc` and `/openapi.json` routes are declared `include_in_schema=False`.
 **Fix:** Assert on the intent rather than one literal:
 
 ```python
@@ -234,6 +293,10 @@ and better, assert that every route in the production app has `include_in_schema
 
 **File:** `src/taskmanager/infrastructure/db/unit_of_work.py:47`, `src/taskmanager/infrastructure/db/unit_of_work.py:115-122`
 **Issue:** The flag `_committed` is set to `True` by both `commit()` and `rollback()`. The behaviour is correct (both finish the transaction, so `__aexit__` must not roll back again), but the name states something false after a rollback, and the next person adding a feature that genuinely needs "was this block committed" (an outbox flush, an audit line, a metric) will read the flag and get a wrong answer. `FakeUnitOfWork` already uses the accurate name, `_finished`.
+**Status:** FIXED
+**fixed_in:** `3aee2e5`
+**Resolution:** Taken as written. The flag is `_finished`, the comment in `rollback()` now says it is named for the transaction being finished rather than for how it ended, and `__init__` carries the reasoning. Behaviour is unchanged and the 293-test suite confirms it.
+
 **Fix:** Rename to `_finished`, mirroring the fake, and update the comment at line 118-122 which already describes it as "the transaction is finished".
 
 ## Info
@@ -286,8 +349,14 @@ and better, assert that every route in the production app has `include_in_schema
 **Issue:** "Replace the name, applying the same guard construction applied." reads as a half-edited sentence in a codebase whose docstrings are otherwise carefully written and will be read by the evaluator.
 **Fix:** "Replace the name, applying the same guard that construction applies."
 
+## Info findings: all open
+
+None of IN-01 through IN-08 was touched. This pass was scoped to CR-01 and five
+of the seven Warnings.
+
 ---
 
 _Reviewed: 2026-09-19T02:08:15Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Fix round 1: 2026-09-19T02:50:29Z, 6 of 16 findings fixed_
