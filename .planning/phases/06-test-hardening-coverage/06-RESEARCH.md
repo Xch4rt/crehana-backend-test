@@ -830,7 +830,10 @@ not applicable.
 | A4 | The ~29-test sweep is mechanical (add a GET and a body assertion) | D-05/06 | Plan sizing. Sampled four of them by hand; all were two-line additions |
 | A5 | A fifth concurrency case for list deletion is in scope under D-14 rather than a Deferred Idea | D-08 break 5 | Planner's call; the finding itself is measured and must be reported either way |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three were settled at planning time as recommended below: the `a is b` branch and the
+list-deletion concurrency case are in plan 06-01, and `tests/probe.py` stays unmarked in plan 06-04.
 
 1. **Does the self-transition leg belong in D-04's "complement"?**
    - Known: `(pending,pending)`, `(in_progress,in_progress)`, `(completed,completed)` are outside

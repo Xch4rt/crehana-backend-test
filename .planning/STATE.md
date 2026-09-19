@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 6 context gathered — ready to plan Phase 6
-last_updated: 2026-09-19T20:06:05.426Z
-last_activity: 2026-09-19 -- Phase 06 context gathered (06-CONTEXT.md, 15 decisions); suite baseline 1019 passed, 100% coverage
+status: ready_to_execute
+stopped_at: Phase 6 planned (4 plans, 4 sequential waves) — ready to execute Phase 6
+last_updated: 2026-09-19T20:45:02.699Z
+last_activity: 2026-09-19 -- Phase 06 planned (06-01..06-04, plan check passed, 15/15 decisions covered); suite baseline 1019 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 55
+  total_plans: 59
   completed_plans: 55
-  percent: 100
+  percent: 93
 ---
 
 # Project State
@@ -28,15 +28,15 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 6
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-19 -- Phase 06 context gathered; Phase 05 complete (17/17) after gap closure 05-17 and a passing re-verification (6/6)
+Status: Ready to execute
+Last activity: 2026-09-19 -- Phase 06 planned (4 plans in 4 sequential waves); Phase 05 complete (17/17) after gap closure 05-17 and a passing re-verification (6/6)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 55/55
-means "every plan written so far has been executed", not "the milestone is finished".
+`total_plans` counts planned plans only - phase 7 is not yet planned, so 55/59 means
+"55 plans executed, the four Phase 6 plans written and waiting", not a share of the milestone.
 
 ## Performance Metrics
 
@@ -823,5 +823,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-09-19T20:06:05.418Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-test-hardening-coverage/06-CONTEXT.md
+Stopped at: Phase 6 planned — ready to execute
+Resume file: .planning/phases/06-test-hardening-coverage/06-01-PLAN.md
