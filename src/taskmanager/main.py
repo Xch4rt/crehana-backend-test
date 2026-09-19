@@ -9,11 +9,24 @@ runs `uvicorn --factory taskmanager.main:create_app`.
 Building the application touches no database, and that is a decision rather than
 an accident (D-06). No schema migration runs here and no statement is executed
 here, on startup or anywhere else in this module: `docker/entrypoint.sh` owns
-`alembic upgrade head` and runs it once, before the server is exec'd. Two things
-follow. Every unit test in this suite can build the real application against a
-syntactically valid but fictional DSN with no server running anywhere, which is
-what `tests/conftest.py` has relied on since Phase 1; and several replicas
-started at the same moment cannot race each other through the same migration.
+`alembic upgrade head` and runs it once per container start, before the server
+is exec'd. What that buys is one thing, precisely: every unit test in this suite
+can build the real application against a syntactically valid but fictional DSN
+with no server running anywhere, which is what `tests/conftest.py` has relied on
+since Phase 1.
+
+What it does not buy is safety under several replicas, and the earlier wording
+here claimed otherwise (review fix WR-04). Moving the call out of the
+application does not serialise it: every replica's entrypoint would run
+`alembic upgrade head` concurrently against the same database, and Alembic takes
+no advisory lock of its own. It is not entirely unguarded either - the version
+table is read and written inside one transaction, so on PostgreSQL the losing
+replica generally blocks and then finds the revision already applied - but that
+is a race resolved by the database, not one the project prevents, and DDL that
+Alembic has not yet reached can still collide. One replica, one migration run,
+by construction of `docker-compose.yml`; a multi-replica deployment must
+serialise `upgrade head` itself, with a `pg_advisory_lock` in
+`migrations/env.py` or a one-shot migration job.
 
 What the composition root does own is the engine's lifetime. It builds the
 engine, hands the application a typed container holding it, and disposes it in
