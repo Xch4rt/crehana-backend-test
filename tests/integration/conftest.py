@@ -33,12 +33,20 @@ One consequence is deliberate and worth stating plainly: from this module onward
 `make test` requires a reachable PostgreSQL. That is D-03, not an accident - the
 suite fails once, fast, with an instruction, and never skips itself into a green
 run that proved nothing.
+
+**The recorder (Phase 6, D-03).** The two HTTP fixtures below wrap the
+application in a pure-ASGI function that notes every route the router actually
+matched, into the module-level `REQUESTED` set that
+`test_endpoint_totality.py` reads at the end of the run. The wrapper is applied
+at the transport, never with the application's own middleware installer, so what
+the tests drive is byte-for-byte the production application - adding a middleware
+would change the object under test in order to measure it.
 """
 
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 from uuid import UUID
 
 import pytest
@@ -50,6 +58,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
@@ -81,6 +90,66 @@ ROOT = Path(__file__).resolve().parents[2]
 # moved, and the modules that seed a matching `users` row import it from here
 # (the argument `test_task_lists.py` already makes for `PROBLEM_JSON`).
 OWNER_ID = UUID("00000000-0000-4000-8000-000000000001")
+
+# Every `(method, router-local template)` the integration run actually asked the
+# application for. Module-level and therefore session-lived, which is sound
+# because this suite runs in one process and under no parallel plugin; if xdist
+# is ever adopted, this set becomes per-worker and the totality half of
+# `test_endpoint_totality.py` has to be re-thought rather than trusted.
+#
+# The template is router-local (`/task-lists/{list_id}`), because on the pinned
+# stack that is all `scope["route"].path_format` holds - `include_router` leaves
+# an opaque object in `app.routes` (ADR-057) and `scope["root_path"]` stays
+# empty, so the `/api/v1` prefix is in neither. The reader resolves it.
+REQUESTED: Final[set[tuple[str, str]]] = set()
+
+# The module whose check has to see the whole run; see the ordering hook below.
+TOTALITY_MODULE: Final[str] = "test_endpoint_totality.py"
+
+
+def recording(app: FastAPI) -> ASGIApp:
+    """The application, plus a note of which route the router matched.
+
+    A pure-ASGI wrapper rather than `app.add_middleware(...)`: the middleware
+    form would rebuild the application's stack, so the object under test would be
+    one the production composition root never produces. Wrapping at the transport
+    leaves `app` untouched and observes it from outside.
+
+    The note is taken *after* the call, because the route is written into `scope`
+    by the router as it dispatches. On a 404 or a 405 no route matched and there
+    is nothing to record - which is correct: an unroutable request is not
+    evidence that an operation was exercised.
+    """
+
+    async def record(scope: Scope, receive: Receive, send: Send) -> None:
+        await app(scope, receive, send)
+        if scope["type"] != "http":
+            return
+        route = scope.get("route")
+        if route is None:
+            return
+        REQUESTED.add((str(scope["method"]).lower(), str(route.path_format)))
+
+    return record
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Run the endpoint-totality check after every test that could feed it.
+
+    Today's collection order happens to put it last already
+    (`tests/integration/api/*` sorts before `tests/integration/test_*.py`, and
+    `tests/unit/` follows both), but nothing enforces that: a module renamed, or
+    a new `tests/integration/api_v2/` directory, would silently move the check
+    into the middle of the run, where the recorder has seen only part of it and
+    the totality half fails naming operations that are tested three files later.
+    Three lines here make the ordering a property instead of a coincidence.
+    """
+    deferred = [item for item in items if item.path.name == TOTALITY_MODULE]
+    if not deferred:
+        return
+    items[:] = [item for item in items if item.path.name != TOTALITY_MODULE] + deferred
 
 
 def alembic_config(database_url: str) -> Config:
@@ -375,7 +444,7 @@ async def api_client(
     app.dependency_overrides[get_uow] = lambda: SqlAlchemyUnitOfWork(session_factory)
     app.dependency_overrides[get_current_actor] = lambda: OWNER_ID
 
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=recording(app))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, app
 
@@ -424,7 +493,7 @@ async def authenticated_client(
     app = create_app(Settings(_env_file=None))
     app.dependency_overrides[get_uow] = lambda: SqlAlchemyUnitOfWork(session_factory)
 
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=recording(app))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, app
 
