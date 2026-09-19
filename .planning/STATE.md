@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-09-19T16:25:41.339Z"
-last_activity: 2026-09-19 -- Phase 05 plan 08 complete
+stopped_at: Completed 05-10-PLAN.md
+last_updated: "2026-09-19T16:41:37.076Z"
+last_activity: 2026-09-19 -- Phase 05 plan 10 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 46
-  percent: 85
+  completed_plans: 47
+  percent: 87
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 9 of 16
-Status: Executing Phase 05 (plans 01-08 complete; plan 09 next)
-Last activity: 2026-09-19 -- Phase 05 plan 08 complete
+Plan: 10 of 16
+Status: Executing Phase 05 (plans 01-08 and 10 complete; plan 09 still outstanding)
+Last activity: 2026-09-19 -- Phase 05 plan 10 complete
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -102,6 +102,7 @@ Progress: [█████████░] 85%
 | Phase 05 P06 | 5min | 2 tasks | 7 files |
 | Phase 05 P07 | 16min | 3 tasks | 16 files |
 | Phase 05 P08 | 13min | 3 tasks | 13 files |
+| Phase 05 P10 | 14min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -508,6 +509,38 @@ Recent decisions affecting current work:
   05-16 is the last claimant, the tenth consecutive plan in this phase to make the same call, and
   these four use cases have no route above them until 05-11 and 05-12
 
+- [Phase 05-10]: OWNER_ID lives in tests/integration/conftest.py and test_task_lists.py imports it,
+  against the plan's 'module-local' wording - the fixture that installs the override and the users
+  row the tests seed have to be ONE value, and two copies agree only until one is edited with
+  nothing able to notice (the 04-09 PROBLEM_JSON precedent applied to an identifier the harness
+  owns); the plan's own 'grep -c OWNER_ID >= 5' prints 6 either way
+- [Phase 05-10]: the deleted 'not authentication' test is replaced by a source scan of
+  IMPLEMENTATION names, not English words - a first draft forbade 'algorithm' and 'secret' and
+  immediately collided with the docstring the same plan requires; the shipped tuple is jwt, pwdlib,
+  argon2, hs256, rs256, so actor.py says 'bearer token' throughout and never names the format,
+  which is also the truer statement: the format is the adapter's business
+- [Phase 05-10]: Task 2's 'grep DEMO_USER_ID in tests/ prints 0' criterion cannot hold at Task 2 -
+  tests/unit/presentation/test_actor.py is the module whose subject IS the constant, and Task 2
+  changes no production code by design; the identical Task 3 criterion over src/ tests/ docker/
+  prints 0, and the harness-first ordering is what keeps each commit green
+- [Phase 05-10]: three grep counters were met by rewording prose rather than code - auto_error=False
+  printed 3 and the deleted step's old label printed 1, both from passages explaining the forms they
+  named (the 01-03 prose-not-literal convention, now in its fourth phase)
+- [Phase 05-10]: the four header shapes are driven over HTTP in a UNIT test rather than by calling
+  the provider with None - 'no header' and 'Basic zzz' both arrive as None and 'Bearer ' arrives as
+  '', so the distinction lives in FastAPI's parse and a hand-passed value would prove nothing; the
+  lowercase-scheme leg cannot be expressed at all without a real request
+- [Phase 05-10]: nothing went into the lifespan - the security container owns no pool, no file and
+  no socket, the startup half stays empty (D-06), and the HTTP harness never enters the lifespan
+  (ADR-056), so anything placed there would be untested by every test that drives the app over HTTP
+- [Phase 05-10]: the already-seeded demo row on the compose database was deliberately left in place
+  rather than deleted - password_hash is '!', which is not an Argon2 encoded hash, so 05-05's
+  adapter turns any verification against it into False; a fresh volume never gets the row, and
+  docker compose down -v is the developer's one-line removal
+- [Phase 05-10]: requirement ticks AUTH-03/AUTH-05/AUTH-06 deliberately NOT taken - 05-16 is the
+  last claimant, the eleventh consecutive plan in this phase to make the same call: AUTH-05 has no
+  route until 05-11 and AUTH-06's 403 cannot be produced over HTTP until 05-12
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -542,6 +575,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T16:25:41.333Z
-Stopped at: Completed 05-08-PLAN.md
+Last session: 2026-09-19T16:41:37.069Z
+Stopped at: Completed 05-10-PLAN.md
 Resume file: None
