@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-09-19T05:21:16.854Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-09-19T05:29:10.415Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 29
+  completed_plans: 30
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 79%
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Progress: [████████░░] 76%
 | Phase 04 P01 | 10min | 3 tasks | 8 files |
 | Phase 04 P02 | 18min | 3 tasks | 10 files |
 | Phase 04 P03 | 12min | 2 tasks | 6 files |
+| Phase 04 P04 | 14min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -254,6 +255,12 @@ Recent decisions affecting current work:
 - [Phase 04-03]: indistinguishability is tested by producing BOTH refusals and comparing type, code and details - three comparative tests across the two modules - because a single-error assertion passes just as happily against an implementation that leaks existence through a different code
 - [Phase 04-03]: the shared guard is a module of functions, never a GuardedUseCase mixin: an override is invisible at the call site while a missing 'await visible_task(...)' is an absent line in a diff; a ninth test asserts both guards leave commits and rollbacks at zero, so the transaction boundary stays with the use case (D-17, ARC-08)
 - [Phase 04-03]: requirement ticks TASK-02/TASK-05 deliberately NOT taken - 04-12 is the last claimant and this plan ships the application-layer rule with no endpoint above it
+- [Phase 04-04]: TaskCollectionResult carries the three statistics FLAT rather than 04-RESEARCH's nested stats: CompletionStats - the plan's interfaces block and its acceptance criteria both read result.completion_percentage, and a nested value object would make the presentation schema reach through a domain type for a number; from_parts(tasks, stats) is where the unpacking happens exactly once
+- [Phase 04-04]: ListTasksCommand's status/priority filters are plain X | None = None and NOT the Unset sentinel - for a filter, absent and null are the same request, so a second marker would be ceremony every use case has to unwrap; the asymmetry with the two update commands is argued in the command docstring rather than left implicit
+- [Phase 04-04]: the thirty per-command convention tests are THREE parametrized tests over a COMMAND_CASES table with per-class ids, not thirty hand-written functions - same granularity in the report, and a command added later joins all three gates by joining one table
+- [Phase 04-04]: UpdateTaskCommand's absence test asserts four names - status (D-08) plus owner_id, assignee_id and completed_at - so T-4-17's mass-assignment surface is refused as a set rather than one field at a time
+- [Phase 04-04]: ChangeTaskStatusCommand moved to the end of the tasks banner with its body byte-identical, so the file reads task-lists-then-tasks and the status verb sits after the CRUD five it is deliberately not part of (D-08); nothing 04-03 decided was reverted
+- [Phase 04-04]: requirement tick ARC-05 deliberately NOT taken - 04-12 is the last claimant, and this plan ships only the frozen-dataclass half; the Pydantic-at-every-HTTP-boundary half does not exist until the schemas and routers do
 
 ### Pending Todos
 
@@ -287,6 +294,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T05:21:16.848Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-09-19T05:29:10.409Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
