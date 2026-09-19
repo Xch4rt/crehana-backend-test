@@ -42,8 +42,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from taskmanager import __version__
+from taskmanager.infrastructure.clock import SystemClock
 from taskmanager.infrastructure.config.settings import Settings, get_settings
 from taskmanager.infrastructure.db.engine import create_database_resources
+from taskmanager.infrastructure.security.resources import create_security_resources
 from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 from taskmanager.presentation.api.health import register_health_routes
 from taskmanager.presentation.api.routers.task_lists import register_task_list_routes
@@ -54,6 +56,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application, optionally with explicitly injected settings."""
     resolved = settings or get_settings()
     resources = create_database_resources(resolved)
+    # The second container, built here for the reason the first one is: this is
+    # the only place `Settings` is read, so `dependencies.py` narrows two typed
+    # objects off `app.state` and reads no configuration per request (RC-3).
+    # The clock is passed in rather than constructed inside the builder, which
+    # keeps the JWT configuration and the notion of "now" substitutable
+    # independently.
+    security = create_security_resources(resolved, SystemClock())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -75,6 +84,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.database = resources
+    # Nothing about either container goes in the lifespan. The startup half
+    # stays empty (D-06), and the HTTP harness never enters the lifespan at
+    # all, so anything placed there would be untested by every test that drives
+    # the application over HTTP. The security container has nothing to release
+    # on the way down either: it owns no pool, no file and no socket.
+    app.state.security = security
     register_exception_handlers(app)
     register_health_routes(app)
     register_task_list_routes(app)

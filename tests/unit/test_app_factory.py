@@ -1,9 +1,10 @@
 """Unit tests for the FastAPI composition root."""
 
-from typing import Any, Final
+import inspect
+from typing import Annotated, Any, Final, get_args, get_origin, get_type_hints
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
@@ -11,9 +12,22 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from taskmanager import __version__
+from taskmanager.application.ports.notifications import EmailNotifier
+from taskmanager.application.ports.security import PasswordHasher, TokenService
 from taskmanager.domain.exceptions import DomainError
 from taskmanager.infrastructure.config.settings import Settings
+from taskmanager.infrastructure.notifications.logging import LoggingEmailNotifier
+from taskmanager.infrastructure.security.resources import SecurityResources
 from taskmanager.main import create_app
+from taskmanager.presentation.api import dependencies as dependencies_module
+from taskmanager.presentation.api.dependencies import (
+    EmailNotifierDependency,
+    PasswordHasherDependency,
+    TokenServiceDependency,
+    get_email_notifier,
+    get_password_hasher,
+    get_token_service,
+)
 from taskmanager.presentation.api.errors.handlers import (
     handle_domain_error,
     handle_http_exception,
@@ -322,3 +336,127 @@ def test_every_api_route_is_documented(monkeypatch: pytest.MonkeyPatch) -> None:
         "Every route needs a tag, a summary, a description of its success and "
         f"a responses map naming its refusal legs. Bare: {undocumented}"
     )
+
+
+# --- The security container and the three providers it feeds (05-10) ---------
+#
+# These live here rather than beside `get_clock` in `test_actor.py` because the
+# property they defend is a property of the composition root: the container is
+# built once, in `create_app`, and the providers exist to hand pieces of it out
+# without reading application state a second time.
+
+
+def _app_with_a_security_container() -> FastAPI:
+    """The real application, settings injected, no environment consulted."""
+    return create_app(
+        Settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            jwt_secret=JWT_SECRET,
+        )
+    )
+
+
+def _request_for(app: FastAPI) -> Request:
+    """The minimum scope a provider that narrows `app.state` needs.
+
+    The providers take a `Request` and read one attribute off the application
+    behind it, so a hand-built scope is enough and a running server would add
+    nothing - the same shape `tests/integration/test_dependencies.py` uses to
+    prove `get_engine`.
+    """
+    return Request({"type": "http", "app": app, "headers": []})
+
+
+def test_create_app_stores_the_security_container_on_state() -> None:
+    """The second typed container, beside the database one (RC-3)."""
+    app = _app_with_a_security_container()
+
+    assert isinstance(app.state.security, SecurityResources)
+
+
+def test_the_two_stateful_providers_hand_back_the_container_s_objects() -> None:
+    """One hasher and one token service per application, not per request.
+
+    Identity, not equivalence, and asserted twice per provider. `dummy_verify`
+    is answered from a throwaway Argon2 hash the hasher computes once and
+    caches, at a measured ~37 ms; a provider that built a fresh adapter per
+    call would pay that on every login, which is the cost D-21 added the method
+    to control and D-27 put the object in the container to avoid.
+    """
+    app = _app_with_a_security_container()
+    request = _request_for(app)
+
+    assert get_password_hasher(request) is app.state.security.password_hasher
+    assert get_password_hasher(request) is get_password_hasher(request)
+    assert get_token_service(request) is app.state.security.token_service
+    assert get_token_service(request) is get_token_service(request)
+
+
+def test_get_email_notifier_builds_a_fresh_notifier_per_call() -> None:
+    """The `get_clock` shape, for the same reason and with the same assertion.
+
+    `LoggingEmailNotifier` holds nothing but a module-level logger, so there is
+    no cached work to preserve and nothing for the narrowing to be worth: the
+    provider takes no `Request` and stores nothing on the application. Two
+    calls returning two objects is what says so.
+    """
+    notifier = get_email_notifier()
+
+    assert isinstance(notifier, LoggingEmailNotifier)
+    assert get_email_notifier() is not get_email_notifier()
+
+
+def test_the_three_providers_are_typed_by_the_ports() -> None:
+    """Contracts at the boundary, never the adapters that satisfy them.
+
+    Nothing at runtime tells the two apart and mypy accepts either, because
+    every adapter satisfies its port - so the annotation is the only place the
+    decision lives, and reading it back is the only way to pin it. The aliases
+    are checked in the same breath: they are what a router actually spells, so
+    an alias pointing at the right port through the wrong provider would leave
+    every signature compiling and every request answered by someone else.
+    """
+    assert get_type_hints(get_password_hasher)["return"] is PasswordHasher
+    assert get_type_hints(get_token_service)["return"] is TokenService
+    assert get_type_hints(get_email_notifier)["return"] is EmailNotifier
+
+    for alias, port, provider in (
+        (PasswordHasherDependency, PasswordHasher, get_password_hasher),
+        (TokenServiceDependency, TokenService, get_token_service),
+        (EmailNotifierDependency, EmailNotifier, get_email_notifier),
+    ):
+        assert get_origin(alias) is Annotated
+        annotated_type, marker = get_args(alias)
+        assert annotated_type is port
+        assert marker.dependency is provider
+
+
+def test_creating_the_app_still_opens_no_connection() -> None:
+    """D-06 survives the second container (`test_health.py` asserts the first).
+
+    Re-asserted here rather than left to the sibling because this plan adds a
+    builder to `create_app`, and the whole unit suite - every test above
+    included - rests on the application being constructible against a DSN that
+    points nowhere. The security container performs no I/O of its own
+    (`test_security_resources.py` proves that directly); what this asserts is
+    that adding it moved nothing in the half that owns a pool.
+    """
+    app = _app_with_a_security_container()
+
+    assert app.state.database.engine.pool.checkedout() == 0
+
+
+def test_the_dependency_module_reads_no_settings_per_request() -> None:
+    """RC-3 as a gate: configuration is read once, in the composition root.
+
+    A provider that reached for the settings object per request would work
+    perfectly and would quietly undo the reason both containers exist - the
+    application's state is narrowed in one private helper per container, and
+    everything downstream is typed by a dataclass instead of by a fresh cast.
+    A source scan is the honest form here: the accessor is cached, so a call
+    would not even be slow enough to notice.
+    """
+    source = inspect.getsource(dependencies_module)
+
+    assert "get_settings" not in source
