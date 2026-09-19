@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-09-19T06:40:33.242Z"
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-09-19T06:52:33.000Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 36
+  completed_plans: 37
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [██████████] 95%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Progress: [██████████] 95%
 | Phase 04 P08 | 11min | 3 tasks | 7 files |
 | Phase 04 P09 | 10min | 3 tasks | 3 files |
 | Phase 04 P11 | 14min | 2 tasks | 3 files |
+| Phase 04 P10 | 12min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -306,6 +307,9 @@ Recent decisions affecting current work:
 - [Phase 04-11]: the idempotence evidence carries a SECOND run the plan did not ask for - the same three executions against a targeted clause, where the third raises IntegrityError on uq_users_email_lower; executions 1 and 2 are byte-identical between the two forms, so a proof that only restarted with the same id would have passed against the form that aborts the container
 - [Phase 04-11]: the seed proof ran against taskmanager_test, never taskmanager - its third execution deliberately attempts a second row and its cleanup deletes by email, so pointing it at the database docker compose up serves would have put a destructive statement beside an evaluator's data for no gain
 - [Phase 04-11]: requirement tick LIST-01 deliberately NOT taken despite this plan's own frontmatter naming it - 04-12 is the last claimant of LIST-01..06 and TASK-01..08, the tenth consecutive plan in this phase to make the same call
+- [Phase 04-10]: GET /api/v1/task-lists/{id}/tasks issues THREE statements, not the two 04-10-PLAN's interfaces block predicted - the third is 04-03's visible_task_list guard, which the plan forgot to count; the measured number shipped with all three named in TASK_COLLECTION_STATEMENTS, because removing the guard would trade a security property of this same phase for a number in a plan, and D-17 is about invariance rather than a magic number
+- [Phase 04-10]: two status tests are named ..._rejects_an_unknown_value/_key rather than the plan's ..._is_422 - pytest exits 5, not 0, when -k matches nothing, so the plan's own prescribed names would have failed its own '-k rejects exits 0' clause; both halves of the either/or criterion are now literally true (the 04-09 precedent for renaming to contain the matched word)
+- [Phase 04-10]: requirement ticks TASK-01..TASK-08 deliberately NOT taken despite this plan's own frontmatter naming all eight - 04-12 is the last claimant, the eleventh consecutive plan in this phase to make the same call, though the behaviour those ticks rest on is now proved over HTTP
 
 ### Pending Todos
 
@@ -339,6 +343,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:40:25.538Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-09-19T06:52:26.141Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None
