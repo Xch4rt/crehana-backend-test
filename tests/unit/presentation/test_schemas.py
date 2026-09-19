@@ -957,3 +957,49 @@ def test_the_user_summary_publishes_nothing_the_directory_was_not_asked_for() ->
     the reason `UserResult` exists at all (T-5-08).
     """
     assert list(UserSummaryResponse.model_fields) == USER_SUMMARY_MEMBERS
+
+
+# ---------------------------------------------------------------------------
+# What the two existing task doors refuse by having no field for it
+# ---------------------------------------------------------------------------
+
+# Each row is a key an existing task body must never accept, and each is proven
+# by **absence**: the model does not declare the field, and `extra="forbid"`
+# turns sending it into one 422 naming it. `assignee_id` on create is D-06 (a
+# task cannot be created already assigned, and one use case notifies, not two);
+# `assignee_id` on the generic patch is T-5-10 (the patch stays free of side
+# effects, and D-05 gives assignment its own door); `status` on the generic
+# patch is D-08, re-asserted here because this phase touched the module that
+# declares both patch models.
+FORBIDDEN_TASK_BODY_KEYS = [
+    pytest.param(TaskCreateRequest, "assignee_id", id="create-assignee_id"),
+    pytest.param(TaskPatchRequest, "assignee_id", id="patch-assignee_id"),
+    pytest.param(TaskPatchRequest, "status", id="patch-status"),
+]
+
+FORBIDDEN_KEY_VALUES: dict[str, object] = {
+    "assignee_id": str(ASSIGNEE_ID),
+    "status": "completed",
+}
+
+
+@pytest.mark.parametrize(("model", "key"), FORBIDDEN_TASK_BODY_KEYS)
+def test_an_existing_task_door_refuses_a_key_it_declares_no_field_for(
+    model: type[BaseModel], key: str
+) -> None:
+    """Exactly one error, at the key - and the count is the load-bearing part.
+
+    A model that declared the field and then refused it in a validator would
+    fail this assertion, because the refusal would arrive as a `value_error`
+    at a field that exists; a bare "it raised" check would pass against that
+    model and against a model that had quietly started accepting the key and
+    tripped over something else in the body.
+    """
+    with pytest.raises(ValidationError) as caught:
+        model.model_validate({"title": TITLE, key: FORBIDDEN_KEY_VALUES[key]})
+
+    errors = caught.value.errors()
+
+    assert len(errors) == 1
+    assert errors[0]["type"] == "extra_forbidden"
+    assert errors[0]["loc"] == (key,)

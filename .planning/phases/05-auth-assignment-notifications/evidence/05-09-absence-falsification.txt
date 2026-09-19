@@ -1,0 +1,60 @@
+FALSIFICATION - plan 05-09, Task 3: the absence assertions are not vacuous
+Run at 2026-09-19T16:49:16Z.
+
+A task body proves D-06, T-5-10 and D-08 by having no field for the key, so
+the tests assert something only if declaring the field turns them red. Both
+task request models were given 'assignee_id: UUID | None = None' by hand and
+the suite was re-run; the plant was reverted afterwards with git checkout.
+
+$ .venv/bin/pytest tests/unit/presentation/test_schemas.py -q --no-cov -k "refuses_a_key_it_declares_no_field_for or status_to_the_generic_patch"
+
+.FF.                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_an_existing_task_door_refuses_a_key_it_declares_no_field_for[create-assignee_id] _
+
+model = <class 'taskmanager.presentation.api.schemas.tasks.TaskCreateRequest'>
+key = 'assignee_id'
+
+    @pytest.mark.parametrize(("model", "key"), FORBIDDEN_TASK_BODY_KEYS)
+    def test_an_existing_task_door_refuses_a_key_it_declares_no_field_for(
+        model: type[BaseModel], key: str
+    ) -> None:
+        """Exactly one error, at the key - and the count is the load-bearing part.
+
+        A model that declared the field and then refused it in a validator would
+        fail this assertion, because the refusal would arrive as a `value_error`
+        at a field that exists; a bare "it raised" check would pass against that
+        model and against a model that had quietly started accepting the key and
+        tripped over something else in the body.
+        """
+>       with pytest.raises(ValidationError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValidationError
+
+tests/unit/presentation/test_schemas.py:998: Failed
+_ test_an_existing_task_door_refuses_a_key_it_declares_no_field_for[patch-assignee_id] _
+
+model = <class 'taskmanager.presentation.api.schemas.tasks.TaskPatchRequest'>
+key = 'assignee_id'
+
+    @pytest.mark.parametrize(("model", "key"), FORBIDDEN_TASK_BODY_KEYS)
+    def test_an_existing_task_door_refuses_a_key_it_declares_no_field_for(
+        model: type[BaseModel], key: str
+    ) -> None:
+        """Exactly one error, at the key - and the count is the load-bearing part.
+
+        A model that declared the field and then refused it in a validator would
+        fail this assertion, because the refusal would arrive as a `value_error`
+        at a field that exists; a bare "it raised" check would pass against that
+        model and against a model that had quietly started accepting the key and
+        tripped over something else in the body.
+        """
+>       with pytest.raises(ValidationError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValidationError
+
+tests/unit/presentation/test_schemas.py:998: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/presentation/test_schemas.py::test_an_existing_task_door_refuses_a_key_it_declares_no_field_for[create-assignee_id]
+FAILED tests/unit/presentation/test_schemas.py::test_an_existing_task_door_refuses_a_key_it_declares_no_field_for[patch-assignee_id]
+2 failed, 2 passed, 63 deselected in 0.04s
