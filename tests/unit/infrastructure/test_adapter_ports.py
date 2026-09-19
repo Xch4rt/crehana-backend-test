@@ -6,7 +6,7 @@ accepts that assignment only if the adapter matches the port structurally -
 method by method, including keyword-only parameters and return types.
 `make typecheck` is therefore the gate; these tests are what make it *visible*,
 because a requirement an evaluator can confirm only by running a type checker
-is weaker than one that names itself, four times, in the pytest report.
+is weaker than one that names itself, once per adapter, in the pytest report.
 
 The `Clock` port is deliberately absent from this module. Its adapter
 conformance already has a single home in
@@ -14,6 +14,11 @@ conformance already has a single home in
 (plan 03-03), and asserting the same thing twice would mean a future change to
 the port produces two identical failures in two files - which reads as two
 problems.
+
+The two credential adapters are here, and their own suites -
+`test_passwords.py` and `test_tokens.py` - are about behaviour only. The split
+follows the same rule the `Clock` exclusion above does: a port binding has one
+home, and this is the home for every adapter that has a port.
 
 Nothing here opens a connection. The session the three repositories borrow comes
 from a factory over an engine whose DSN points at a port with no listener, which
@@ -32,7 +37,9 @@ from taskmanager.application.ports.repositories import (
     TaskRepository,
     UserRepository,
 )
+from taskmanager.application.ports.security import PasswordHasher, TokenService
 from taskmanager.application.ports.unit_of_work import UnitOfWork
+from taskmanager.infrastructure.clock import SystemClock
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.infrastructure.db.engine import create_database_resources
 from taskmanager.infrastructure.db.repositories.task_lists import (
@@ -41,6 +48,8 @@ from taskmanager.infrastructure.db.repositories.task_lists import (
 from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
 from taskmanager.infrastructure.db.repositories.users import SqlAlchemyUserRepository
 from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from taskmanager.infrastructure.security.passwords import PwdlibPasswordHasher
+from taskmanager.infrastructure.security.tokens import JwtTokenService
 
 # The same unreachable DSN `test_engine.py` uses, and for the same reason: an
 # accidental connection attempt must fail loudly instead of silently reaching
@@ -72,6 +81,33 @@ def test_the_sqlalchemy_task_list_repository_satisfies_its_port() -> None:
 def test_the_sqlalchemy_user_repository_satisfies_the_user_repository_port() -> None:
     repository: UserRepository = SqlAlchemyUserRepository(a_session_factory()())
     assert repository is not None
+
+
+def test_the_pwdlib_password_hasher_satisfies_the_password_hasher_port() -> None:
+    """Including `dummy_verify`, the one method D-21 added to either port.
+
+    A structural match is the whole check: the adapter declares no base class,
+    so if the port grew a method and this adapter did not, nothing but this
+    binding would say so.
+    """
+    hasher: PasswordHasher = PwdlibPasswordHasher()
+    assert hasher is not None
+
+
+def test_the_jwt_token_service_satisfies_the_token_service_port() -> None:
+    """Constructed exactly as the composition root will construct it.
+
+    Keyword-only, with the `Clock` **port** rather than a concrete clock, and
+    with no `Settings` object anywhere near it - the three JWT values are read
+    once by the builder in `infrastructure/security/resources.py` and passed in.
+    """
+    tokens: TokenService = JwtTokenService(
+        secret=JWT_SECRET,
+        algorithm="HS256",
+        expire_minutes=30,
+        clock=SystemClock(),
+    )
+    assert tokens is not None
 
 
 def test_the_sqlalchemy_unit_of_work_satisfies_the_unit_of_work_port() -> None:
