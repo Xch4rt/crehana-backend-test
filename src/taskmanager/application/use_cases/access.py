@@ -5,14 +5,15 @@ refuse it if it is `None` *or* not the actor's, then proceed. Written out per
 use case that is eleven chances to forget the second half of the condition, and
 the failure mode of forgetting it is silent: the endpoint works, the tests for
 the owner pass, and only an actor who is not the owner discovers that ownership
-was never checked. So the rule lives here, once, as two functions every use case
-calls.
+was never checked. So the rule lives here, once, as three functions every use
+case calls: `visible_task_list`, `visible_task` for anyone who may *see* a task,
+and `owned_task` for the write paths only its list's owner may take.
 
 **The deliberate asymmetry.** `visible_task_list` refuses with the list-shaped
 not-found error - the only place in this module that class is raised, which is
-why a grep for it finds one call site. `visible_task` refuses with the
-task-shaped one on *every* leg, including a missing or foreign parent list, and
-that is not an oversight in the second function. A task
+why a grep for it finds one call site. The two task guards refuse with the
+task-shaped one on *every* 404 leg, including a missing or foreign parent list,
+and that is not an oversight in them. A task
 route that answered a foreign parent with `task_list_not_found` would tell the
 caller two things they are not entitled to know: that the task itself exists,
 because the code differs from the one an absent task returns, and what the
@@ -22,18 +23,32 @@ identifier the caller already supplied, and with nothing else. The task is
 checked *before* its list for the same reason: a wrong-list request must not
 reveal whether the addressed list exists.
 
-**Why nothing here can answer 403.** Phase 4 is scoped to the owner (D-04), and
-the owner is the only actor who can see a list or its tasks at all - so there is
-no visible-but-forbidden case left for a 403 to answer, and every refusal here
-is a `*NotFoundError`. Phase 5 adds the assignee capabilities, and with them the
-first resource an actor can see but may not change; the 403 leg belongs to that
-phase, and the mapping from the authorization failure class Phase 2 defined onto
-a 403 problem body is already proven end to end by
-`tests/api/test_error_contract.py` (plan 02-04). That class is deliberately not
-named anywhere in this file, prose included, so "this module cannot produce a
-403" is something a grep over it settles rather than something a reader has to
-take on trust - the same convention the Makefile follows for the tool
-invocations it warns against.
+**How this module answers 403, and the claim that used to stand here (D-22).**
+For the whole of Phase 4 this paragraph said the opposite. It was headed "Why
+nothing here can answer 403", and it stated as a grep-checkable property that
+the authorization failure class was named nowhere in this file, prose included -
+so a reader could settle "this module cannot produce a 403" with a command
+rather than with trust. The claim was true, and it was true for a reason worth
+keeping in the record: Phase 4 was scoped to the list owner (D-04), the owner
+was the only actor who could see a list or a task at all, and a rule with no
+visible-but-forbidden case has nothing for a 403 to say. Every refusal was a
+`*NotFoundError` because every refused caller was, as far as the system was
+concerned, looking at nothing.
+
+Phase 5 retires it. The assignee (D-01) is the first actor who can see a
+resource they may not change, so `owned_task` below refuses them with
+`AuthorizationError` while refusing everyone else exactly as `visible_task`
+does. The replacement property is the same kind of thing, only counted rather
+than absent: that class is raised on **one** leg, of **one** function, in this
+file, so counting the raise statements that name it settles how many ways this
+module can produce a 403 - and the answer is one. The mapping from that class
+onto a 403 problem body needs nothing here; it is resolved by MRO walk in
+`presentation/api/errors/mapping.py` and proven end to end by
+`tests/api/test_error_contract.py` (plan 02-04).
+
+The paragraph was rewritten in the commit that falsified it, not afterwards.
+A documented property this project asserts with a grep is worth exactly as much
+as the discipline of retiring it out loud.
 
 **Why a module of functions rather than a base class.** A `GuardedUseCase`
 mixin would put the rule in an inheritance chain, where a subclass can override
@@ -42,9 +57,11 @@ looks. A function call is grep-able (`grep -rn "visible_task" src/`), and a use
 case that forgot to call one shows up in a diff as an absent line rather than as
 a missing `if` inside a body nobody re-reads.
 
-Both functions take an already-entered `UnitOfWork`. Neither opens the block,
-neither commits, and neither reads a clock: the transaction boundary belongs to
-the use case (D-17, ARC-08), and these are reads inside it.
+All three functions take an already-entered `UnitOfWork`. None opens the block,
+none commits, and none reads a clock: the transaction boundary belongs to the
+use case (D-17, ARC-08), and these are reads inside it. That holds on the 403
+leg too - a refusal this module raises leaves the transaction exactly as it
+found it, for the use case to end.
 
 **`for_update` is how a write path says so (ADR-058, Phase 4 review CR-01).** A
 use case that is about to `update` or `delete` what it loads passes
@@ -52,15 +69,18 @@ use case that is about to `update` or `delete` what it loads passes
 `get_for_update`: the latest committed state, held against every other writer
 until the unit of work ends. Without it, two overlapping requests validated
 against the same stale copy, and the second persisted a status transition the
-state machine forbids while erasing the first one's write. It is a keyword on the
-two existing functions rather than a second pair of them, because a second pair
+state machine forbids while erasing the first one's write. It is a keyword on
+each of the three functions rather than a locking twin of each, because a twin
 would be a second copy of the visibility rule - the one thing this module exists
-to have exactly one of. The default is `False`, so a read can never wait on a
+to have exactly one of. (`owned_task` is not such a twin: it differs by which
+failures it can produce, not by whether it locks.) The default is `False`, so a
+read can never wait on a
 writer by accident, and the flag is keyword-only, so a write path names it at the
 call site where a reviewer will look for it.
 
-Only the *addressed* resource is held. `visible_task(..., for_update=True)` holds
-the task and, when it has to consult the parent list at all, reads it plainly:
+Only the *addressed* resource is held. Both task guards, called with
+`for_update=True`, hold the task and, when they consult the parent list at all,
+read it plainly:
 the list is consulted for ownership, not changed, and a rule of "a task's writer
 never holds a list" is what keeps a list deletion, which reaches its tasks
 through the cascade, from ever waiting on a writer that is waiting on it. The
@@ -73,7 +93,11 @@ from uuid import UUID
 from taskmanager.application.ports.unit_of_work import UnitOfWork
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
-from taskmanager.domain.exceptions import TaskListNotFoundError, TaskNotFoundError
+from taskmanager.domain.exceptions import (
+    AuthorizationError,
+    TaskListNotFoundError,
+    TaskNotFoundError,
+)
 
 
 async def visible_task_list(
@@ -146,5 +170,71 @@ async def visible_task(
         return task
     task_list = await uow.task_lists.get(task_list_id)
     if task_list is None or task_list.owner_id != actor_id:
+        raise TaskNotFoundError(task_id)
+    return task
+
+
+async def owned_task(
+    uow: UnitOfWork,
+    task_list_id: UUID,
+    task_id: UUID,
+    actor_id: UUID,
+    *,
+    for_update: bool = False,
+) -> Task:
+    """The task, if this actor owns the list it is in (D-03, ADR-008).
+
+    The owner-only door. `UpdateTask`, `DeleteTask`, `AssignTask` and
+    `UnassignTask` come through here; `GetTask` and `ChangeTaskStatus` come
+    through `visible_task`, because an assignee may read their task and may
+    advance its state machine. This function's whole reason for existing is the
+    gap between those two sets: an actor who can see a resource and may not
+    change it.
+
+    One 403 and four 404s. The assignee is refused with `AuthorizationError`,
+    because they can see this task and are being told only that they may not
+    change it. Everyone else - a stranger, an absent task, a task under another
+    list (ADR-050), an orphan whose parent is gone - is refused exactly as
+    `visible_task` refuses them, with `TaskNotFoundError(task_id)`, so nothing
+    about the list or its owner leaks out of the door that says "no".
+
+    The refusal message names the **rule**, never the actor. A 403 tells a
+    caller that they may not; who may is a different question, and answering it
+    would hand an enumerating caller an identifier their request never
+    contained.
+
+    **Why a second function rather than `visible_task(..., require_owner=True)`.**
+    A boolean at the call site reads as configuration - something tuned - when
+    what is actually being chosen is which set of failures this request can
+    produce. The two functions do not differ by a degree of strictness; they
+    differ in that one of them can answer 403 and the other cannot, and that is
+    worth a name a reviewer can grep for rather than an argument they have to
+    trace. **And why not one function returning `(task, is_owner)`:** it would
+    change every existing call site, and it would put the ADR-008 decision back
+    into the use cases - eleven `if not is_owner:` branches, eleven chances to
+    pick the wrong status code - which is the one thing ADR-055 exists to
+    prevent.
+
+    `for_update=True` holds the task and only the task, exactly as its sibling
+    does; see the module docstring for the lock-ordering rule.
+    """
+    if for_update:
+        task = await uow.tasks.get_for_update(task_id)
+    else:
+        task = await uow.tasks.get(task_id)
+    # First, and for `visible_task`'s reason: a wrong-list request is refused
+    # before anything under the addressed list is read, so the answer cannot
+    # depend on whether that list exists - and cannot become a 403 for an
+    # assignee who addressed their task under the wrong parent (ADR-050).
+    if task is None or task.task_list_id != task_list_id:
+        raise TaskNotFoundError(task_id)
+    task_list = await uow.task_lists.get(task_list_id)
+    if task_list is None or task_list.owner_id != actor_id:
+        # The one leg in this module that produces a 403, and the whole of the
+        # difference between the two functions. The assignee reached a resource
+        # they can see, so pretending it is absent would be a lie they can
+        # already disprove with a `GET`; everyone else is told nothing.
+        if task.assignee_id == actor_id:
+            raise AuthorizationError("Only the list owner may change this task.")
         raise TaskNotFoundError(task_id)
     return task

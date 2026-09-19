@@ -32,7 +32,11 @@ from uuid import UUID
 
 import pytest
 
-from taskmanager.application.use_cases.access import visible_task, visible_task_list
+from taskmanager.application.use_cases.access import (
+    owned_task,
+    visible_task,
+    visible_task_list,
+)
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.exceptions import (
@@ -53,6 +57,9 @@ OTHER_USER_ID = UUID("99999999-9999-4999-8999-999999999999")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 OTHER_LIST_ID = UUID("44444444-4444-4444-8444-444444444444")
+# The third role. `OTHER_USER_ID` is the foreign *owner* in these fixtures, so a
+# caller who is neither owner nor assignee needs an identifier of their own.
+STRANGER_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 
 def _task_list(
@@ -373,8 +380,144 @@ async def test_the_wrong_parent_refuses_even_the_tasks_own_assignee() -> None:
         assert str(OTHER_LIST_ID) not in str(error.details)
 
 
+async def test_owned_task_returns_the_task_to_the_owner_of_its_list() -> None:
+    """The success leg, identical to `visible_task`'s: only the refusals differ."""
+    async with _uow(assignee_id=OTHER_USER_ID) as unit_of_work:
+        task = await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        assert task.id == TASK_ID
+        assert task is unit_of_work.task_repository.stored[TASK_ID]
+
+
+async def test_owned_task_refuses_the_assignee_with_the_projects_first_403() -> None:
+    """D-03: the assignee can see this task and may not change it.
+
+    The base `DomainError` is caught and the leaf asserted afterwards, the same
+    way round as every 404 test here - a `pytest.raises(AuthorizationError)`
+    would be satisfied by an implementation that had never considered the 404
+    alternative, and the pair is the whole point.
+
+    The message is asserted not to name the owner. A 403 tells a caller that
+    they may not; who may is a different question, and answering it would hand
+    an enumerating caller a user identifier the request never contained.
+    """
+    async with _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID) as unit_of_work:
+        with pytest.raises(DomainError) as excinfo:
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        error = excinfo.value
+        assert isinstance(error, AuthorizationError)
+        assert not isinstance(error, TaskNotFoundError)
+        assert error.code == "authorization_failed"
+        assert error.details == {}
+        assert str(OTHER_USER_ID) not in str(error)
+        assert str(OTHER_USER_ID) not in str(error.details)
+
+
+async def test_owned_task_hides_the_task_from_a_stranger() -> None:
+    """The third role gets the answer an absent task gets, never the 403."""
+    async with _uow(owner_id=OTHER_USER_ID, assignee_id=OTHER_USER_ID) as unit_of_work:
+        with pytest.raises(DomainError) as excinfo:
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        error = excinfo.value
+        assert isinstance(error, TaskNotFoundError)
+        assert not isinstance(error, AuthorizationError)
+        assert error.details == {"task_id": str(TASK_ID)}
+
+
+async def test_owned_task_hides_an_absent_task() -> None:
+    """Nothing was loaded, so there is no assignee to be forbidden."""
+    async with _uow(with_task=False) as unit_of_work:
+        with pytest.raises(DomainError) as excinfo:
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        error = excinfo.value
+        assert isinstance(error, TaskNotFoundError)
+        assert not isinstance(error, AuthorizationError)
+        assert error.details == {"task_id": str(TASK_ID)}
+
+
+async def test_owned_task_refuses_a_wrong_parent_before_it_reads_anything() -> None:
+    """ADR-050 on the owner-only door, with the same ordering as its sibling.
+
+    The caller owns the list they addressed and is also the task's assignee, so
+    both of the ways through this function are open to them - and the wrong
+    parent still refuses first, with the task-shaped 404 rather than the 403.
+    An implementation that compared the parent later would answer this request
+    403, which tells the caller their task exists somewhere.
+    """
+    task_lists = CountingTaskListRepository()
+    async with _uow(
+        task_belongs_to=OTHER_LIST_ID, assignee_id=ACTOR_ID, task_lists=task_lists
+    ) as unit_of_work:
+        with pytest.raises(DomainError) as excinfo:
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        error = excinfo.value
+        assert isinstance(error, TaskNotFoundError)
+        assert not isinstance(error, AuthorizationError)
+        assert error.details == {"task_id": str(TASK_ID)}
+        assert str(OTHER_LIST_ID) not in str(error.details)
+        assert task_lists.reads == []
+
+
+async def test_owned_task_hides_a_task_whose_parent_list_is_absent() -> None:
+    """An orphan is `task_not_found`, exactly as it is through the other door."""
+    async with _uow(with_task_list=False) as unit_of_work:
+        with pytest.raises(DomainError) as excinfo:
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+        error = excinfo.value
+        assert isinstance(error, TaskNotFoundError)
+        assert not isinstance(error, TaskListNotFoundError)
+        assert not isinstance(error, AuthorizationError)
+        assert error.details == {"task_id": str(TASK_ID)}
+        assert str(TASK_LIST_ID) not in str(error.details)
+
+
+async def test_the_owned_task_403_and_404_are_two_different_answers() -> None:
+    """The mirror image of this module's indistinguishability tests.
+
+    Every other comparative test here produces two refusals and asserts they
+    match. This one produces two refusals and asserts they *differ* - same
+    fixture, same request, one actor who is the assignee and one who is not -
+    because "visible but forbidden is a 403 and invisible is a 404" is a claim
+    about a pair too. A single-error assertion would pass just as happily
+    against an implementation that answered 404 for the assignee as well, which
+    is what the project did for the whole of Phase 4.
+    """
+    async with _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID) as assignee_uow:
+        with pytest.raises(DomainError) as assignee_info:
+            await owned_task(assignee_uow, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+
+    async with _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID) as stranger_uow:
+        with pytest.raises(DomainError) as stranger_info:
+            await owned_task(stranger_uow, TASK_LIST_ID, TASK_ID, STRANGER_ID)
+
+    forbidden, hidden = assignee_info.value, stranger_info.value
+    assert type(forbidden) is not type(hidden)
+    assert forbidden.code != hidden.code
+    assert isinstance(forbidden, AuthorizationError)
+    assert isinstance(hidden, TaskNotFoundError)
+
+
+async def test_owned_task_holds_the_task_and_never_its_parent_list() -> None:
+    """ADR-058 and the lock-ordering rule on the door both write paths now use."""
+    task_lists = CountingTaskListRepository()
+    async with _uow(task_lists=task_lists) as unit_of_work:
+        task = await owned_task(
+            unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID, for_update=True
+        )
+
+        assert task.id == TASK_ID
+        assert unit_of_work.task_repository.held_for_update == [TASK_ID]
+        assert task_lists.held_for_update == []
+        assert task_lists.reads == [TASK_LIST_ID]
+
+
 async def test_the_guards_never_end_the_transaction_they_were_handed() -> None:
-    """Both helpers read inside a block someone else owns, on every leg.
+    """All three helpers read inside a block someone else owns, on every leg.
 
     A guard that committed, rolled back or opened its own block would take the
     transaction boundary away from the use case, which is exactly what D-17 and
@@ -382,12 +525,17 @@ async def test_the_guards_never_end_the_transaction_they_were_handed() -> None:
     `FakeUnitOfWork.__aexit__` rolls an uncommitted block back on the way out -
     that is the unit of work's obligation, not the guard's doing.
     """
-    async with _uow() as unit_of_work:
+    async with _uow(assignee_id=OTHER_USER_ID) as unit_of_work:
         await visible_task_list(unit_of_work, TASK_LIST_ID, ACTOR_ID)
         await visible_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
+        await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, ACTOR_ID)
 
         with pytest.raises(DomainError):
             await visible_task(unit_of_work, OTHER_LIST_ID, TASK_ID, ACTOR_ID)
+        # The 403 leg closes nothing either: an authorization refusal must leave
+        # the transaction exactly as it found it, for the use case to end.
+        with pytest.raises(DomainError):
+            await owned_task(unit_of_work, TASK_LIST_ID, TASK_ID, OTHER_USER_ID)
 
         assert unit_of_work.commits == 0
         assert unit_of_work.rollbacks == 0

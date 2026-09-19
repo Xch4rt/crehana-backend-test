@@ -55,3 +55,34 @@ After the assignee tests it read
 
 line 92 being `visible_task_list`'s `get_for_update`. Closed by writing the missing
 test rather than by reinterpreting the criterion.
+
+
+Task 2 -- `owned_task`, the first 403 (D-03, D-22)
+==================================================
+Eight tests written first, importing a name `access.py` did not yet export.
+
+$ .venv/bin/pytest tests/unit/application/test_access.py -q --no-cov
+
+    tests/unit/application/test_access.py:35: in <module>
+        from taskmanager.application.use_cases.access import (
+    E   ImportError: cannot import name 'owned_task' from
+        'taskmanager.application.use_cases.access'
+        (/Users/xch4rt/work/myself/crehana/test/src/taskmanager/application/use_cases/access.py)
+    =========================== short test summary info ============================
+    ERROR tests/unit/application/test_access.py
+    !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+    1 error in 0.12s
+
+A collection error rather than a set of assertion failures, and this is the shape
+that cannot be committed at all. `mypy --strict` runs as a pre-commit hook over
+`src` and `tests`:
+
+$ .venv/bin/mypy src tests
+
+    tests/unit/application/test_access.py:35: error: Module
+    "taskmanager.application.use_cases.access" has no attribute "owned_task"
+    [attr-defined]
+    Found 1 error in 1 file (checked 141 source files)
+
+so the hook refuses the commit before pytest is ever consulted. 02-01 hit this
+first and recorded it; 04-02, 05-01 and 05-02 hit it again.
