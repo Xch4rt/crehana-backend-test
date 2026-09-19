@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-13-PLAN.md
-last_updated: "2026-09-19T17:34:23.959Z"
-last_activity: 2026-09-19 -- Phase 05 plan 13 complete
+stopped_at: Completed 05-14-PLAN.md
+last_updated: "2026-09-19T17:55:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 plan 14 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 51
-  percent: 94
+  completed_plans: 52
+  percent: 96
 ---
 
 # Project State
@@ -27,17 +27,17 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 14 of 16
-Status: Executing Phase 05 (plans 01-13 complete; 05-14 next)
-Last activity: 2026-09-19 -- Phase 05 plan 13 complete
+Plan: 15 of 16
+Status: Executing Phase 05 (plans 01-14 complete; 05-15 next)
+Last activity: 2026-09-19 -- Phase 05 plan 14 complete
 
-Progress: [█████████░] 94%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 51
+- Total plans completed: 52
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -107,6 +107,7 @@ Progress: [█████████░] 94%
 | Phase 05 P11 | 24min | 3 tasks | 10 files |
 | Phase 05 P12 | 7min | 3 tasks | 8 files |
 | Phase 05 P13 | 11min | 3 tasks | 4 files |
+| Phase 05 P14 | 34min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -653,6 +654,32 @@ Recent decisions affecting current work:
   - no pragma and no omit entry was added
 - [Phase 05-13]: requirement ticks AUTH-01..AUTH-05/ASGN-03 deliberately NOT taken - 05-16 is the
   last claimant, the fifteenth consecutive plan in this phase to make the same call
+- [Phase 05-14]: no TDD RED was available - 05-08 and 05-12 shipped the behaviour, so every test
+  here was green when written; four falsifications were recorded instead (the guard reordered after
+  the user lookup, the D-07 early return deleted, AssignTask's commit removed, the owner's write
+  path not holding the row), each reverted with git checkout and the suite re-run green
+- [Phase 05-14]: a notification's extra= fields are read with vars(record), never with attribute
+  access - record.event is a mypy-strict attr-defined error and getattr(record, "event") is four
+  flake8-bugbear B009 violations, both observed; __dict__ is also what JsonFormatter itself iterates
+- [Phase 05-14]: NOTF-03 is proven by a RE-READ through the API, not by the 200 - removing
+  AssignTask's commit() was observed leaving the status code and the response body green while the
+  re-read went red, which is exactly the implementation the requirement forbids
+- [Phase 05-14]: the statement counts measured on the real authenticated path are 2 and 4 for the
+  OWNER (D-11's actor lookup is the new first entry, named in the constant's comment); the
+  invariance property is unchanged and the module now says the absolute number is a measurement
+- [Phase 05-14]: counts differ by ROLE and it was measured, not inferred - owner GET task 3 SELECTs
+  vs assignee 2, owner PATCH .../status 4 SELECTs + 1 UPDATE vs assignee 3 + 1; any future count
+  assertion must say whose it is
+- [Phase 05-14]: _remove_what_was_committed names both users explicitly - tasks.assignee_id is ON
+  DELETE SET NULL, so deleting the owner clears the column and leaves the assignee's users row for
+  test_dependencies.py to report as a leak
+- [Phase 05-14]: the new concurrency case asserts `waited` LAST, the ordering the module's own
+  _until_it_waits_or_finishes docstring asks for - with the lock removed it now fails on the lost
+  rename rather than on "nobody waited"
+- [Phase 05-14]: routers/assignments.py is back at 100% and the suite's total coverage is 100.00%
+  with no pragma and no omit entry - the six statements 05-13 handed over are closed
+- [Phase 05-14]: requirement ticks ASGN-01/ASGN-02/NOTF-01/NOTF-02/NOTF-03 deliberately NOT taken -
+  05-16 is the last claimant, the sixteenth consecutive plan in this phase to make the same call
 
 ### Pending Todos
 
@@ -688,6 +715,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:34:23.951Z
-Stopped at: Completed 05-13-PLAN.md
+Last session: 2026-09-19T17:55:00.000Z
+Stopped at: Completed 05-14-PLAN.md
 Resume file: None
