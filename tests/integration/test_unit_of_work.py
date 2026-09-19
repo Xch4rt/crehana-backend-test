@@ -203,6 +203,36 @@ async def test_rollback_is_not_performed_twice(uow: SqlAlchemyUnitOfWork) -> Non
     assert not await rows_in_users(uow, USER_ID)
 
 
+async def test_the_repositories_are_unreachable_outside_the_block(
+    uow: SqlAlchemyUnitOfWork,
+) -> None:
+    """WR-01: a closed session must not stay reachable through a repository.
+
+    The failure this forbids is silent rather than noisy, which is why it needs
+    a test of its own. `close()` does not make an `AsyncSession` unusable -
+    SQLAlchemy reuses it - so `await uow.users.get(...)` after the block would
+    autobegin a fresh transaction on a newly checked-out connection, answer
+    correctly, and leave that transaction open for ever. Nothing would raise,
+    nothing would be written, and the pool would lose a connection per call.
+
+    Both sides of the block are asserted, because they are the same mistake
+    seen from two directions: the repositories exist only while a transaction
+    does.
+    """
+    with pytest.raises(AttributeError):
+        _ = uow.users
+
+    async with uow:
+        assert await uow.users.get(USER_ID) is None
+
+    with pytest.raises(AttributeError):
+        _ = uow.users
+    with pytest.raises(AttributeError):
+        _ = uow.tasks
+    with pytest.raises(AttributeError):
+        _ = uow.task_lists
+
+
 async def test_the_three_repositories_share_one_transaction(
     uow: SqlAlchemyUnitOfWork,
 ) -> None:

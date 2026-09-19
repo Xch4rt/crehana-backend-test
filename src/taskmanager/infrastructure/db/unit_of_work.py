@@ -127,6 +127,24 @@ class SqlAlchemyUnitOfWork:
         connection. The D-01 fixture relies on exactly that: it keeps ownership
         of the outer transaction across every block a test opens, and rolls it
         back at teardown.
+
+        The three repositories are unbound on the way out, and that is the
+        Phase 3 review's WR-01. They hold the session object directly, and
+        `close()` does not make a session unusable: SQLAlchemy reuses it, so a
+        repository call made *after* the block would silently autobegin a fresh
+        transaction on a newly checked-out pooled connection that nothing here
+        will ever commit, roll back or close - the dirty session the port's
+        docstring forbids, reached from outside the boundary rather than
+        inside it. Deleting the attributes turns that call into an immediate
+        `AttributeError` naming the attribute, both after the block and before
+        the first one, which is where `FakeUnitOfWork` needs no equivalent:
+        its repositories are dictionaries with no transaction to leak.
+
+        The alternative - a `__getattr__` that answered with the same sentence
+        `_open_session` uses - was rejected. mypy resolves *every* unknown
+        attribute through `__getattr__` once it exists, so a typo on the one
+        object every use case holds would stop being a type error, which is a
+        worse trade than a less eloquent exception.
         """
         session = self._open_session
         try:
@@ -135,6 +153,7 @@ class SqlAlchemyUnitOfWork:
         finally:
             await session.close()
             self._session = None
+            del self.tasks, self.task_lists, self.users
         return None
 
     async def commit(self) -> None:
