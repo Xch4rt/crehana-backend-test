@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-09-19T00:18:37.901Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-09-19T01:00:35.869Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 23
-  percent: 88
+  completed_plans: 24
+  percent: 92
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 9 of 11
+Plan: 10 of 11
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Progress: [█████████░] 88%
 | Phase 03 P06 | 15min | 3 tasks | 7 files |
 | Phase 03 P07 | 10min | 2 tasks | 3 files |
 | Phase 03 P08 | 13min | 3 tasks | 7 files |
+| Phase 03 P09 | 16min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,15 @@ Recent decisions affecting current work:
 - [Phase 03-08]: The commit falsification is on disk (evidence/03-08-commit-falsification.txt): every read in the integration suite shares the fixture's connection, so only the second-connection test and the red/green pair can distinguish a working `create_savepoint` from a silently degraded `rollback_only` (Pitfall 1)
 - [Phase 03-08]: Requirement ticks DB-01/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the eighth consecutive plan in this phase to make the same call
 
+- [Phase 03-09]: taskmanager.__version__ is the ONE runtime version string and src/taskmanager/__init__.py is now the project's only non-empty package init, with the exception justified in its docstring; importlib.metadata was rejected because it raises PackageNotFoundError in exactly the environment pytest.ini's pythonpath=src creates, and tests/unit/test_version.py binds the constant to pyproject.toml
+- [Phase 03-09]: Dependencies are injected as Annotated[T, Depends(f)], never as an argument default - flake8-bugbear's B008 matches the call name AS WRITTEN and .flake8 whitelists the dotted `fastapi.Depends` this project never uses; PATTERNS.md predicted B008 could not fire and make lint proved otherwise
+- [Phase 03-09]: The lifespan closes over the DatabaseResources create_app just built instead of reading app.state.database - the plan's form type-checks only because the attribute arrives as Any, and dependencies.py stays the single place application state is narrowed (grep -c "cast(" prints 1)
+- [Phase 03-09]: /health is a status document and never problem+json: the 503 is a status assignment on the injected Response, so both legs keep the declared response model and both appear in /openapi.json; the probe returns a bool so the driver's message is discarded rather than reported (T-3-26)
+- [Phase 03-09]: get_uow is proven by a throwaway router that TAKES the provider, not by an override - an override replaces the code under test; the no-durable-teardown claim was falsified (one line added, assert 1 == 0) and the red/green pair is in evidence/03-09-teardown-falsification.txt
+- [Phase 03-09]: Engine disposal is asserted by pool object identity before and after the lifespan, because dispose() recreates the pool - a connection-count assertion would pass vacuously against an engine that never connected
+- [Phase 03-09]: The falsification run left a real row in taskmanager_test and had to be deleted by hand: test_dependencies.py deliberately runs OUTSIDE the D-01 rollback, which is the only arrangement in which an escaping write is visible
+- [Phase 03-09]: Requirement ticks DOCK-03/ARC-08/DB-01 deliberately NOT taken - 03-11 is the last claimant, the ninth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -232,6 +242,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-18T23:52:05.626Z
-Stopped at: Completed 03-07-PLAN.md
+Last session: 2026-09-19T00:58:00.000Z
+Stopped at: Completed 03-09-PLAN.md
 Resume file: None

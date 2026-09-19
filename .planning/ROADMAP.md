@@ -168,7 +168,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 03-09-PLAN.md — __version__, the FastAPI dependencies, GET /health and the wired composition root
+- [x] 03-09-PLAN.md — __version__, the FastAPI dependencies, GET /health and the wired composition root
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -248,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
-| 3. Persistence & Runnable Stack | 8/11 | In Progress | - |
+| 3. Persistence & Runnable Stack | 9/11 | In Progress | - |
 | 4. Task Lists & Tasks | 0/TBD | Not started | - |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
