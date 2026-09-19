@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-09-19T06:05:10.676Z"
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-09-19T06:19:21.017Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 33
+  completed_plans: 34
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Progress: [█████████░] 87%
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
 | Phase 04 P06 | 11min | 3 tasks | 12 files |
 | Phase 04 P07 | 10min | 3 tasks | 7 files |
+| Phase 04 P08 | 11min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -283,6 +284,14 @@ Recent decisions affecting current work:
 - [Phase 04-07]: get_clock takes no Request and stores nothing on app.state - SystemClock is stateless, so the narrowing _resources exists for does not apply, and a test asserts two calls return different objects; CurrentActor is pinned through typing.get_args, so a refactor that repointed the alias at another provider fails there rather than in production
 - [Phase 04-07]: the 'not authentication' phrase is asserted against inspect.getsource rather than __doc__, so moving the sentence into a comment still satisfies D-03's honesty requirement; the requirement is that a reader of the file is told, not that a particular string object exists at runtime
 - [Phase 04-07]: requirement ticks ARC-05/TASK-01/TASK-03/TASK-06 deliberately NOT taken - 04-12 is the last claimant, the seventh consecutive plan in this phase to make the same call, and this plan ships the typed boundary with no route above it
+- [Phase 04-08]: the plan's route-counting one-liners walk app.routes for .path/.methods, but FastAPI 0.141.1 with Starlette 1.6.0 leaves ONE opaque _IncludedRouter there with neither attribute - every route assertion, acceptance checks and the new inventory test alike, reads app.openapi()['paths'] instead, which is both the working form and the document a client actually reads
+- [Phase 04-08]: every route declares a 500 leg beside its 404/409/422, because GET /api/v1/task-lists can produce none of the three and would otherwise have carried an EMPTY responses map - the 500 is Phase 2's fixed problem+json body, a real documented outcome rather than padding
+- [Phase 04-08]: declaring 422 explicitly REPLACES FastAPI's generated HTTPValidationError entry, and that is a correction - this API answers 422 as RFC 9457 problem+json, so the generated entry documented a shape no endpoint has ever returned; publishing the real component is DOC-04's Phase 7 budget
+- [Phase 04-08]: the tasks router takes the plan's conditional branch - the parameter is status_filter with Query(alias="status") because the plain name shadows the status module imported for the status-code constants; the public contract was MEASURED rather than assumed (422 with field "query.status")
+- [Phase 04-08]: the D-15 import check flags the forbidden name bound from ANY module, not only fastapi and starlette.exceptions as 04-RESEARCH recommends - naming the two would tie the gate to a dependency's layout rather than to the property, and a local re-export would walk straight through it
+- [Phase 04-08]: the red capture's plant 1 adds the import AS WELL AS the raise (the plan names only the raise) - a raise of an unbound name is not a state the codebase could reach, and plant 2, the import alone, is the run that proves the two assertions are not redundant: raise check green, import check red
+- [Phase 04-08]: two grep criteria were met by rewording docstring prose rather than by changing code - "commit()" printed 1 and "response_class=Response" printed 2 from passages that spelled the forms they explained; the prose-not-literal convention since 01-03 exists precisely so these counters stay strict
+- [Phase 04-08]: requirement ticks ARC-05/LIST-01..06/TASK-01..08 deliberately NOT taken - 04-12 is the last claimant, the eighth consecutive plan in this phase to make the same call; these routes have no HTTP test above them until 04-09 and 04-10, and a tick taken from a route's existence rather than its behaviour proves nothing
 
 ### Pending Todos
 
@@ -316,6 +325,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:05:10.668Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-09-19T06:18:37.289Z
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None
