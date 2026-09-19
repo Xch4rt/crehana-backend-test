@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-09-19T05:54:32.037Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-09-19T06:05:10.676Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 32
+  completed_plans: 33
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [████████░░] 84%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Progress: [████████░░] 84%
 | Phase 04 P04 | 14min | 2 tasks | 3 files |
 | Phase 04 P05 | 12min | 3 tasks | 11 files |
 | Phase 04 P06 | 11min | 3 tasks | 12 files |
+| Phase 04 P07 | 10min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -276,6 +277,12 @@ Recent decisions affecting current work:
 - [Phase 04-06]: test_the_filter_never_moves_the_statistics asserts the item counts DIFFER as well as the three counters matching, so it cannot pass vacuously against a filter that was silently dropped; D-08 is asserted from the command's dataclass fields AND from a source scan of update.py for the status mutator name, so status is unwritable by shape rather than by convention
 - [Phase 04-06]: grep -c visible_task_list on create.py prints 2, not the plan's 1 - the import line plus the call line is the floor for import-by-name, and collapsing them by importing the access module would satisfy a counter by abandoning a convention; the same call 04-03 made for the same criterion on access.py itself
 - [Phase 04-06]: requirement ticks TASK-01..TASK-08 deliberately NOT taken - 04-12 is the last claimant, and this plan ships orchestration with no endpoint above it
+- [Phase 04-07]: the non-nullable PATCH mapper uses `value is not None`, NOT the plan's and 04-RESEARCH's membership test on model_fields_set - the membership form leaves the value `str | None` and mypy strict refuses to pass it to a `str | Unset` command field; the two questions are identical for those fields because the field validator has already refused an explicit null, while the nullable fields keep the membership form, where absence genuinely cannot be read off the value
+- [Phase 04-07]: grep -c "Unset" prints 0 per schema module, not the plan's 1 - importing the sentinel by name gives the uppercase spelling the mixed-case pattern does not match, and 0 is the stronger reading since the sentinel TYPE is then never named at all; grep -c "UNSET" prints 3 and 5, every match the import line or a to_command argument (the 04-03/04-06 precedent for a counter met in substance)
+- [Phase 04-07]: D-08 is proven by ABSENCE - status is not a field of TaskPatchRequest at all, so extra=forbid makes sending it exactly one extra_forbidden error at (status,), asserted with len(errors) == 1 so a model that both declared the field and refused it would still fail
+- [Phase 04-07]: get_clock takes no Request and stores nothing on app.state - SystemClock is stateless, so the narrowing _resources exists for does not apply, and a test asserts two calls return different objects; CurrentActor is pinned through typing.get_args, so a refactor that repointed the alias at another provider fails there rather than in production
+- [Phase 04-07]: the 'not authentication' phrase is asserted against inspect.getsource rather than __doc__, so moving the sentence into a comment still satisfies D-03's honesty requirement; the requirement is that a reader of the file is told, not that a particular string object exists at runtime
+- [Phase 04-07]: requirement ticks ARC-05/TASK-01/TASK-03/TASK-06 deliberately NOT taken - 04-12 is the last claimant, the seventh consecutive plan in this phase to make the same call, and this plan ships the typed boundary with no route above it
 
 ### Pending Todos
 
@@ -309,6 +316,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T05:54:32.031Z
-Stopped at: Completed 04-06-PLAN.md
+Last session: 2026-09-19T06:05:10.668Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None

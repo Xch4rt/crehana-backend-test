@@ -208,7 +208,7 @@ Plans:
 
 - [x] 04-05-PLAN.md — The five task-list use cases and their two-actor unit proofs
 - [x] 04-06-PLAN.md — The five task use cases, the filter conjunction and the D-07 overdue rule
-- [ ] 04-07-PLAN.md — The actor seam, the Clock provider and every Pydantic request/response schema
+- [x] 04-07-PLAN.md — The actor seam, the Clock provider and every Pydantic request/response schema
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -283,7 +283,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
-| 4. Task Lists & Tasks | 6/12 | In Progress|  |
+| 4. Task Lists & Tasks | 7/12 | In Progress|  |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
