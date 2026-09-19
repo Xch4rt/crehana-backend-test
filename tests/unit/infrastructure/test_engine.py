@@ -11,6 +11,7 @@ fictional DSN - would stop being unit tests.
 from dataclasses import FrozenInstanceError
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -31,6 +32,10 @@ JWT_SECRET = "b" * 32
 # A real field of DatabaseResources, named once so the immutability test below
 # cannot quietly start asserting about an attribute that does not exist.
 DECLARED_FIELD = "engine"
+
+# A fixed identifier rather than a generated one: nothing here depends on it
+# being unique, and a reader can see the value that is being hidden.
+USER_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def a_settings() -> Settings:
@@ -92,6 +97,37 @@ def test_the_engine_pre_pings() -> None:
     engine = create_engine(a_settings())
 
     assert engine.pool._pre_ping is True
+
+
+def test_the_engine_hides_bound_parameters() -> None:
+    """WR-02: a statement error renders without the values it was bound to.
+
+    The flag is read off the real engine - it lives on the sync engine, not on
+    the dialect - and then passed to the error being rendered, so removing
+    `hide_parameters=True` from the builder fails this test rather than leaving
+    it asserting about a hardcoded `True`. The parameters are a register INSERT's:
+    an Argon2 hash and an address, the two values the log must not carry.
+    """
+    hide_parameters = create_engine(a_settings()).sync_engine.hide_parameters
+
+    assert hide_parameters is True
+
+    hashed = "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$0123456789abcdef"
+    address = "ana@example.com"
+    error = DBAPIError(
+        "INSERT INTO users (id, email, full_name, password_hash) "
+        "VALUES (%s, %s, %s, %s)",
+        (USER_ID, address, "Ana Torres", hashed),
+        # Any driver-level cause will do: what is under test is how the values
+        # bound to the statement are rendered, not which failure produced it.
+        Exception("server closed the connection unexpectedly"),
+        hide_parameters=hide_parameters,
+    )
+
+    rendered = str(error)
+
+    assert hashed not in rendered
+    assert address not in rendered
 
 
 def test_database_resources_is_frozen() -> None:

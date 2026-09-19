@@ -65,8 +65,19 @@ def create_engine(settings: Settings) -> AsyncEngine:
     Only `create_async_engine` is imported into this module: importing
     `sqlalchemy.create_engine` beside it would shadow this function's name and
     make every call site ambiguous to a reader.
+
+    Parameters are hidden from error rendering (Phase 5 review WR-02). Without
+    it every statement error stringifies with the values it was bound to, and
+    the catch-all handler logs the exception - so a register INSERT that fails
+    for any reason other than a duplicate address, a dropped connection or a
+    statement timeout or a failover, writes the stored Argon2 hash into a log
+    line anyone with the Docker socket can read. T-5-04 claimed a hash had no
+    field to travel in; that was true of the response body and false of the
+    log channel, and this is what makes it true of both.
     """
-    return create_async_engine(settings.database_url, pool_pre_ping=True)
+    return create_async_engine(
+        settings.database_url, pool_pre_ping=True, hide_parameters=True
+    )
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
