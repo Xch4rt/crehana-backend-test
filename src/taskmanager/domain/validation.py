@@ -46,6 +46,31 @@ def require_utc(value: datetime, *, field: str) -> datetime:
         ) from error
 
 
+def _refuse_nul(text: str, *, field: str) -> None:
+    """Refuse the one character no text column can hold (Phase 4 review WR-03).
+
+    `"\u0000"` is valid JSON and a valid Python `str`; it survives `strip()` and
+    counts as one character, so it passed every rule below - and PostgreSQL then
+    refused the statement, because its text types cannot contain NUL. That
+    arrived as a driver error no adapter translates, so a well-formed body
+    answered 500, and for a list name it did so from inside the duplicate-name
+    SELECT before anything was written at all.
+
+    The rule lives here rather than as a caught driver error, because it is a
+    rule about the value: the domain says what a title may contain, and an
+    adapter that turned a `DataError` back into "your title is wrong" would be
+    guessing which field a statement-level failure was about. Called from both
+    helpers, so there is one copy and no text field can be added without it.
+    Only NUL is refused - other control characters are storable, and whether
+    they are *welcome* is a product question nobody has asked.
+    """
+    if "\x00" in text:
+        raise ValidationError(
+            f"{field} must not contain NUL characters.",
+            details={"field": field},
+        )
+
+
 def require_text(value: str, *, field: str, max_length: int) -> str:
     """Return the trimmed value, refusing a blank or over-long one."""
     text = value.strip()
@@ -54,6 +79,7 @@ def require_text(value: str, *, field: str, max_length: int) -> str:
             f"{field} must not be blank.",
             details={"field": field},
         )
+    _refuse_nul(text, field=field)
     if len(text) > max_length:
         # The number comes from the argument, never from a literal repeated
         # here, so the entity ClassVar stays the single source of the limit.
@@ -73,6 +99,7 @@ def optional_text(value: str | None, *, field: str, max_length: int) -> str | No
         # An explicitly empty string clears the field. Storing "" alongside NULL
         # would give the same absence two representations to test for.
         return None
+    _refuse_nul(text, field=field)
     if len(text) > max_length:
         raise ValidationError(
             f"{field} must be at most {max_length} characters long.",

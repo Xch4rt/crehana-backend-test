@@ -133,3 +133,35 @@ def test_optional_text_rejects_an_over_length_value() -> None:
         optional_text("a" * 2001, field="description", max_length=2000)
 
     assert excinfo.value.details == {"field": "description"}
+
+
+# Phase 4 review WR-03. Spelled as an escape so the file itself stays free of the
+# character under test: this is what the JSON body `"a\u0000b"` parses to.
+WITH_A_NUL = "a\x00b"
+
+
+def test_require_text_refuses_a_nul_character() -> None:
+    """PostgreSQL's text types cannot hold NUL, so the domain says so first."""
+    with pytest.raises(ValidationError) as excinfo:
+        require_text(WITH_A_NUL, field="title", max_length=200)
+
+    assert excinfo.value.details == {"field": "title"}
+    assert "NUL" in str(excinfo.value)
+    # The message names the rule and never echoes the offending value back.
+    assert "\x00" not in str(excinfo.value)
+
+
+def test_optional_text_refuses_a_nul_character() -> None:
+    """The second helper, because a description reaches the same column type."""
+    with pytest.raises(ValidationError) as excinfo:
+        optional_text(WITH_A_NUL, field="description", max_length=2000)
+
+    assert excinfo.value.details == {"field": "description"}
+
+
+def test_a_nul_is_reported_before_the_length() -> None:
+    """One refusal per request: the character rule wins over the length rule."""
+    with pytest.raises(ValidationError) as excinfo:
+        require_text(WITH_A_NUL * 100, field="title", max_length=10)
+
+    assert "NUL" in str(excinfo.value)

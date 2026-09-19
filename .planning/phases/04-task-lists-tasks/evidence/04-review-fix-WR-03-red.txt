@@ -1,0 +1,84 @@
+WR-03 regression tests, driven red - Phase 4 review fix
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1
+
+WR-03: a NUL character in any text field reached PostgreSQL, which refuses it, and the untranslated driver error answered 500 to a well-formed JSON body.
+
+Method: the new tests were written beside the fix. For the red run the
+uncommitted changes under src/ were set aside with `git stash push -- src`
+(tests left in place), so the suite ran against the code the review read;
+`git stash pop` then restored the fix for the green run. Both runs use the
+same command. Captures are verbatim apart from trailing whitespace.
+The runs happened in an isolated git worktree of this repository under
+/private/tmp (the review-fix workflow never edits the main checkout in
+place), which is why source paths in a traceback begin there.
+
+Command:
+  .venv/bin/pytest tests/unit/domain/test_validation.py tests/integration/api/test_task_lists.py tests/integration/api/test_tasks.py -k "nul_character or a_nul_is" --tb=line --show-capture=no --no-cov -q -p no:cacheprovider ; echo exit=$?
+
+================================================================================
+RED - src/ as reviewed, new tests in place
+================================================================================
+
+FFFFFFF                                                                  [100%]
+=================================== FAILURES ===================================
+E   Failed: DID NOT RAISE ValidationError
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/unit/domain/test_validation.py:145: Failed: DID NOT RAISE ValidationError
+E   Failed: DID NOT RAISE ValidationError
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/unit/domain/test_validation.py:156: Failed: DID NOT RAISE ValidationError
+E   AssertionError: assert 'NUL' in 'title must be at most 10 characters long.'
+     +  where 'title must be at most 10 characters long.' = str(ValidationError('title must be at most 10 characters long.', {'field': 'title'}))
+     +    where ValidationError('title must be at most 10 characters long.', {'field': 'title'}) = <ExceptionInfo ValidationError('title must be at most 10 characters long.', {'field': 'title'}) tblen=2>.value
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/unit/domain/test_validation.py:167: AssertionError: assert 'NUL' in 'title must be at most 10 characters long.'
+E   psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+E   sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+    [SQL: SELECT count(*) AS count_1
+    FROM task_lists
+    WHERE task_lists.owner_id = %(owner_id_1)s::UUID AND task_lists.name = %(name_1)s::VARCHAR]
+    [parameters: {'owner_id_1': UUID('00000000-0000-4000-8000-00000000de00'), 'name_1': 'a\x00b'}]
+    (Background on this error at: https://sqlalche.me/e/20/9h9h)
+/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/psycopg/cursor_async.py:117: sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+E   psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+E   sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+    [SQL: INSERT INTO task_lists (id, owner_id, name, description, created_at, updated_at) VALUES (%(id)s::UUID, %(owner_id)s::UUID, %(name)s::VARCHAR, %(description)s::VARCHAR, %(created_at)s::TIMESTAMP WITH TIME ZONE, %(updated_at)s::TIMESTAMP WITH TIME ZONE)]
+    [parameters: {'id': UUID('e4c614ba-0677-4556-ad45-a7baab50e1a7'), 'owner_id': UUID('00000000-0000-4000-8000-00000000de00'), 'name': 'ok', 'description': 'x\x00y', 'created_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 51899, tzinfo=datetime.timezone.utc), 'updated_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 51899, tzinfo=datetime.timezone.utc)}]
+    (Background on this error at: https://sqlalche.me/e/20/9h9h)
+/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/psycopg/cursor_async.py:117: sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+E   psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+E   sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+    [SQL: INSERT INTO tasks (id, task_list_id, title, description, status, priority, due_date, assignee_id, created_at, updated_at, completed_at) VALUES (%(id)s::UUID, %(task_list_id)s::UUID, %(title)s::VARCHAR, %(description)s::VARCHAR, %(status)s::VARCHAR, %(priority)s::VARCHAR, %(due_date)s::TIMESTAMP WITH TIME ZONE, %(assignee_id)s::UUID, %(created_at)s::TIMESTAMP WITH TIME ZONE, %(updated_at)s::TIMESTAMP WITH TIME ZONE, %(completed_at)s::TIMESTAMP WITH TIME ZONE)]
+    [parameters: {'id': UUID('aa32fbce-f0aa-4380-8ac9-b1859d11ac62'), 'task_list_id': UUID('00000000-0000-4000-8000-000000000011'), 'title': 'a\x00b', 'description': None, 'status': 'pending', 'priority': 'medium', 'due_date': None, 'assignee_id': None, 'created_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 81320, tzinfo=datetime.timezone.utc), 'updated_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 81320, tzinfo=datetime.timezone.utc), 'completed_at': None}]
+    (Background on this error at: https://sqlalche.me/e/20/9h9h)
+/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/psycopg/cursor_async.py:117: sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+E   psycopg.DataError: PostgreSQL text fields cannot contain NUL (0x00) bytes
+
+The above exception was the direct cause of the following exception:
+E   sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+    [SQL: INSERT INTO tasks (id, task_list_id, title, description, status, priority, due_date, assignee_id, created_at, updated_at, completed_at) VALUES (%(id)s::UUID, %(task_list_id)s::UUID, %(title)s::VARCHAR, %(description)s::VARCHAR, %(status)s::VARCHAR, %(priority)s::VARCHAR, %(due_date)s::TIMESTAMP WITH TIME ZONE, %(assignee_id)s::UUID, %(created_at)s::TIMESTAMP WITH TIME ZONE, %(updated_at)s::TIMESTAMP WITH TIME ZONE, %(completed_at)s::TIMESTAMP WITH TIME ZONE)]
+    [parameters: {'id': UUID('e72afc2f-74c3-4e53-a8bc-6e54ef0d028d'), 'task_list_id': UUID('00000000-0000-4000-8000-000000000011'), 'title': 'ok', 'description': 'x\x00y', 'status': 'pending', 'priority': 'medium', 'due_date': None, 'assignee_id': None, 'created_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 106055, tzinfo=datetime.timezone.utc), 'updated_at': datetime.datetime(2026, 9, 19, 7, 51, 59, 106055, tzinfo=datetime.timezone.utc), 'completed_at': None}]
+    (Background on this error at: https://sqlalche.me/e/20/9h9h)
+/Users/xch4rt/work/myself/crehana/test/.venv/lib/python3.14/site-packages/psycopg/cursor_async.py:117: sqlalchemy.exc.DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes
+=========================== short test summary info ============================
+FAILED tests/unit/domain/test_validation.py::test_require_text_refuses_a_nul_character
+FAILED tests/unit/domain/test_validation.py::test_optional_text_refuses_a_nul_character
+FAILED tests/unit/domain/test_validation.py::test_a_nul_is_reported_before_the_length
+FAILED tests/integration/api/test_task_lists.py::test_a_nul_character_in_a_list_field_is_a_domain_validation_error[body0-name]
+FAILED tests/integration/api/test_task_lists.py::test_a_nul_character_in_a_list_field_is_a_domain_validation_error[body1-description]
+FAILED tests/integration/api/test_tasks.py::test_a_nul_character_in_a_task_field_is_a_domain_validation_error[body0-title]
+FAILED tests/integration/api/test_tasks.py::test_a_nul_character_in_a_task_field_is_a_domain_validation_error[body1-description]
+7 failed, 95 deselected in 0.21s
+exit=1
+
+================================================================================
+GREEN - the fix restored
+================================================================================
+
+.......                                                                  [100%]
+7 passed, 95 deselected in 0.17s
+exit=0

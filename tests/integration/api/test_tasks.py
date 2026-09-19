@@ -1456,6 +1456,35 @@ async def test_a_due_date_with_no_utc_form_is_a_domain_validation_error(
         assert body["errors"] == {"field": "due_date"}
 
 
+@pytest.mark.parametrize(
+    ("body", "field"),
+    [
+        ({"title": "a\x00b"}, "title"),
+        ({"title": "ok", "description": "x\x00y"}, "description"),
+    ],
+)
+async def test_a_nul_character_in_a_task_field_is_a_domain_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    body: dict[str, str],
+    field: str,
+) -> None:
+    """Phase 4 review WR-03, on the task routes: a 422 naming the field, not a 500."""
+    await given_a_task(session_factory)
+    client, _ = api_client
+
+    created = await client.post(tasks_url(LIST_ID), json=body)
+    patched = await client.patch(task_url(LIST_ID, TASK_ID), json=body)
+
+    for response in (created, patched):
+        assert response.status_code == 422
+        assert response.headers["content-type"] == PROBLEM_JSON
+        problem = response.json()
+        assert problem["code"] == "validation_error"
+        assert problem["title"] == "Validation error"
+        assert problem["errors"] == {"field": field}
+
+
 async def test_an_empty_patch_body_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,

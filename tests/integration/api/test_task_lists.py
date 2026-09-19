@@ -842,6 +842,40 @@ async def test_a_duplicate_409_reports_the_trimmed_name_on_both_verbs(
         assert "'Groceries'" in body["detail"]
 
 
+@pytest.mark.parametrize(
+    ("body", "field"),
+    [
+        ({"name": "a\x00b"}, "name"),
+        ({"name": "ok", "description": "x\x00y"}, "description"),
+    ],
+)
+async def test_a_nul_character_in_a_list_field_is_a_domain_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    body: dict[str, str],
+    field: str,
+) -> None:
+    """Phase 4 review WR-03: `"\\u0000"` is valid JSON and must never be a 500.
+
+    PostgreSQL refuses NUL in a text value, and for `name` it used to do so from
+    inside the duplicate-name SELECT, before anything was written. Both verbs
+    are driven, because create and PATCH reach the rule by different roads.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    created = await client.post(TASK_LISTS, json=body)
+    patched = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json=body)
+
+    for response in (created, patched):
+        assert response.status_code == 422
+        assert response.headers["content-type"] == PROBLEM_JSON
+        problem = response.json()
+        assert problem["code"] == "validation_error"
+        assert problem["title"] == "Validation error"
+        assert problem["errors"] == {"field": field}
+
+
 async def test_an_empty_patch_body_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
