@@ -189,7 +189,7 @@ Plans:
   2. A caller can create, read, PATCH and delete a task inside a list; a task id requested under the wrong list returns 404; blank titles, over-length fields and past due dates are rejected with a specific error code.
   3. A dedicated status endpoint moves a task through `pending` → `in_progress` → `completed`, and an invalid transition returns a problem+json body naming the transition rather than a generic error; `status` cannot be changed through the generic PATCH.
   4. Listing a list's tasks filtered by `status` and/or `priority` returns only matching tasks, rejects invalid filter values with 422, and always reports `completion_percentage`, `total_tasks` and `completed_tasks` for the whole list — unchanged by the filter, `0.0` when empty, and produced by a single SQL aggregate.
-  5. Pydantic v2 models type every HTTP boundary crossed in this slice (request and response schemas), application command/result DTOs are frozen dataclasses per ADR-020, and no router imports SQLAlchemy or raises `HTTPException` for a business failure.
+  5. Pydantic v2 models type every HTTP boundary crossed in this slice (request and response schemas), application command/result DTOs are frozen dataclasses per ADR-020, and no router raises **or imports** `HTTPException` — enforced by `tests/architecture/test_routers_raise_no_http_exception.py` — while no layer below `presentation` imports `fastapi` or `starlette` at all, enforced by the `no-http-below-presentation` contract in `.importlinter` (ADR-051). *(Amended 2026-09-19 by plan 04-12, following the Phase 2 SC-1 and Phase 3 SC-4 precedent. The original wording read "no router imports SQLAlchemy or raises `HTTPException` for a business failure". The SQLAlchemy half is true of both routers by inspection — neither names it — but nothing gates it, and `presentation` as a whole deliberately does import SQLAlchemy in `health.py` and `dependencies.py`, so the criterion as written credited a gate that does not exist. The replacement names only what a failing command can prove, and is strictly stronger about `HTTPException`: the shipped gate refuses the **import** as well as the raise.)*
 
 **Plans**: 12 plans (7 waves)
 
@@ -225,7 +225,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 04-12-PLAN.md — Phase 4 ADRs, the AI_WORKFLOW entries, the fifteen requirement ticks and the full phase gate
+- [x] 04-12-PLAN.md — Phase 4 ADRs, the AI_WORKFLOW entries, the fifteen requirement ticks and the full phase gate
 
 ### Phase 5: Auth, Assignment & Notifications
 

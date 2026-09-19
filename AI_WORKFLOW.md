@@ -130,6 +130,42 @@ What is already true of Phase 3:
 - Driving each new gate red on purpose and capturing the output — three falsification files in
   `.planning/phases/03-persistence-runnable-stack/evidence/`.
 
+What is already true of Phase 4:
+
+**Decided by the human**
+
+- That the phase ships the brief's mandatory slice *before* authentication, through one honest
+  seam rather than a half-built login (`04-CONTEXT.md` D-01/D-02/D-03; `DECISION_LOG.md` ADR-044,
+  ADR-045). The consequence — that the API has no access control against a stranger in Phase 4 —
+  is written in the module's own docstring and asserted by
+  `test_the_seam_says_it_is_not_authentication`.
+- That ownership is nevertheless **enforced now**, with a list the actor does not own answering
+  exactly like an absent one on every verb (D-04, ADR-008). The alternative — "add the check with
+  the auth" — is how an authorization hole ships.
+- The PATCH contract: omitted leaves unchanged, explicit `null` clears a nullable field, an empty
+  body is a 422 rather than a 200 no-op, and `status` is not a field of the task PATCH at all
+  (D-05, D-06, D-08; ADR-046, ADR-048). The last three each contradict a recommendation in
+  `.planning/research/FEATURES.md`, and ADR-053 records why the context won each time.
+- That the completion statistics describe the **list** and the filter describes the **view**, so
+  the counters do not move when a filter is applied (D-09, ADR-049), and that "no N+1" would be
+  *measured* by a statement recorder rather than claimed (D-17, ADR-054).
+- That Phase 2's deferred gate lands here as **two** gates, and that a new gate is proven by being
+  planted red before it is trusted (D-15, ADR-051).
+
+**Delegated to AI**
+
+- The ten commands and two result DTOs, the ten use cases, the shared `access.py` guard, every
+  Pydantic request/response schema, the two routers, the actor seam and the entrypoint seed — and
+  the 306 tests that specify them. The suite went from 293 to 599 across this phase, at 100.00%
+  coverage over 1155 statements with no `omit` entry and no `# pragma: no cover`.
+- Executing each candidate before adopting it: the sentinel-in-the-schema variant, the PATCH
+  mapper's two spellings, the grouped statistics query, the `ON CONFLICT` clause and the
+  `app.routes` walk were each run against the real stack, and four of the five were rejected on
+  what the run produced rather than on argument.
+- Driving both new gates red on purpose and capturing the output — `04-02-importlinter-red.txt`
+  and `04-08-ast-gate-red.txt` in `.planning/phases/04-task-lists-tasks/evidence/`, plus the fake
+  ordering falsification and the seed counterfactual.
+
 _Phase 7 completes this section with the per-claim commit/file/test references._
 
 ---
@@ -875,6 +911,257 @@ check — because each of the easy alternatives destroys the claim the test exis
 `_env_file=None` on the `get_settings()` path would stop testing the function as production calls
 it, `skipif` would hide the failure on the only machine that reproduces it, and deleting the test
 would drop the "the cached instance carries the current environment" guarantee altogether.
+
+### 2026-09-18 — A Phase 2 DTO could not express the URL Phase 4 had already chosen
+
+**What happened.** `ChangeTaskStatusCommand` shipped in Phase 2 as the project's reference use
+case, carrying `actor_id` and `task_id`. Phase 4's URL for that verb is nested —
+`PATCH /api/v1/task-lists/{list_id}/tasks/{task_id}/status` — and D-14 requires a task addressed
+under a list it does not belong to to answer `404`, identically to an absent task. The command had
+no `task_list_id`, so the use case could not ask the question at all. Every other task verb could.
+
+**How it was caught.** By the phase research, before a single router existed: `04-RESEARCH.md`
+Open Question 1 states the mismatch and recommends applying the rule to *every* task route rather
+than exempting the one whose DTO was inconvenient. Nothing automated could have caught it — a
+nested path whose parent segment is silently ignored produces no error, no warning and no failing
+test. It produces a `200` on somebody else's task.
+
+**Consequence.** Had it been found after the routers were written, the fix would have been the
+same one line in the DTO plus seven test call sites; had it been found after delivery, it would
+have been an access-control defect an evaluator finds in one `curl`. The cost of finding it early
+was that one test had to be *inverted* rather than updated:
+`test_change_task_status_allows_the_assignee_who_does_not_own_the_list` asserted behaviour that
+Phase 4 deliberately drops, so the tree could not be green either way.
+
+**What changed.** Plan 04-03 added the field and moved the visibility rule into
+`application/use_cases/access.py` (commits `c04d99d`, `45d0aae`; `DECISION_LOG.md` ADR-050,
+ADR-055). The inverted test is named
+`test_change_task_status_hides_the_task_from_its_assignee_for_now` and its docstring says what it
+used to assert and that Phase 5 turns it back — a rename rather than a deletion, so the lost
+guarantee is visible in the test report rather than only in a diff.
+
+### 2026-09-18 — The sentinel design was chosen by executing the alternative, not by arguing about it
+
+**What happened.** PATCH needs three states per field — absent, explicit null, value — and the
+natural place to express that is the Pydantic request schema, which is where FastAPI's own
+documentation puts partial updates (`model_dump(exclude_unset=True)`). Declaring the sentinel in
+the schema was written and run.
+
+**How it was caught.** It was not a mistake that was caught; it was a candidate that was measured.
+Two observable defects came out of the run and are recorded in
+`src/taskmanager/application/dto/unset.py`'s docstring: the schema publishes a `_Unset` component
+into `/openapi.json` as part of the field's `anyOf`, and the explicit-null refusal splits into two
+error entries, at `body.title.str` and `body.title.enum[_Unset]`, neither of which a client can
+act on.
+
+**Consequence.** The sentinel stops at the application boundary: the schemas declare plain
+`X | None = None` and the mapper converts `model_fields_set` into the marker on the way in
+(`DECISION_LOG.md` ADR-046). The narrowing claim that justifies the enum over a bare `object()`
+was checked the same way — a guard was deleted and mypy was observed reporting the `arg-type`
+error at the call site.
+
+**What changed.** Nothing in the process; this is the process working. It is recorded because the
+rejected option is the one the official FastAPI documentation recommends, and "we did not follow
+the docs" deserves a reason a reader can check rather than a preference.
+
+### 2026-09-18 — Both new gates were planted red, and the first planting proved the wrong thing
+
+**What happened.** Plan 04-02 asks for one planted `from fastapi import HTTPException` inside
+`src/taskmanager/application/` to demonstrate the new `no-http-below-presentation` contract. The
+capture shows `Contracts: 2 kept, 2 broken.` — because `application-framework-free` already
+forbade `fastapi` there. That run proves the build goes red. It does not prove the *new* contract
+earns its place, because the build would have gone red without it.
+
+**How it was caught.** By reading the capture instead of its exit status: two BROKEN lines where
+the demonstration needed one.
+
+**Consequence.** A gate that has only ever been observed failing alongside another gate is
+indistinguishable from a no-op.
+
+**What changed.** A second planting, in `src/taskmanager/infrastructure/db/engine.py` — the only
+layer `no-http-below-presentation` adds — reports `Contracts: 3 kept, 1 broken.` and the one
+broken contract is the new one. Both runs are in
+`.planning/phases/04-task-lists-tasks/evidence/04-02-importlinter-red.txt` with a header saying
+why the first is insufficient. The same reasoning was applied pre-emptively to the AST gate in
+plan 04-08: plant 1 is the import *and* the raise (`2 failed, 1 passed`), plant 2 is the import
+alone (`1 failed, 2 passed`) — which is the run proving the two assertions are not redundant — and
+the shipped tree is `3 passed`
+(`.planning/phases/04-task-lists-tasks/evidence/04-08-ast-gate-red.txt`).
+
+### 2026-09-18 — The research's PATCH mapper, and the plan that repeated it, do not type-check
+
+**What happened.** `04-RESEARCH.md` Pattern 2 and plan 04-07's `<interfaces>` block both write
+every mapper leg as `self.title if "title" in sent else UNSET`. Under `mypy --strict` that
+expression has type `str | None | Unset` while `UpdateTaskCommand.title` is `str | Unset`: a
+membership test is a runtime question the type checker cannot narrow on, so the recommended form
+does not compile at all.
+
+**How it was caught.** `make typecheck`, on the first attempt to write the schema module. This is
+one of the few incidents in this log that a gate caught rather than a human.
+
+**Consequence.** Two documents — one of them produced by executing code against this very
+repository — recommended a form that had never been run through this repository's type checker.
+
+**What changed.** The two **non-nullable** fields per model are mapped with `... is not None`,
+which narrows cleanly, and the **nullable** ones keep the membership form, where `None` is a
+legitimate value and absence genuinely cannot be read off it. The equivalence is exact rather than
+convenient, and three tests assert the premise it rests on — an explicit null on a non-nullable
+field is refused at the field validator, so a `None` at mapping time can only mean absence
+(`DECISION_LOG.md` ADR-052). A `cast` was rejected for asserting something the checker then stops
+checking, and an `assert` for adding a branch the no-`pragma` coverage rule would need an
+unreachable test for.
+
+### 2026-09-19 — A plan predicted two SQL statements; the code issues three, and the plan was wrong
+
+**What happened.** Plan 04-10's `<interfaces>` block states that `GET .../tasks` issues "TWO (the
+page and the aggregate, ADR-009)", and its task text repeats it as "expecting exactly two
+`SELECT`s". The statement recorder measured **three**.
+
+**How it was caught.** By the test on its first run — the D-17 recorder exists precisely to count
+rather than to agree.
+
+**Consequence.** The third statement is `visible_task_list`, the ADR-008 guard that loads the
+parent list and discards it so a list the caller cannot see is refused before a single task is
+read. The plan had not counted its own phase's security guard. Two "fixes" were available and both
+were worse than the finding: removing the guard would trade a security property of this phase for
+a number in a planning document, and folding it into the page query would dissolve the
+indistinguishability plan 04-03 had just built.
+
+**What changed.** The measured number shipped. `TASK_COLLECTION_STATEMENTS` carries a three-item
+comment naming each statement and recording that the plan predicted two. The D-17 claim is
+unaffected, because D-17 is about *invariance*: the test asserts the recording is byte-identical
+between one task and five, and again with a filter applied, and none of the three statements is
+issued once per row (commit `e308132`, `DECISION_LOG.md` ADR-054).
+
+### 2026-09-18 — A test double disagreed with the adapter it stands for, and only a falsification run showed it
+
+**What happened.** The SQLAlchemy task adapter has ordered by `(created_at, id)` since plan 03-07,
+and `04-PATTERNS.md` section 11 scheduled the matching `sorted(...)` for **both** list methods of
+the in-memory fakes. Plan 04-02 applied it to the task-list side; the task side stayed in
+insertion order. A D-13 ordering assertion written against that fake would have passed in the unit
+suite and been free to fail over HTTP, where PostgreSQL answers in whatever order the plan
+produced.
+
+**How it was caught.** By noticing the asymmetry while writing the ordering test, not by a failing
+run — the test passed against the unsorted fake, because the fixture happened to insert in the
+expected order.
+
+**Consequence.** A fake that is not faithful to its adapter converts a real ordering bug into a
+green unit suite. This is the second time in the project that a test passed without exercising
+what it claimed to (the Phase 3 savepoint entry above is the first).
+
+**What changed.** The sort was added, the fixture is now seeded in an order that is deliberately
+*not* the expected answer, and the fix was falsified rather than asserted: removing the sort turns
+`test_list_tasks_orders_by_created_at_then_id` and
+`test_the_status_filter_narrows_the_items_on_its_own` red (`2 failed, 7 passed`), restoring it
+gives `9 passed`
+(`.planning/phases/04-task-lists-tasks/evidence/04-06-fake-ordering.txt`, commit `a9d57cf`).
+
+### 2026-09-18 — A plan reused a route-walking idiom this repository had already found broken
+
+**What happened.** Three of plan 04-08's acceptance checks and one of its tests enumerate the
+application's routes by walking `app.routes`, filtering on `hasattr(r, "methods")` and reading
+`r.path`. On the pinned stack — FastAPI 0.141.1 with Starlette 1.6.0 — `include_router` leaves a
+single opaque `fastapi.routing._IncludedRouter` object there, with no `path` and no `methods` at
+all. Run verbatim against a correctly wired application, the first check asserted `0 == 5` and
+failed.
+
+**How it was caught.** By running the acceptance check rather than assuming a correct
+implementation would satisfy it. The failure looked exactly like "the routers were not
+registered", which is the dangerous part: the obvious next move is to go and "fix" working code.
+
+**Consequence.** The repository had already discovered this. Plan 03-09's probe-route guard hit
+the same opacity and says so in its own words — "FastAPI wraps an included router in a single
+opaque object with no `path` attribute at all" — and a later plan reintroduced the idiom anyway.
+Knowledge that lives only in one module's comment does not reach the next plan.
+
+**What changed.** Every route assertion now derives its operations from `app.openapi()["paths"]`,
+through `_api_operations()` in `tests/unit/test_app_factory.py`, whose docstring carries the
+reason. That is the stronger form regardless: the schema is what a client reads, so asserting on
+it asserts the published contract rather than an internal representation that has already changed
+once (`DECISION_LOG.md` ADR-057, commit `f96076e`).
+
+### 2026-09-19 — The idempotence proof as planned would have passed against the form that breaks the container
+
+**What happened.** Plan 04-11 asks for the demo-user seed to be executed three times and its
+rowcounts recorded — `1, 0, 0`. That is a real proof of idempotence, and it is also true of the
+*targeted* `ON CONFLICT` clause the plan rejects, for the first two executions.
+
+**How it was caught.** By asking what the capture would look like if the rejected option had been
+shipped by mistake. The answer was: identical for two of the three runs.
+
+**Consequence.** A capture that cannot distinguish the shipped implementation from the rejected
+one proves the property but not the choice — and the choice is the load-bearing part here.
+
+**What changed.** The evidence file carries a second, counterfactual run the plan did not ask for:
+the same three executions against a clause naming the primary-key column, where execution 3 —
+a different id with the same address — produces
+`RAISED IntegrityError: (psycopg.errors.UniqueViolation) duplicate key value violates unique
+constraint "uq_users_email_lower"`. Under the entrypoint's `set -eu` that is a container that does
+not come back up. Executions 1 and 2 are byte-identical between the two forms, which is exactly
+the point
+(`.planning/phases/04-task-lists-tasks/evidence/04-11-seed-idempotence.txt`, commit `2c2acab`).
+
+### 2026-09-19 — Phase 4's plans wrote nine mechanical counters that were unreachable, and none of them was gamed
+
+**What happened.** This phase's plans lean on `grep -c` and `pytest -k` as acceptance criteria,
+and nine of them could not be satisfied by a correct implementation:
+
+- `grep -c "TaskListNotFoundError" access.py` required to print `1`, when importing the class by
+  name puts it on an import line *and* a raise line — `2` is the floor (04-03). The same shape
+  recurred for `visible_task_list` in `create.py` (04-06) and `list_for_owner_with_stats` in
+  `list.py` (04-05).
+- `grep -c "Unset"` required to print `1`, when the sentinel is imported as `UNSET` and `grep` is
+  case-sensitive — the literal answer is `0` (04-07).
+- `grep -c "application/problem+json"` required to be at least `10`, when the media type already
+  has a single home in `tests/api/test_error_contract.py` (04-09).
+- `pytest -k duplicate` required to collect at least 2, against two test names the same plan
+  prescribed — neither of which contains the word (04-09); and `-k rejects` required to exit `0`,
+  when pytest exits `5` on a selector that matches nothing (04-10).
+- "8 tests passing" in a module that contains seven (04-01).
+- "exactly two `SELECT`s" against a route that issues three (04-10, above).
+
+**How it was caught.** By running each criterion rather than declaring it met, and then by asking
+what satisfying it literally would cost.
+
+**Consequence.** Every one of these had a cheap literal fix that would have damaged something: an
+`import exceptions` that abandons the project's import-by-name convention to collapse two lines
+into one, a prose mention of a type so a case-sensitive grep finds it, a tenth copy of a constant
+that already has one home, an invented eighth test.
+
+**What changed.** Nothing was gamed, and each call is recorded in the plan's summary with the
+rejected alternative named. Where the criterion's *intent* could be met by a stronger assertion,
+it was — `grep -c "raise TaskListNotFoundError"` prints `1`, `grep -c "UNSET"` prints `3` and `5`
+with every match being an import or a `to_command` argument, and two test names were changed so
+the plan's own `-k` selectors are literally true. Where prose was the only thing standing between
+the code and a strict counter, the prose was reworded rather than the counter loosened — the
+convention this repository has had since plan 01-03, precisely so that these counters stay worth
+writing. The general rule, stated for Phase 5's planners: a mechanical counter is a good gate and
+a bad requirement, and a plan that writes one should expect the executor to report the number
+rather than produce it.
+
+### 2026-09-19 — What Phase 4's 79 HTTP tests found under `src/`: nothing
+
+**What happened.** Plans 04-09 and 04-10 added 79 integration tests that drive every Phase 4 route
+over HTTP against real PostgreSQL — success paths, the 404 matrix, both 409s, the 422 matrix, the
+ordering tie-break, the rounding path and the statistics. Every one of them passed on its first
+run against the already-shipped code. Not a single defect in a router, a schema, a use case or an
+adapter.
+
+**How it was read.** As two possible things, only one of which is good news: either the code was
+right, or the tests are weaker than they look. The evidence for the first is that the same
+behaviours had already been specified against in-memory fakes in plans 04-05 and 04-06, so the
+HTTP suite was re-proving a contract rather than exploring one. The evidence against the second is
+that the same suite's *other* assertions did fail and did change the code — the statement count
+(above), the fake ordering (above), and the not-owned comparison, which was strengthened to
+compare the two problem bodies whole after it became clear that excusing `instance` left the
+request path uncompared.
+
+**Why it is in this log at all.** A phase with no incidents should be treated as suspicious, and
+so should a test suite that finds nothing. Recording the null result, with the reason it is
+plausible and the checks that would have exposed the alternative, is the honest form. Phase 6's
+deliberate-break spot check (TEST-05) is where this claim gets tested properly, by inverting the
+completion-percentage formula and requiring the suite to go red.
 
 ---
 

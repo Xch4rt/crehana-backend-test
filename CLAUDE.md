@@ -282,6 +282,14 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   deliberately not tightened — but application command and result DTOs are frozen dataclasses
   (`@dataclass(frozen=True, slots=True)`) per ADR-020, so nothing in the layer imports it
   today.
+- No module under `taskmanager.domain`, `taskmanager.application` or
+  `taskmanager.infrastructure` imports `fastapi` or `starlette`. HTTP is the presentation
+  layer's vocabulary and nobody else's, so a layer below it cannot even name the web
+  framework's error class. Enforced by the `no-http-below-presentation` contract in
+  `.importlinter` and by `EXPECTED_CONTRACT_NAMES` in
+  `tests/architecture/test_layer_boundaries.py`, which fails if a contract is added or removed
+  without editing both files. `presentation` and `main` are deliberately outside the
+  contract's `source_modules` — they are the layers that are *supposed* to import FastAPI.
 - This is enforced automatically by the contracts in `.importlinter`, executed by
   `tests/architecture/test_layer_boundaries.py`, by `make arch` and by CI. A violating
   import fails a test, not a review.
@@ -289,6 +297,20 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 ### Error handling
 
 - `fastapi.HTTPException` may **never** be raised outside the `presentation` layer.
+- No module under `src/taskmanager/presentation/api/routers/` raises **or imports**
+  `HTTPException` — not even inside `presentation`, where importing it is otherwise legal.
+  A router that raised it would produce a second error-body shape a client has to parse, and
+  would take a visibility decision (404 vs 403) in the one layer that does not know who owns
+  what. Enforced by `tests/architecture/test_routers_raise_no_http_exception.py`, which makes
+  two passes over the package's AST — one over `raise` statements, reporting `file:line` for
+  every offender, and one over imports and attribute access, which is the load-bearing half
+  because a module that never binds the name cannot raise it by any spelling. A third test
+  asserts the scan is non-vacuous, so a renamed or emptied routers package fails rather than
+  passing silently.
+- Neither of the two gates above adds a pre-commit hook or a CI step, and that is deliberate:
+  the contract rides inside `lint-imports` and the AST test rides inside pytest, and both
+  commands are already run by the hook set, the Docker `test` stage and CI. The "a new gate
+  goes in two places" rule below applies to a gate that introduces a *new command*.
 - Business failures raise a `DomainError` subclass (Phase 2) and are translated once, at a
   single exception-handling point, into an RFC 9457 `application/problem+json` response.
   No handler builds an error body by hand.

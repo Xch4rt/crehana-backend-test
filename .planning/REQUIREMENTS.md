@@ -29,7 +29,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **ARC-02**: Domain entities and value objects are stdlib dataclasses/Enums; the domain package imports no third-party library [NL, user decision]
 - [x] **ARC-03**: import-linter contracts enforce the layer order and forbid fastapi/starlette/sqlalchemy in `domain` and `application`; the check runs inside the pytest suite and in CI [NL]
 - [x] **ARC-04**: Every use case is a single-purpose class in `application/` depending only on `typing.Protocol` ports (repositories, UnitOfWork, PasswordHasher, TokenService, EmailNotifier, Clock) [PDF 2.a]
-- [ ] **ARC-05**: Pydantic v2 models type every HTTP boundary: request/response schemas and settings; application command/result DTOs are frozen dataclasses (ADR-020) [PDF 2.b]
+- [x] **ARC-05**: Pydantic v2 models type every HTTP boundary: request/response schemas and settings; application command/result DTOs are frozen dataclasses (ADR-020) [PDF 2.b]
 - [x] **ARC-06**: A `DomainError` hierarchy (not found, conflict, business-rule violation, authentication, authorization) carries a stable `code` and details; no `HTTPException` is raised outside `presentation` [PDF 2.c]
 - [x] **ARC-07**: One exception-handling point maps `DomainError`, request-validation errors and unexpected errors to RFC 9457 `application/problem+json` responses with a single shape [NL]
 - [x] **ARC-08**: Transactions are owned by a UnitOfWork committed explicitly by the use case (never in a `yield` dependency teardown) [R]
@@ -44,23 +44,23 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Task Lists (LIST)
 
-- [ ] **LIST-01**: User can create a task list with a name and optional description [PDF 1.a.i]
-- [ ] **LIST-02**: User can get one of their task lists by id [PDF 1.a.i]
-- [ ] **LIST-03**: User can list their task lists, each with task counts and completion percentage computed in SQL (no N+1) [PDF 1.a.i]
-- [ ] **LIST-04**: User can partially update a task list (PATCH) [PDF 1.a.i]
-- [ ] **LIST-05**: User can delete a task list and gets 204 [PDF 1.a.i]
-- [ ] **LIST-06**: Creating or renaming a list to a name the same owner already uses is rejected with 409 [PDF 2.d]
+- [x] **LIST-01**: User can create a task list with a name and optional description [PDF 1.a.i]
+- [x] **LIST-02**: User can get one of their task lists by id [PDF 1.a.i]
+- [x] **LIST-03**: User can list their task lists, each with task counts and completion percentage computed in SQL (no N+1) [PDF 1.a.i]
+- [x] **LIST-04**: User can partially update a task list (PATCH) [PDF 1.a.i]
+- [x] **LIST-05**: User can delete a task list and gets 204 [PDF 1.a.i]
+- [x] **LIST-06**: Creating or renaming a list to a name the same owner already uses is rejected with 409 [PDF 2.d]
 
 ### Tasks (TASK)
 
-- [ ] **TASK-01**: User can create a task inside a list with title, optional description, priority (`low|medium|high`, default `medium`) and optional due date; new tasks start as `pending` [PDF 1.a.ii]
-- [ ] **TASK-02**: User can get a task by id within its list; a task id under the wrong list returns 404 [PDF 1.a.ii]
-- [ ] **TASK-03**: User can partially update a task (PATCH) — title, description, priority, due date; `status` is not writable here [PDF 1.a.ii]
-- [ ] **TASK-04**: User can delete a task and gets 204 [PDF 1.a.ii]
-- [ ] **TASK-05**: User can change a task's status through a dedicated endpoint; only valid transitions among `pending`, `in_progress`, `completed` are accepted, invalid ones return 409/422 with a specific error code [PDF 1.a.iii, 2.d]
-- [ ] **TASK-06**: User can list all tasks of a list filtered by `status` and/or `priority`; invalid filter values return 422 [PDF 1.a.iv]
-- [ ] **TASK-07**: The task listing response includes `completion_percentage` computed over the whole list (independent of filters) by a single SQL aggregate, plus `total_tasks` and `completed_tasks`; an empty list yields `0.0` [PDF 1.a.iv]
-- [ ] **TASK-08**: Business validations reject blank titles, over-length fields and a due date in the past at creation [PDF 2.d]
+- [x] **TASK-01**: User can create a task inside a list with title, optional description, priority (`low|medium|high`, default `medium`) and optional due date; new tasks start as `pending` [PDF 1.a.ii]
+- [x] **TASK-02**: User can get a task by id within its list; a task id under the wrong list returns 404 [PDF 1.a.ii]
+- [x] **TASK-03**: User can partially update a task (PATCH) — title, description, priority, due date; `status` is not writable here [PDF 1.a.ii]
+- [x] **TASK-04**: User can delete a task and gets 204 [PDF 1.a.ii]
+- [x] **TASK-05**: User can change a task's status through a dedicated endpoint; only valid transitions among `pending`, `in_progress`, `completed` are accepted, invalid ones return 409/422 with a specific error code [PDF 1.a.iii, 2.d]
+- [x] **TASK-06**: User can list all tasks of a list filtered by `status` and/or `priority`; invalid filter values return 422 [PDF 1.a.iv]
+- [x] **TASK-07**: The task listing response includes `completion_percentage` computed over the whole list (independent of filters) by a single SQL aggregate, plus `total_tasks` and `completed_tasks`; an empty list yields `0.0` [PDF 1.a.iv]
+- [x] **TASK-08**: Business validations reject blank titles, over-length fields and a due date in the past at creation [PDF 2.d]
 
 ### Authentication (AUTH)
 
@@ -168,7 +168,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | ARC-02 | Phase 2 | Complete |
 | ARC-03 | Phase 1 | Complete |
 | ARC-04 | Phase 2 | Complete |
-| ARC-05 | Phase 4 | Pending |
+| ARC-05 | Phase 4 | Complete |
 | ARC-06 | Phase 2 | Complete |
 | ARC-07 | Phase 2 | Complete |
 | ARC-08 | Phase 3 | Complete |
@@ -177,20 +177,20 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | DB-03 | Phase 3 | Complete |
 | DB-04 | Phase 3 | Complete |
 | DB-05 | Phase 3 | Complete |
-| LIST-01 | Phase 4 | Pending |
-| LIST-02 | Phase 4 | Pending |
-| LIST-03 | Phase 4 | Pending |
-| LIST-04 | Phase 4 | Pending |
-| LIST-05 | Phase 4 | Pending |
-| LIST-06 | Phase 4 | Pending |
-| TASK-01 | Phase 4 | Pending |
-| TASK-02 | Phase 4 | Pending |
-| TASK-03 | Phase 4 | Pending |
-| TASK-04 | Phase 4 | Pending |
-| TASK-05 | Phase 4 | Pending |
-| TASK-06 | Phase 4 | Pending |
-| TASK-07 | Phase 4 | Pending |
-| TASK-08 | Phase 4 | Pending |
+| LIST-01 | Phase 4 | Complete |
+| LIST-02 | Phase 4 | Complete |
+| LIST-03 | Phase 4 | Complete |
+| LIST-04 | Phase 4 | Complete |
+| LIST-05 | Phase 4 | Complete |
+| LIST-06 | Phase 4 | Complete |
+| TASK-01 | Phase 4 | Complete |
+| TASK-02 | Phase 4 | Complete |
+| TASK-03 | Phase 4 | Complete |
+| TASK-04 | Phase 4 | Complete |
+| TASK-05 | Phase 4 | Complete |
+| TASK-06 | Phase 4 | Complete |
+| TASK-07 | Phase 4 | Complete |
+| TASK-08 | Phase 4 | Complete |
 | AUTH-01 | Phase 5 | Pending |
 | AUTH-02 | Phase 5 | Pending |
 | AUTH-03 | Phase 5 | Pending |
@@ -249,6 +249,40 @@ Phase 6 = 5, Phase 7 = 8.
 - Unmapped: 0 ✓
 - Duplicates: 0 ✓
 
+### Phase 4 re-verification (plan 04-12)
+
+The fifteen Phase 4 boxes above were ticked by **plan 04-12 only**, after running the command in
+each row and seeing it pass — not inherited from the plan frontmatter that claimed them. Eleven
+consecutive Phase 4 plans deferred these ticks to the last claimant, which is the convention
+established in plans 02-07 and 03-11. The full output of every command below is in
+`.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`.
+
+| ID | Command | Collected | A named test that proves it |
+|----|---------|-----------|------------------------------|
+| ARC-05 | `pytest tests/unit/presentation/test_schemas.py tests/unit/test_app_factory.py` | 55 | `test_every_api_route_declares_a_response_model_or_returns_no_content` |
+| LIST-01 | `pytest tests/integration/api/test_task_lists.py -k create` | 4 | `test_create_returns_201_with_a_location_header_and_the_full_representation` |
+| LIST-02 | `pytest tests/integration/api/test_task_lists.py -k get` | 3 | `test_get_returns_the_list_with_its_statistics` |
+| LIST-03 | `pytest tests/integration/api/test_statements.py -k lists` | 1 | `test_the_task_lists_collection_issues_the_same_statements_for_one_list_and_for_many` |
+| LIST-03 | `pytest tests/integration/test_repositories_task_lists.py -k single_statement` | 1 | `test_listing_with_stats_is_a_single_statement` |
+| LIST-04 | `pytest tests/integration/api/test_task_lists.py -k patch` | 7 | `test_patch_with_an_explicit_null_description_clears_the_field` |
+| LIST-05 | `pytest tests/integration/api/test_task_lists.py -k delete` | 3 | `test_delete_returns_204_with_an_empty_body` |
+| LIST-06 | `pytest tests/integration/api/test_task_lists.py -k duplicate` | 2 | `test_renaming_a_list_to_a_name_the_actor_already_uses_is_a_duplicate_409` |
+| TASK-01 | `pytest tests/integration/api/test_tasks.py -k create` | 4 | `test_create_returns_201_with_a_location_header` |
+| TASK-02 | `pytest tests/integration/api/test_tasks.py -k wrong_list` | 4 | `test_a_get_under_the_wrong_list_is_404_exactly_like_an_absent_task` |
+| TASK-03 | `pytest tests/integration/api/test_tasks.py -k status_is_not_writable` | 1 | `test_status_is_not_writable_through_the_generic_patch` |
+| TASK-04 | `pytest tests/integration/api/test_tasks.py -k delete` | 2 | `test_delete_returns_204_with_an_empty_body` |
+| TASK-05 | `pytest tests/integration/api/test_tasks.py -k status` | 8 | `test_the_status_endpoint_walks_pending_to_in_progress_to_completed` |
+| TASK-05 | `pytest tests/unit/application/test_change_task_status.py` | 15 | `test_change_task_status_propagates_a_forbidden_transition` |
+| TASK-06 | `pytest tests/integration/api/test_tasks.py -k filter` | 6 | `test_filtering_by_both_applies_the_conjunction` |
+| TASK-07 | `pytest tests/integration/api/test_tasks.py -k statistics` | 2 | `test_the_statistics_cover_the_whole_list_whatever_the_filter` |
+| TASK-08 | `pytest tests/integration/api/test_tasks.py -k validation_error` | 6 | `test_a_past_due_date_is_a_domain_validation_error` |
+| TASK-08 | `pytest tests/unit/domain/test_task.py` | 42 | `test_task_validation_rejects_a_blank_title` |
+
+Every command exited `0` and collected at least one test. A command collecting zero would have
+blocked its tick: `pytest` exits `5`, not `0`, when `-k` matches nothing, which is how a
+mis-specified selector announces itself rather than passing vacuously.
+
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-17 after roadmap creation (7 phases, 69/69 mapped)*
+*Last updated: 2026-09-19 after Phase 4 (plan 04-12): ARC-05, LIST-01..06 and TASK-01..08
+ticked against the re-verification table above; 44/69 complete*
