@@ -53,3 +53,27 @@ ERROR tests/unit/application/test_write_paths_hold_what_they_change.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!!
 4 errors in 0.11s
 exit status: 2
+
+================================================================
+TDD RED - plan 05-08, Task 2: AssignTask
+Run at 2026-09-19T16:18:01Z, with src/taskmanager/application/use_cases/tasks/assign.py absent.
+
+$ .venv/bin/pytest tests/unit/application/test_assign_task.py -q --no-cov
+
+
+==================================== ERRORS ====================================
+_________ ERROR collecting tests/unit/application/test_assign_task.py __________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/application/test_assign_task.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/application/test_assign_task.py:35: in <module>
+    from taskmanager.application.use_cases.tasks.assign import AssignTask
+E   ModuleNotFoundError: No module named 'taskmanager.application.use_cases.tasks.assign'
+=========================== short test summary info ============================
+ERROR tests/unit/application/test_assign_task.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.09s
+exit status: 2

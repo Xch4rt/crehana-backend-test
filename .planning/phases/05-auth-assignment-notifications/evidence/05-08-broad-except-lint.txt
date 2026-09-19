@@ -1,0 +1,19 @@
+Which lint code does a bare `except Exception` trip in this project?
+Plan 05-08 Task 2 requires the noqa the linter actually asks for, measured rather than guessed.
+Run at 2026-09-19T16:20:19Z against src/taskmanager/application/use_cases/tasks/assign.py,
+with the `except Exception:` line carrying NO suppression comment.
+
+Installed flake8 plugins:
+$ .venv/bin/flake8 --version
+7.3.0 (flake8-bugbear: 26.9.9, flake8-comprehensions: 3.17.0, mccabe: 0.7.0,
+pep8-naming: 0.15.1, pycodestyle: 2.14.0, pyflakes: 3.4.0) CPython 3.14.3 on
+Darwin
+
+$ .venv/bin/flake8 src/taskmanager/application/use_cases/tasks/assign.py   # no noqa on the except
+(no output)
+exit status: 0
+
+Conclusion: the installed set (bugbear 26.9.9 + comprehensions + pep8-naming) emits
+nothing for this shape. BLE001 is a Ruff code, and the `# noqa: BLE001` in
+docker/entrypoint.sh sits in a shell heredoc flake8 never reads. So assign.py carries
+no suppression: a noqa naming a code that cannot fire suppresses nothing and misleads.
