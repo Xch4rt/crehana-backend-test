@@ -4055,3 +4055,51 @@ mutation behind.
   by its own inverse replacement, never a blanket checkout.
 
 ---
+
+## ADR-094: the break script traps HUP and QUIT too, and its signal test runs under dash (2026-09-19, amending ADR-091)
+
+**Context**
+ADR-091 records that the restore happens "through a trap installed before the first mutation".
+The trap was `trap cleanup EXIT` plus `trap on_signal INT TERM`. POSIX does not run the EXIT trap
+when the shell dies from an **untrapped** signal; bash happens to, dash does not, and dash is
+`/bin/sh` on Debian — the base of the `test` image and of any Linux evaluator's host. HUP is what a
+closed terminal tab or a dropped SSH session sends, QUIT is Ctrl-\, and this script spends about a
+minute with a defect on disk. Reproduced with a stub that sends `kill -s HUP "$PPID"` mid-run:
+
+```
+dash  exit=129   M src/taskmanager/domain/value_objects/completion.py   <- left behind
+sh    exit=129   (restored: macOS /bin/sh is bash)
+```
+
+The unit test passed on both platforms because it only ever sent TERM, which *was* trapped.
+
+**Options**
+
+- **Leave it: `make break-check` is run by hand and interrupted with Ctrl-C.** Ctrl-C is INT and
+  was covered; the uncovered cases are the ones nobody chooses, on the one tool in this repository
+  that writes to `src/`. The cost of the fix is one word per signal.
+- **Rely on the EXIT trap and document the shell requirement.** It would mean this script's safety
+  depends on which `sh` the evaluator's machine has, which is exactly the class of defect the
+  POSIX-only rule in its header exists to avoid.
+- **Name every signal, and test under the strict shell.**
+
+**Decision**
+`trap on_signal HUP INT QUIT TERM`, and
+`test_the_trap_restores_the_file_when_the_script_is_terminated` is parametrized over all four
+signals *and* over the shells — `sh` always, plus `dash` whenever `shutil.which("dash")` finds it,
+which it does on this macOS host and in the container. Eight runs, about two seconds.
+
+**Consequences**
+
+- **A macOS developer now exercises the shell the image uses.** Without the `dash` axis the whole
+  class of defect is invisible locally: bash's leniency is not a property the deliverable can rely
+  on, and `/bin/sh` being bash is a macOS accident.
+- **Driven red, both axes.** Narrowing the trap back to `INT TERM` reddens exactly four of the eight
+  rows — `[sh-HUP]`, `[sh-QUIT]`, `[dash-HUP]`, `[dash-QUIT]` — and under dash the failure is the
+  mutation still sitting in `src/`, while under bash-as-sh it is the exit status being the signal
+  (129) rather than the handler's own 143. Two different symptoms, one missing word.
+- **`on_signal` still exits 143 for every signal.** Convention would be 130 for INT, and a caller
+  such as `make` reports the two differently; that is a separate, cosmetic finding (IN-03) and is
+  deliberately not folded in here, because the exit code is not what makes the tree clean.
+
+---

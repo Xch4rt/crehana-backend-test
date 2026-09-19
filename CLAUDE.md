@@ -464,11 +464,16 @@ phases and each one turned out to be partly untrue the first time it was checked
   **response**.
 - **The spot check may write to `src/`, and nothing else may.** `scripts/break-check.sh` refuses to
   start unless `git status --porcelain -- src/` is empty, restores through a trap installed before
-  the first mutation, restores **only the files it touched**, and guards every mutation with an
+  the first mutation — `trap cleanup EXIT` **plus every signal by name**, `HUP INT QUIT TERM`,
+  because POSIX does not run the EXIT trap when the shell dies from an untrapped signal and dash
+  (Debian's `/bin/sh`, so the test image's) does not do it as a favour the way bash does — restores
+  **only the files it touched**, and guards every mutation with an
   `assert old in s` precondition. A blanket `git checkout -- src/`, `git stash` or
   `git reset --hard` is forbidden anywhere in this repository's tooling: it destroys uncommitted
   work the tool never touched, and Phase 6 produced a live example. Enforced by
-  `tests/unit/test_break_check.py`, which drives the script in a throwaway repository (ADR-091).
+  `tests/unit/test_break_check.py`, which drives the script in a throwaway repository (ADR-091),
+  and whose signal test is parametrized over all four signals and over `dash` as well as `sh`
+  whenever the host has it — on macOS `sh` alone cannot show the difference (ADR-094).
 - **A break is RED only against a measured baseline.** The same script runs each break's selection
   once **unmutated** first and refuses, non-zero, unless that run exits 0; then RED means pytest
   exit **1 and at least one `FAILED` line**, while exit 2/3/4/5 — and an exit 1 whose failures are

@@ -28,6 +28,7 @@ of those paths, including the ones that abort.
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Final
@@ -40,6 +41,12 @@ pytestmark = pytest.mark.unit
 ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 SCRIPT: Final[Path] = ROOT / "scripts" / "break-check.sh"
 SUCCESS_LINE: Final[str] = "turned the suite red"
+
+# `sh` is whatever the host calls POSIX - bash on macOS, dash on Debian. `dash`
+# is added by name when it exists, because bash runs its EXIT trap on an
+# untrapped signal and dash does not: the signal test below is about exactly that
+# difference, and on a macOS host `sh` alone cannot show it.
+SHELLS: Final[tuple[str, ...]] = ("sh",) + (("dash",) if shutil.which("dash") else ())
 
 # Git is invoked with an explicit identity and no signing, so the temporary
 # repository does not depend on - or pick up - the developer's global config.
@@ -147,10 +154,17 @@ def a_stub_green_on_the_baseline(mutated: str, directory: Path) -> tuple[str, Pa
     return a_stub_for_pytest(body, directory), counted
 
 
-def run_script(repository: Path, pytest_stub: str) -> subprocess.CompletedProcess[str]:
-    """Run the real script in `repository`, with `pytest_stub` for pytest."""
+def run_script(
+    repository: Path, pytest_stub: str, shell: str = "sh"
+) -> subprocess.CompletedProcess[str]:
+    """Run the real script in `repository`, with `pytest_stub` for pytest.
+
+    `shell` is `sh` everywhere except the signal test, which also runs the script
+    under `dash` when the host has it: macOS's `/bin/sh` is bash, and bash is
+    lenient about exactly the thing that test is about.
+    """
     return subprocess.run(
-        ["sh", str(SCRIPT)],
+        [shell, str(SCRIPT)],
         cwd=repository,
         env={**os.environ, "BREAK_CHECK_PYTEST": pytest_stub},
         capture_output=True,
@@ -179,8 +193,10 @@ def test_a_dirty_src_is_refused_before_anything_is_mutated(tmp_path: Path) -> No
     assert target.read_text(encoding="utf-8") == dirtied
 
 
+@pytest.mark.parametrize("signal_name", ["HUP", "INT", "QUIT", "TERM"])
+@pytest.mark.parametrize("shell", SHELLS)
 def test_the_trap_restores_the_file_when_the_script_is_terminated(
-    tmp_path: Path,
+    tmp_path: Path, shell: str, signal_name: str
 ) -> None:
     """A run killed with the mutation in place still leaves the tree clean.
 
@@ -191,18 +207,28 @@ def test_the_trap_restores_the_file_when_the_script_is_terminated(
     applied" is asserted rather than assumed: without that, a script which
     mutated nothing would pass this test. The signal has to land on the *mutated*
     run rather than the baseline one, which is what the parity stub is for.
+
+    Both axes are load-bearing, and the test used to have neither. **Signal:**
+    only TERM was sent, so `trap on_signal INT TERM` looked complete while HUP -
+    a closed terminal tab, a dropped SSH session - and QUIT (Ctrl-\\) were not
+    trapped at all. **Shell:** POSIX does not run the EXIT trap when the shell
+    dies from an untrapped signal; bash does anyway and dash does not, so on
+    macOS, where `/bin/sh` *is* bash, the missing signals were invisible while on
+    Debian - the test image, and any Linux evaluator - they left the mutation in
+    `src/` (WR-01, ADR-094). `dash` is added to the axis whenever the host has it,
+    so a macOS developer exercises the strict shell too.
     """
     repository = tmp_path / "repo"
     target = a_repository_in(repository, ORIGINAL)
     observed = tmp_path / "what-the-tests-saw"
     stub, _ = a_stub_green_on_the_baseline(
         f"cat {shlex.quote(str(target))} > {shlex.quote(str(observed))}\n"
-        'kill -TERM "$PPID"\n'
+        f'kill -s {signal_name} "$PPID"\n'
         "exit 1\n",
         tmp_path,
     )
 
-    result = run_script(repository, stub)
+    result = run_script(repository, stub, shell=shell)
 
     # 143 is the script's own `exit 143` from the signal handler, not the shell
     # being killed - a terminated shell would report a negative status here and

@@ -39,8 +39,10 @@
 #   * it refuses to start unless `git status --porcelain -- src/` is empty, so
 #     it can never be blamed for - or destroy - uncommitted work;
 #   * a trap installed BEFORE the first mutation restores on any exit, including
-#     INT and TERM, and it restores exactly the files this script itself touched,
-#     never a blanket checkout of the tree;
+#     HUP, INT, QUIT and TERM - each named, because a shell that dies from an
+#     untrapped signal does not run its EXIT trap under dash - and it restores
+#     exactly the files this script itself touched, never a blanket checkout of
+#     the tree;
 #   * after every restore the clean-tree check is re-run, so break 2 cannot
 #     start on top of break 1.
 #
@@ -125,7 +127,16 @@ assert_src_is_clean
 # clean-tree check this script depends on.
 LOGDIR=$(mktemp -d)
 trap cleanup EXIT
-trap on_signal INT TERM
+# All four signals, and the EXIT trap is not a substitute for naming them: POSIX
+# does not run the EXIT trap when the shell dies from an untrapped signal. bash
+# happens to; dash does not, and dash is /bin/sh on Debian, which is the test
+# image and any Linux evaluator. Verified before this line was widened: under
+# dash a `kill -s HUP` mid-run left `"verify_exp": False` in tokens.py on disk and
+# leaked $LOGDIR, while the same run under macOS's bash-as-sh restored cleanly -
+# a defect invisible on the development host. HUP is a closed terminal tab or a
+# dropped SSH session, QUIT is Ctrl-\, and both are about a minute's worth of
+# window here (ADR-094).
+trap on_signal HUP INT QUIT TERM
 
 survivors=0
 checked=0
