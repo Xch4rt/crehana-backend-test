@@ -37,6 +37,18 @@ captures `before` with a read above the mutation and asserts `after == before`
 below it, and a check that accepted any read anywhere would count the `before`
 and let the half that actually says "unchanged" go missing.
 
+A mutation is recognised by the verb, not by the attribute name. `client.post`
+says it outright; the generic `client.request(...)` carries its verb as the first
+positional argument or as a `method=` keyword, and it is resolved from there when
+that argument is a string literal, so `request("GET", ...)` is a read and
+`request("DELETE", ...)` is a mutation. A verb the gate **cannot** read - an
+expression, a name, an unrecognised spelling - is treated as a mutation. That
+asymmetry is the lesson of WR-02: half (b) matched the attribute name alone, so
+`test_permission_matrix.py`, which issues every one of a seventy-six-cell
+table's mutations through `client.request(cell.row.method, ...)`, sat entirely
+outside the rule while this gate reported zero offenders. A non-literal verb
+must never be a way *out* of the gate (ADR-096).
+
 Half (b) has an escape hatch, because ten tests provably have nothing a `GET`
 can observe: `POST /auth/login` mutates no resource, and the five notification
 tests assert on a log record no route publishes. It is `@pytest.mark.no_reread`
@@ -200,11 +212,21 @@ REQUIRED_NO_REREAD: Final[frozenset[str]] = frozenset(
 # needs it by itself: it is the only one that proves an end state.
 READ_VERB: Final[str] = "get"
 MUTATING_VERBS: Final[frozenset[str]] = frozenset({"post", "put", "patch", "delete"})
+
+# `client.request(<verb>, ...)` - the generic call, whose verb is an argument
+# rather than the attribute name. It is resolved when the argument is a literal
+# this module recognises, and otherwise stands for "could be any verb", which
+# half (b) treats as **mutating**. An unreadable verb must never be a way *out*
+# of the gate: that is exactly how a seventy-six-cell table driven entirely
+# through `client.request(cell.row.method, ...)` sat outside the re-read rule
+# while this gate reported zero offenders (WR-02, ADR-096).
+UNRESOLVED_VERB: Final[str] = "request"
+
 REQUEST_VERBS: Final[frozenset[str]] = MUTATING_VERBS | {
     READ_VERB,
     "head",
     "options",
-    "request",
+    UNRESOLVED_VERB,
 }
 
 pytestmark = pytest.mark.unit
@@ -343,13 +365,58 @@ def client_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]
     return frozenset(names)
 
 
+def _verb_of(call: ast.Call, attribute: str) -> str:
+    """The verb this call issues, which is not always the attribute name.
+
+    `client.post(...)` says it in the attribute and returns unchanged. The
+    generic `client.request(...)` carries its verb as the first positional
+    argument, or as a `method=` keyword, and is resolved when that argument is a
+    string literal this module recognises - so `request("GET", ...)` really is a
+    read and `request("DELETE", ...)` really is a mutation.
+
+    Anything else - an expression, an f-string, a name, a spelling that is not
+    one of `REQUEST_VERBS` - is unreadable, and an unreadable verb stays
+    `UNRESOLVED_VERB`, which half (b) treats as mutating. The asymmetry is
+    deliberate: a wrongly-mutating classification costs a re-read that was
+    already the standard, and a wrongly-reading one is a hole (WR-02).
+    """
+    if attribute != UNRESOLVED_VERB:
+        return attribute
+    method: ast.expr | None = call.args[0] if call.args else None
+    if method is None:
+        method = next(
+            (keyword.value for keyword in call.keywords if keyword.arg == "method"),
+            None,
+        )
+    if isinstance(method, ast.Constant) and isinstance(method.value, str):
+        spelled = method.value.lower()
+        if spelled in REQUEST_VERBS:
+            return spelled
+    return UNRESOLVED_VERB
+
+
+def _mutates(verb: str) -> bool:
+    """Whether a request with this verb may have changed something.
+
+    The four named verbs, plus the unresolved one: a `request(...)` whose method
+    the gate cannot read could be any of them.
+    """
+    return verb in MUTATING_VERBS or verb == UNRESOLVED_VERB
+
+
 def requests_made(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> list[tuple[str, int]]:
-    """Every request this test issues, as `(verb, line)` in source order."""
+    """Every request this test issues, as `(verb, line)` in source order.
+
+    The verb is resolved through `_verb_of`, so a `client.request(...)` is
+    classified by the method it was given rather than by the attribute name.
+    Membership in `REQUEST_VERBS` is still tested on the attribute, so a call to
+    an unrelated method of a client is still not a request.
+    """
     clients = client_names(node)
     return sorted(
-        (child.func.attr, child.func.value.lineno)
+        (_verb_of(child, child.func.attr), child.func.value.lineno)
         for child in ast.walk(node)
         if isinstance(child, ast.Call)
         and isinstance(child.func, ast.Attribute)
@@ -581,13 +648,18 @@ def no_reread_offenders(path: Path, tree: ast.Module) -> list[str]:
     a read above the mutation, and a gate that accepted any read anywhere would
     count that one and let the `after == before` half go missing - which is the
     only half that says the resource is unchanged.
+
+    A mutation issued through the generic `client.request(...)` counts too: the
+    verb is resolved from the call's first argument or its `method=` keyword, and
+    a verb the gate cannot read is treated as mutating rather than as nothing
+    (ADR-096).
     """
     offenders = []
     for node in http_tests(tree):
         if _no_reread_decorators(node):
             continue
         requests = requests_made(node)
-        mutations = [line for verb, line in requests if verb in MUTATING_VERBS]
+        mutations = [line for verb, line in requests if _mutates(verb)]
         if not mutations:
             continue
         reads = [line for verb, line in requests if verb == READ_VERB]
@@ -985,6 +1057,93 @@ def test_a_read_only_test_is_not_an_offender() -> None:
         )
         == []
     )
+
+
+_A_LITERAL_DELETE = (
+    "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+    "    client, _ = api_client\n"
+    "    response = await client.request('DELETE', '/x')\n"
+    "    assert response.json()['code'] == 'gone'\n"
+)
+
+
+def test_a_literal_mutating_verb_through_request_is_an_offender() -> None:
+    """The generic call is a mutation when its verb says so."""
+    assert _no_reread_in(_A_LITERAL_DELETE) == ["tests/integration/api/planted.py:1"]
+
+
+def test_a_literal_get_through_request_is_not_an_offender() -> None:
+    """And it is a read when its verb says *that*, which is the load-bearing half.
+
+    Without this the resolution could be nothing more than "treat `request` as
+    mutating", and a re-read spelled generically would be invisible - so the
+    second assertion reads the change back through `request('GET', ...)` after a
+    `patch` and expects no offender.
+    """
+    assert (
+        _no_reread_in(
+            "async def test_planted("
+            "api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+            "    client, _ = api_client\n"
+            "    response = await client.request('GET', '/x')\n"
+            "    assert response.json() == []\n"
+        )
+        == []
+    )
+    assert (
+        _no_reread_in(
+            _A_MUTATION + "    after = (await client.request('GET', '/x')).json()\n"
+            "    assert after['name'] == 'Weekly'\n"
+        )
+        == []
+    )
+
+
+def test_a_non_literal_verb_is_treated_as_mutating() -> None:
+    """The permission matrix's own shape, reduced to four lines.
+
+    `cell.row.method` is any of POST, PATCH, PUT, DELETE and GET depending on the
+    parameter, so the gate cannot know - and the rule is that it assumes the
+    worst. With a `get` after it the test complies, which is what plan 06-05's
+    first commit made true of the matrix itself.
+    """
+    unread = (
+        "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+        "    client, _ = api_client\n"
+        "    response = await client.request(cell.row.method, '/x')\n"
+        "    assert response.json()['code'] == 'whatever'\n"
+    )
+
+    assert _no_reread_in(unread) == ["tests/integration/api/planted.py:1"]
+    assert (
+        _no_reread_in(
+            unread + "    after = (await client.get('/x')).json()\n"
+            "    assert after['name'] == 'Weekly'\n"
+        )
+        == []
+    )
+
+
+def test_a_verb_the_gate_cannot_read_is_never_a_way_out() -> None:
+    """The fallback, not the happy path: both of these are mutations.
+
+    A spelling `REQUEST_VERBS` does not contain, passed as the `method=` keyword,
+    and a verb bound to a local name. Neither can be resolved, so neither is
+    allowed to be a read.
+    """
+    assert _no_reread_in(
+        "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+        "    client, _ = api_client\n"
+        "    response = await client.request(method='TRACE', url='/x')\n"
+        "    assert response.json()['code'] == 'nope'\n"
+    ) == ["tests/integration/api/planted.py:1"]
+    assert _no_reread_in(
+        "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+        "    client, _ = api_client\n"
+        "    verb = 'GET'\n"
+        "    response = await client.request(verb, '/x')\n"
+        "    assert response.json() == []\n"
+    ) == ["tests/integration/api/planted.py:1"]
 
 
 def test_a_marked_test_is_not_an_offender() -> None:
