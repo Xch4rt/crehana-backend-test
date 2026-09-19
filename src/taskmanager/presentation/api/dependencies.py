@@ -17,12 +17,14 @@ more one is worth. Phase 4 will add providers here, and none of them will have
 to repeat it.
 """
 
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import Request
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.unit_of_work import UnitOfWork
+from taskmanager.infrastructure.clock import SystemClock
 from taskmanager.infrastructure.db.engine import DatabaseResources
 from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -74,3 +76,28 @@ def get_uow(request: Request) -> UnitOfWork:
     than of changing a signature.
     """
     return SqlAlchemyUnitOfWork(get_session_factory(request))
+
+
+def get_clock() -> Clock:
+    """The system clock, built fresh for whoever asks (D-14).
+
+    It takes no `Request` because it reads nothing off the application, and it
+    is not stored on `app.state` for the same reason: `SystemClock` holds no
+    state, opens nothing and costs a single object allocation, so the narrowing
+    `_resources` exists to avoid would buy nothing here. A shared instance would
+    only add a second place a test could forget to override.
+
+    The annotation is the **port**, never the concrete adapter, exactly as
+    `get_uow`'s is. A use case that wants a frozen instant in a test gets it by
+    overriding this provider, which is a line in a fixture rather than a change
+    to a signature.
+    """
+    return SystemClock()
+
+
+# The two aliases every Phase 4 router shares, declared once here rather than
+# re-spelled per router. They are annotations and not argument defaults, for the
+# B008 reason `health.py` L47-L54 sets out in full; that argument is not
+# repeated here.
+UnitOfWorkDependency = Annotated[UnitOfWork, Depends(get_uow)]
+ClockDependency = Annotated[Clock, Depends(get_clock)]
