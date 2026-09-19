@@ -5,7 +5,14 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 
 from taskmanager.domain.exceptions import ValidationError
-from taskmanager.domain.validation import optional_text, require_text, require_utc
+from taskmanager.domain.validation import (
+    PASSWORD_MAX_LENGTH,
+    PASSWORD_MIN_LENGTH,
+    optional_text,
+    require_password,
+    require_text,
+    require_utc,
+)
 
 # Fixed literals rather than a clock reading or a generated identifier: a guard
 # that normalises time must be asserted against an instant the reader can see.
@@ -165,3 +172,78 @@ def test_a_nul_is_reported_before_the_length() -> None:
         require_text(WITH_A_NUL * 100, field="title", max_length=10)
 
     assert "NUL" in str(excinfo.value)
+
+
+# D-10's two numbers, spelled here and in `validation.py` and nowhere else. Every
+# password test below builds its input from the constants rather than from a
+# literal, exactly as the entity tests read their ClassVar - so the one test that
+# pins the constants to the policy is the only place the numbers can drift.
+def test_the_password_bounds_are_the_policy_d10_states() -> None:
+    """8 to 128, length only: the constants are the policy, not a coincidence."""
+    assert (PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH) == (8, 128)
+
+
+def test_require_password_accepts_the_shortest_allowed_password() -> None:
+    """The floor is inclusive, and the value comes back byte-identical."""
+    shortest = "x" * PASSWORD_MIN_LENGTH
+
+    assert require_password(shortest, field="password") == shortest
+
+
+def test_require_password_accepts_the_longest_allowed_password() -> None:
+    """The cap is inclusive too: 128 characters is a valid password."""
+    longest = "x" * PASSWORD_MAX_LENGTH
+
+    assert require_password(longest, field="password") == longest
+
+
+def test_require_password_rejects_one_character_below_the_floor() -> None:
+    """A password one short is refused, naming the field the client sent."""
+    with pytest.raises(ValidationError) as excinfo:
+        require_password("x" * (PASSWORD_MIN_LENGTH - 1), field="password")
+
+    assert excinfo.value.details == {"field": "password"}
+
+
+def test_require_password_rejects_one_character_above_the_cap() -> None:
+    """The upper bound also bounds the Argon2 work a request can demand."""
+    with pytest.raises(ValidationError) as excinfo:
+        require_password("x" * (PASSWORD_MAX_LENGTH + 1), field="password")
+
+    assert excinfo.value.details == {"field": "password"}
+
+
+def test_the_two_refusals_carry_different_messages() -> None:
+    """Too short and too long are distinguishable in the 422 body."""
+    with pytest.raises(ValidationError) as too_short:
+        require_password("x" * (PASSWORD_MIN_LENGTH - 1), field="password")
+    with pytest.raises(ValidationError) as too_long:
+        require_password("x" * (PASSWORD_MAX_LENGTH + 1), field="password")
+
+    assert str(too_short.value) != str(too_long.value)
+
+
+def test_require_password_accepts_a_password_that_is_only_spaces() -> None:
+    """Unlike `require_text`, whitespace is content here: nothing is trimmed."""
+    spaces = " " * PASSWORD_MIN_LENGTH
+
+    assert require_password(spaces, field="password") == spaces
+
+
+def test_require_password_keeps_surrounding_whitespace() -> None:
+    """Trimming would change the credential between registration and login."""
+    padded = "  hunter2  "
+
+    assert require_password(padded, field="password") == padded
+
+
+def test_require_password_accepts_a_nul_character() -> None:
+    """The second departure from `require_text`, asserted as behaviour.
+
+    Only the Argon2 encoded hash is stored, and Argon2 hashes arbitrary bytes, so
+    the NUL guard that protects `title` and `full_name` has nothing to protect
+    here. This test is what proves `_refuse_nul` is genuinely not called.
+    """
+    with_a_nul = "pass" + WITH_A_NUL + "word"
+
+    assert require_password(with_a_nul, field="password") == with_a_nul

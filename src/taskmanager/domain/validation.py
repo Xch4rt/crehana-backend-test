@@ -13,8 +13,18 @@ there into the `errors` member of the problem body a client actually reads.
 """
 
 from datetime import UTC, datetime
+from typing import Final
 
 from taskmanager.domain.exceptions import ValidationError
+
+# D-10's password policy, length only, spelled here and nowhere else. These are
+# module constants rather than `ClassVar`s on `User`, unlike `Task.TITLE_MAX_LENGTH`
+# and every other limit in this project, and the asymmetry is deliberate: the
+# entity never sees a plaintext password at all - only the Argon2 encoded hash
+# reaches it - so there is no entity that could own the rule. Phase 2 D-04 still
+# applies, and this module is the only place in the domain that can hold it.
+PASSWORD_MIN_LENGTH: Final[int] = 8
+PASSWORD_MAX_LENGTH: Final[int] = 128
 
 
 def require_utc(value: datetime, *, field: str) -> datetime:
@@ -88,6 +98,47 @@ def require_text(value: str, *, field: str, max_length: int) -> str:
             details={"field": field},
         )
     return text
+
+
+def require_password(value: str, *, field: str) -> str:
+    """Return the password unchanged, refusing one outside D-10's length policy.
+
+    The policy is length only - no composition rule, no character class, no
+    dictionary - following NIST 800-63B, and the upper bound doubles as the
+    bound on the Argon2 work a single unauthenticated request can demand.
+
+    It reads like `require_text` and deliberately differs from it in three ways,
+    each of which is a decision rather than an omission:
+
+    - It does **not** `.strip()`. Leading and trailing whitespace is part of a
+      password, not noise around it; trimming would silently change a credential
+      between registration and login, so a password chosen with a trailing space
+      would be unusable and its owner would have no way to find out why.
+    - It does **not** call `_refuse_nul`. That guard exists because PostgreSQL's
+      text types cannot hold NUL and `title`, `name` and `full_name` are stored
+      verbatim. A password never becomes a text column - only its Argon2 encoded
+      hash is stored, and Argon2 hashes arbitrary bytes - so the guard would have
+      nothing to protect here, and refusing a character would be exactly the kind
+      of composition rule D-10 rules out.
+    - Its bounds are the module constants above rather than an argument or an
+      entity `ClassVar`, because there is no entity to put them on: `User` holds
+      a hash and never sees plaintext. The rule about the number is unchanged -
+      it is spelled once - only its home differs from `Task.TITLE_MAX_LENGTH`.
+
+    The two bounds are refused separately, with distinct messages, so the 422
+    body tells the caller which one they crossed rather than restating the range.
+    """
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise ValidationError(
+            f"{field} must be at least {PASSWORD_MIN_LENGTH} characters long.",
+            details={"field": field},
+        )
+    if len(value) > PASSWORD_MAX_LENGTH:
+        raise ValidationError(
+            f"{field} must be at most {PASSWORD_MAX_LENGTH} characters long.",
+            details={"field": field},
+        )
+    return value
 
 
 def optional_text(value: str | None, *, field: str, max_length: int) -> str | None:
