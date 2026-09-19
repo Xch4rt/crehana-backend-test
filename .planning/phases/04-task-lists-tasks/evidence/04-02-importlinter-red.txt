@@ -1,0 +1,273 @@
+D-15 architecture-contract demonstration - Phase 4, plan 04-02
+Date: 2026-09-18
+Host: macOS arm64, CPython 3.14.3 in .venv, import-linter 2.15, pytest 9.1.1
+
+Commands, in the order they were run:
+  printf '\nfrom fastapi import HTTPException\n\n__all__ = ["HTTPException"]\n' \
+      >> src/taskmanager/application/use_cases/tasks/change_task_status.py
+  .venv/bin/lint-imports --no-cache --no-logo                              ; echo $?
+  .venv/bin/pytest tests/architecture/test_layer_boundaries.py -q --no-cov ; echo $?
+  <the planted lines removed again>
+  printf '\nfrom fastapi import HTTPException\n\n__all__ = ["HTTPException"]\n' \
+      >> src/taskmanager/infrastructure/db/engine.py
+  .venv/bin/lint-imports --no-cache --no-logo                              ; echo $?
+  .venv/bin/pytest tests/architecture/test_layer_boundaries.py -q --no-cov ; echo $?
+  <the planted lines removed again>
+  .venv/bin/lint-imports --no-cache --no-logo                              ; echo $?
+  .venv/bin/pytest tests/architecture/test_layer_boundaries.py -q --no-cov ; echo $?
+
+What this proves: the `no-http-below-presentation` contract is enforced, not
+decorative. A single `from fastapi import HTTPException` placed below the
+presentation layer turns the contract BROKEN, names the offending import by
+module and line, and turns the pytest suite red - and only the removal of that
+import turns both green again.
+
+Why the contract exists: D-15 forbids a business layer from raising
+`fastapi.HTTPException`, because a layer that raises it has built an error body
+by hand and bypassed the single RFC 9457 handler ARC-07 puts in charge of every
+response. This contract answers the broader module-level question for the whole
+subtree below presentation; the symbol-level question - an `HTTPException`
+raised inside presentation, where the import IS allowed - belongs to the AST
+gate plan 04-08 adds.
+
+Why the violation is planted TWICE, in two different layers. The plan asks only
+for the first. It is not sufficient on its own, and the capture says so rather
+than hiding it: in RUN 1 the planted import breaks `Application knows no web
+framework or ORM` as well, because that contract already forbade `fastapi` in
+`taskmanager.application`. So RUN 1 proves the new contract fires, but not that
+it is worth having - the build would have gone red without it.
+
+RUN 3 is the falsification that settles that. `infrastructure` is the layer the
+new contract adds and no existing contract covers: the `layers` contract permits
+`infrastructure` to import anything outside the root package, and
+`domain-framework-free` and `application-framework-free` name other source
+modules. And so exactly ONE contract is reported BROKEN there. Without
+`no-http-below-presentation`, the same import would have been reported as four
+kept contracts and a green build.
+
+Note on the pytest runs: only `test_import_contracts_hold` fails.
+`test_every_contract_is_configured` passes throughout, because a planted import
+violates the configuration rather than changing it - which is exactly the
+division of labour those two tests exist to keep.
+
+`--no-logo` suppresses import-linter's nine-line ASCII banner and nothing else;
+it is the same flag `.github/workflows/ci.yml` passes. Everything below is
+verbatim, exit codes included.
+
+Both planted imports were removed immediately after their red runs and exist
+neither on disk nor in git history as a tracked change; the green runs at the end
+are the shipped tree.
+
+================================================================================
+RUN 1 - RED: lint-imports with a forbidden import in the APPLICATION layer
+         (two contracts broken - the new one is not alone here)
+================================================================================
+
+
+---------
+Contracts
+---------
+
+Analyzed 69 files, 170 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM BROKEN
+No web framework below presentation BROKEN
+
+Contracts: 2 kept, 2 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Application knows no web framework or ORM
+-----------------------------------------
+
+taskmanager.application is not allowed to import fastapi:
+
+-   taskmanager.application.use_cases.tasks.change_task_status -> fastapi (l.96)
+
+
+No web framework below presentation
+-----------------------------------
+
+taskmanager.application is not allowed to import fastapi:
+
+-   taskmanager.application.use_cases.tasks.change_task_status -> fastapi (l.96)
+
+
+exit: 1
+
+================================================================================
+RUN 2 - RED: pytest over the architecture suite, same planted import
+================================================================================
+
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+__________________________ test_import_contracts_hold __________________________
+
+    def test_import_contracts_hold() -> None:
+        """Every contract in `.importlinter` is kept by the current import graph."""
+>       assert use_cases.lint_imports(no_logo=True) is True
+E       assert False is True
+E        +  where False = <function lint_imports at 0x10c8d0d50>(no_logo=True)
+E        +    where <function lint_imports at 0x10c8d0d50> = use_cases.lint_imports
+
+tests/architecture/test_layer_boundaries.py:50: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+---------
+Contracts
+---------
+
+Analyzed 69 files, 170 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM BROKEN
+No web framework below presentation BROKEN
+
+Contracts: 2 kept, 2 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+Application knows no web framework or ORM
+-----------------------------------------
+
+taskmanager.application is not allowed to import fastapi:
+
+-   taskmanager.application.use_cases.tasks.change_task_status -> fastapi (l.96)
+
+
+No web framework below presentation
+-----------------------------------
+
+taskmanager.application is not allowed to import fastapi:
+
+-   taskmanager.application.use_cases.tasks.change_task_status -> fastapi (l.96)
+
+
+=========================== short test summary info ============================
+FAILED tests/architecture/test_layer_boundaries.py::test_import_contracts_hold
+1 failed, 1 passed in 0.05s
+exit: 1
+
+================================================================================
+RUN 3 - RED: the same import planted in the INFRASTRUCTURE layer instead
+         (ONE contract broken - the one this plan adds, and only it)
+================================================================================
+
+
+---------
+Contracts
+---------
+
+Analyzed 69 files, 170 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+No web framework below presentation BROKEN
+
+Contracts: 3 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+No web framework below presentation
+-----------------------------------
+
+taskmanager.infrastructure is not allowed to import fastapi:
+
+-   taskmanager.infrastructure.db.engine -> fastapi (l.99)
+
+
+exit: 1
+
+================================================================================
+RUN 4 - RED: pytest over the architecture suite, infrastructure violation
+================================================================================
+
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+__________________________ test_import_contracts_hold __________________________
+
+    def test_import_contracts_hold() -> None:
+        """Every contract in `.importlinter` is kept by the current import graph."""
+>       assert use_cases.lint_imports(no_logo=True) is True
+E       assert False is True
+E        +  where False = <function lint_imports at 0x10ea0cd50>(no_logo=True)
+E        +    where <function lint_imports at 0x10ea0cd50> = use_cases.lint_imports
+
+tests/architecture/test_layer_boundaries.py:50: AssertionError
+----------------------------- Captured stdout call -----------------------------
+
+---------
+Contracts
+---------
+
+Analyzed 69 files, 170 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+No web framework below presentation BROKEN
+
+Contracts: 3 kept, 1 broken.
+
+
+----------------
+Broken contracts
+----------------
+
+No web framework below presentation
+-----------------------------------
+
+taskmanager.infrastructure is not allowed to import fastapi:
+
+-   taskmanager.infrastructure.db.engine -> fastapi (l.99)
+
+
+=========================== short test summary info ============================
+FAILED tests/architecture/test_layer_boundaries.py::test_import_contracts_hold
+1 failed, 1 passed in 0.05s
+exit: 1
+
+================================================================================
+RUN 5 - GREEN: both planted imports removed, lint-imports over the shipped tree
+================================================================================
+
+
+---------
+Contracts
+---------
+
+Analyzed 69 files, 169 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+No web framework below presentation KEPT
+
+Contracts: 4 kept, 0 broken.
+exit: 0
+
+================================================================================
+RUN 6 - GREEN: pytest over the architecture suite, shipped tree
+================================================================================
+
+..                                                                       [100%]
+2 passed in 0.03s
+exit: 0

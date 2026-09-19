@@ -61,3 +61,42 @@ forbidden_modules =
     alembic
     jwt
     pwdlib
+
+# D-15: HTTP is the presentation layer's vocabulary and nobody else's. The rule it
+# exists to keep is that `fastapi.HTTPException` is never raised below presentation -
+# a business layer that raises it has built an error body by hand, bypassing the single
+# RFC 9457 handler ARC-07 puts in charge of every response.
+#
+# What is deliberately OUT of source_modules: `presentation`, which is the layer that
+# is *supposed* to import FastAPI, and `main`, which composes it. Naming either would
+# forbid the application from having a web interface at all.
+#
+# What is deliberately in forbidden_modules: the two packages, not the `HTTPException`
+# symbol. An import-linter `forbidden` contract works on modules, so it cannot express
+# "this name in particular" - it answers the broader question instead, and answers it
+# for the whole subtree. The symbol-level question is a different gate's:
+# `tests/architecture/test_routers_raise_no_http_exception.py` (plan 04-08) walks the
+# AST of the presentation layer, where the import IS allowed and only the `raise` is
+# not. The two are complementary rather than redundant.
+#
+# `domain` and `application` are already covered by their own contracts above; they are
+# repeated here so that this contract states D-15 completely and a future narrowing of
+# either one cannot silently open a hole in it. `infrastructure` is the layer this adds:
+# it is clean today, its only occurrence of `starlette` being a prose mention inside
+# `db/engine.py`'s docstring, which import-linter does not see.
+#
+# No pre-commit hook and no CI step is added for this. Both already run `lint-imports`
+# over this file - the hook id `import-linter` and the CI step "Architecture contracts" -
+# so ADR-015's rule that a new gate goes in both places does not apply to a contract that
+# rides inside a command both already invoke. The same argument plans 02-06 and 03-06
+# recorded for their own additions.
+[importlinter:contract:no-http-below-presentation]
+name = No web framework below presentation
+type = forbidden
+source_modules =
+    taskmanager.domain
+    taskmanager.application
+    taskmanager.infrastructure
+forbidden_modules =
+    fastapi
+    starlette

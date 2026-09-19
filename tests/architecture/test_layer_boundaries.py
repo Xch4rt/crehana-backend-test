@@ -20,16 +20,22 @@ EXPECTED_CONTRACT_NAMES = {
     "Layered architecture (high to low)",
     "Domain is framework-free",
     "Application knows no web framework or ORM",
+    "No web framework below presentation",
 }
 
 
 def test_every_contract_is_configured() -> None:
-    """A config that configures nothing passes vacuously; assert it configures three.
+    """A config that configures nothing passes vacuously; assert what it configures.
 
     `lint-imports` reports "Contracts: 0 kept, 0 broken" and exits 0 when the section
     headers are mistyped (`[importlinter:contracts:...]` instead of the singular
     `[importlinter:contract:...]`), so without this guard a one-character typo would
     silently disable every boundary check while the build stayed green.
+
+    The set is compared exactly rather than by length or by containment, which has a
+    cost worth stating: adding a contract to `.importlinter` fails this test until the
+    name is added here too. That is the guard working. A contract *removed* from the
+    config is the case it exists for, and no weaker comparison catches it.
     """
     config = api.read_configuration()
 
