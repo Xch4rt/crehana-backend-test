@@ -400,6 +400,17 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 - No secret ever gets a default value in code.
 - Every setting is read through `taskmanager.infrastructure.config.settings`, documented in
   `.env.example`, and `.env` is never committed.
+- The placeholder `.env.example` publishes — any `JWT_SECRET` beginning `replace-me` — is
+  refused at boot with a single validation error naming `make env`, which is how a `.env` is
+  written (ADR-084, amending D-15). A 32-character floor is not enough: the shipped value
+  cleared it, and Phase 5 verification forged a token with it against the running container.
+  Enforced by `tests/unit/test_settings.py::test_the_shipped_placeholder_is_refused`, which
+  reads the value out of `.env.example` rather than restating it, and by
+  `tests/unit/test_env_bootstrap.py`, which runs `scripts/init-env.sh` in a temporary directory
+  and boots `Settings` from the file it writes.
+- `JWT_ALGORITHM` is a closed set of one, `Literal["HS256"]`: the secret floor is sized for
+  HS256, so `none`, `RS256`, `HS512` and a trailing space fail at boot rather than at the first
+  login. Enforced by `tests/unit/test_settings.py::test_the_algorithm_is_a_closed_set`.
 
 ### Language and attribution
 

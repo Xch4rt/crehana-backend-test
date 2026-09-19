@@ -1676,6 +1676,33 @@ gate, and the transcription is the last thing done rather than the first.
 
 ---
 
+### 2026-09-19 — Sixteen green plans shipped a signing key that anyone could read
+
+**What happened.** Phase 5 closed with 998 passing tests, 100.00% coverage and four green gates.
+Phase verification then forged a JWT offline, signing it with the `JWT_SECRET` value published in
+`.env.example`, and `GET /api/v1/auth/me` on the running container answered 200 with another
+account's profile. The placeholder is 34 characters, the only check was a 32-character floor, and
+the documented setup was to copy that file to `.env` — so the one-command path an evaluator
+follows signed every token with a string that is in the public repository. A comment in
+`settings.py` had even recorded the placeholder as clearing the floor, three lines below a
+docstring promising the process would refuse to start on a placeholder secret.
+
+**Why every gate missed it.** Each test supplies its own secret: `tests/conftest.py` exports a
+32-character one, CI exports a 36-character one, and the unit tests build `Settings` with
+`_env_file=None` so no file is read at all. That is correct isolation, and it means nothing in
+the suite ever asserted anything about the value the documented path actually installs. The tests
+measured the code; nobody measured the deployment.
+
+**What changed.** `Settings` refuses any secret beginning `replace-me` with one validation error
+naming `make env`, the new target that generates a real secret into an untracked `.env`, and
+`tests/unit/test_settings.py` now reads the shipped value out of `.env.example` rather than
+restating it — so the assertion tracks whatever the repository publishes.
+
+**The rule:** a test that supplies its own configuration proves the code, not the setup. The
+configuration a project ships needs an assertion of its own.
+
+---
+
 This log is appended to at the end of every subsequent phase.
 
 ---

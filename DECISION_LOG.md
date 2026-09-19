@@ -961,7 +961,8 @@ equality* between `Settings.model_fields` and the keys in `.env.example`, not a 
 **Decision**
 Option (a). The rule that matters is one sentence: **the key exists in both places or in
 neither.** `cp .env.example .env && docker compose up` keeps working, and the parity gate was
-not touched.
+not touched. (ADR-084 later made step one `make env`; the argument
+above is unchanged, only the command that writes the file.)
 
 **Consequences**
 
@@ -1554,6 +1555,7 @@ Both promises were kept, in **plan 03-10** (commits `bb1274e`, `15423a9`, `083fd
   tests, integration suite included, reporting `Required test coverage of 75% reached`.
 - Phase 7's README has four settled commands: `cp .env.example .env`, `docker compose up`,
   `http://localhost:8000/health`, `make docker-test`.
+  (ADR-084 replaces the first of the four with `make env`.)
 
 ---
 
@@ -3555,5 +3557,59 @@ a failure names the row it came from.
   matters (the same note ADR-056 makes about Phase 4's 79 HTTP tests).
 - Adding a twentieth operation without a row is now a failing test that names the unmeasured
   `(method, path)`. The same table is what Phase 7's README should reproduce.
+
+---
+
+## ADR-084: the published placeholder is refused at boot, and `make env` writes a real secret
+
+**Context**
+ADR-061 raised the `JWT_SECRET` floor to 32 characters, sized against RFC 7518 §3.2 and PyJWT's
+HS256 warning. It was never checked against the one value this repository publishes:
+`.env.example` ships a 34-character placeholder, which clears the floor, and the documented setup
+was to copy that file verbatim (D-15). Phase 5 verification forged a token offline with the
+published string and read another account's profile from `GET /api/v1/auth/me` with 200 — against
+the container running on this machine, started from exactly the documented path. `GET /users`
+makes the subject identifier trivially obtainable, so the two decisions compound into full
+impersonation by any reader of the public repository.
+
+**Options**
+
+- **Refuse the placeholder and keep the copy step.** One line of validation, and it breaks the
+  brief's one-command review path: the evaluator's first command would produce a configuration
+  that cannot boot, with no documented way to fix it but to invent a secret.
+- **Generate the secret in the container entrypoint when it is absent.** Zero-edit startup, but
+  the value would change on every container start: every token issued before a restart would be
+  refused afterwards, and `make docker-test` and `docker compose up` would disagree about who is
+  logged in. A generated secret that nobody can keep is a different defect.
+- **Generate on the host, in a `make` target, and refuse the placeholder at boot.**
+
+**Decision**
+The third. `make env` runs `scripts/init-env.sh`, which writes a freshly generated 64-character
+secret into an untracked `.env` — creating the file from `.env.example` when it is absent,
+replacing only the placeholder line when it is present, and changing nothing at all when the
+secret is already real. `Settings` then refuses any `JWT_SECRET` beginning `replace-me`, with a
+message naming `make env` as the remedy, and `jwt_algorithm` becomes `Literal["HS256"]`. This
+amends D-15: step one of the evaluator's path is now `make env` rather than a copy.
+
+**Consequences**
+
+- **The rule is a prefix check, and it protects against exactly one thing.** It stops the value
+  published here and half-edited copies of it. An operator who types their own weak
+  32-character secret is not protected, and this ADR does not claim otherwise; a strength
+  estimator would be a different decision, with false refusals of its own.
+- **No code default was introduced.** CLAUDE.md's configuration rule still holds in full: the
+  generated value exists only in an untracked `.env`, never in a tracked file and never as a
+  fallback in `Settings`.
+- **`make env` is the one target that needs neither Python nor Docker** — a POSIX shell, `awk`,
+  `cp`, `mv` and either `openssl` or `/dev/urandom` — because it runs before either is set up.
+  It never overwrites a secret that is already real, so it is safe to re-run, and
+  `tests/unit/test_env_bootstrap.py` drives the real script through `sh` to prove all three
+  behaviours.
+- **`HS512` is now refused rather than accepted against a floor sized for HS256.** Supporting it
+  properly would mean a 64-byte floor and a model validator pairing the two; the adapter signs
+  with one algorithm, so the closed set has one member and a mismatch fails at boot instead of
+  at the first login (WR-03).
+- **Tokens minted under the placeholder stop working.** On this machine that was the point: the
+  running container was rebuilt onto a generated secret as the first step of the fix.
 
 ---
