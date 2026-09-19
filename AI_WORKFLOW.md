@@ -1201,6 +1201,85 @@ which owns TEST-03 and therefore owns the honesty of the coverage number: the ri
 to identify the coverage-core behaviour and pin the two runs to the same measurement, not to argue
 the number down.
 
+### 2026-09-19 — 599 green tests and 100% coverage sat on top of a lost update, and only the code review found it
+
+**What happened.** Phase 4 closed with `599 passed`, `100.00%` coverage and four import-linter
+contracts kept (`7bcbcde`, captured in `evidence/04-12-phase-gate.txt`). The entry two above this
+one records that the phase's 79 HTTP tests found nothing under `src/`, and asks whether that meant
+the code was right or the tests were weak. The Phase 4 code review (`cac2dc0`, `04-REVIEW.md`)
+answered it: finding CR-01 is a concurrency defect the suite could not see. Every mutating use
+case loaded an entity with a plain `SELECT`, validated the change against that copy, and wrote it
+back; nothing serialised two writers. The reviewer reproduced it with two real units of work on
+PostgreSQL - task `in_progress`; A completes and commits; B, holding a stale copy, sets `pending`
+and commits - and the row went `completed -> pending`, a transition `ALLOWED_TRANSITIONS` forbids,
+with A's `completed_at` erased and neither caller told. Three module docstrings said the entity
+was "the only copy of the state machine". Under concurrency that was false.
+
+**How old it was.** Not a Phase 4 regression. The read-validate-write shape arrived with the
+first use case in `8f9f98b` (plan 02-05) and the plain `get` in the adapter in `4a5aa88` (plan
+03-07); `c04d99d` (plan 04-03) moved the load into `access.py` and ten more use cases inherited
+it. It passed three phase gates and two earlier code reviews.
+
+**Why the tests could not see it - the part worth keeping.** The integration harness binds every
+session to *one* connection inside a transaction it rolls back (D-01). That design is what makes
+a stray commit in a repository visible, and it is also exactly what made this invisible: a second
+writer cannot exist on one connection, and a row lock never blocks the connection that holds it.
+Coverage was 100% because every line ran; no line was wrong in isolation. The defect was in the
+*interleaving* of two executions, and line coverage has no unit for that. The AI-written tests,
+the AI-written plans and the human review of both all shared the same blind spot, because all of
+them reasoned about one request at a time.
+
+**What changed.** `63f6ee4` adds a locking read to the ports - `get_for_update`, stated in domain
+terms - and a keyword-only `for_update=True` that the five write paths pass to the `access.py`
+guard; read paths keep the default and never wait. ADR-058 records the three options considered
+(row lock, version column, conditional `UPDATE`) and why the lock won. The regression suite,
+`tests/integration/test_concurrent_writes.py`, deliberately leaves the single-connection harness:
+`test_a_stale_writer_cannot_persist_a_forbidden_transition` runs two units of work on two
+connections, pauses A, watches B wait in `pg_stat_activity`, and asserts B is refused with
+`InvalidStatusTransitionError` and A's completion survives;
+`test_two_list_patches_are_serialised_and_neither_edit_is_lost` does the same for the other
+aggregate; `test_a_read_never_waits_on_a_writer` pins the other direction. It is bounded three
+ways so a broken lock is a red test rather than a hung run, and it was driven red by deleting
+`.with_for_update()` (`evidence/04-review-fix-CR-01-red.txt`).
+
+**What was honest about the red run, and what was not possible.** The reviewer's exact ordering -
+B commits *after* A - cannot be constructed once every write path enters through the locking read;
+that impossibility is the fix. So the red capture shows the mirror image: without the lock B does
+not wait, commits `pending`, is told it succeeded, and A then overwrites it. The evidence file says
+so in its header instead of implying it replays the original probe.
+
+**The same review found five more things the green gate had not.** A false 409 on a padded
+re-send of a list's own name (`0869013`,
+`test_resending_the_lists_own_name_padded_is_not_a_conflict`); two families of 500 from well-formed
+JSON - a `due_date` with no UTC form (`93c4d2c`,
+`test_a_due_date_with_no_utc_form_is_a_domain_validation_error`) and a NUL character in a text
+field (`5299d7d`, `test_a_nul_character_in_a_task_field_is_a_domain_validation_error`); and two
+gates that could not fail for the reason their own docstrings gave. The response-model test
+(`b68686c`) was green for a route returning an application dataclass and for a route with no
+annotation at all - both now shown in `evidence/04-review-fix-WR-04-red.txt`, with the *old* test
+passing under each plant. The `HTTPException` AST gate (`6f30d07`) scanned `routers/` while two
+documents said it covered the presentation layer, and its raise pass did not catch the aliased
+import its docstring said it did; `evidence/04-review-fix-WR-05-red.txt` shows the old gate green
+over a planted `raise` in `actor.py`, the file Phase 5 is about to rewrite.
+
+**What this says about the workflow.** Two of the six findings are gates this project wrote to
+keep AI-generated code honest, and they were themselves decorative. "Drive every gate red before
+trusting it" is already a rule here (see 2026-09-17 and 2026-09-18 above), and neither gate had
+really met it. The AST gate *had* been driven red (`evidence/04-08-ast-gate-red.txt`) - by plants
+inside `routers/`, the one place it looked, never by the aliased spelling or the out-of-scope file
+its prose claimed. The response-model test had never been driven red at all: plan 04-08's summary
+says a dataclass-annotated handler "would ... fail here", and nobody ran it to see. The rule that
+follows is narrower and more useful: a gate's red proof must plant the exact case its docstring
+claims, and a claim with no plant gets deleted from the docstring. The broader
+lesson is the unglamorous one: an adversarial review by a reader who was not the author found in
+one pass what 599 tests written by the author's side could not, and coverage was never evidence
+against it.
+
+**Still open.** The review's six Info findings (IN-01 to IN-06) were out of scope for the fix run
+and are listed as such in `04-REVIEW-FIX.md`. CLAUDE.md's description of the AST gate still says
+`routers/`; the gate is now wider than the rule text, which is the safe direction, and the text is
+hand-maintained.
+
 ---
 
 This log is appended to at the end of every subsequent phase.
