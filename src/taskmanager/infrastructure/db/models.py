@@ -125,8 +125,17 @@ class TaskRow(Base):
     status: Mapped[str] = mapped_column(String(16))
     priority: Mapped[str] = mapped_column(String(16))
     due_date: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Indexed, unlike `task_lists.owner_id` two classes up and unlike the
+    # composite this file refuses below - and for reasons that do not apply to
+    # either of those. PostgreSQL does not index a foreign key automatically.
+    # No unique constraint covers `assignee_id`, so there is no leading column
+    # of anything to serve the lookup from. It is the entire WHERE clause of
+    # `GET /api/v1/tasks/assigned-to-me` (D-02), and it is also the scan the
+    # server performs on every row of `tasks` whenever a user is deleted, to
+    # apply the ON DELETE SET NULL below. That is a measured need, not
+    # speculation (D-25).
     assignee_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(), ForeignKey("users.id", ondelete="SET NULL")
+        Uuid(), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))

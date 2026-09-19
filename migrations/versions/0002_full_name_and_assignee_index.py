@@ -43,7 +43,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add users.full_name over existing rows."""
+    """Add users.full_name over existing rows, and index tasks.assignee_id."""
     # The server_default is what lets a NOT NULL column arrive in a populated
     # table: PostgreSQL uses it to fill the rows that are already there. It is
     # dropped in the statement below, in the same upgrade, because no column in
@@ -58,8 +58,16 @@ def upgrade() -> None:
         ),
     )
     op.alter_column("users", "full_name", server_default=None)
+    # D-25, the other half of this revision and unrelated to the column above:
+    # PostgreSQL does not index a foreign key automatically, and this one is
+    # both the whole WHERE clause of GET /api/v1/tasks/assigned-to-me and the
+    # scan performed for every ON DELETE SET NULL when a user row is removed.
+    op.create_index(
+        op.f("ix_tasks_assignee_id"), "tasks", ["assignee_id"], unique=False
+    )
 
 
 def downgrade() -> None:
-    """Drop users.full_name."""
+    """Drop the index, then the column - reverse order, as in 0001."""
+    op.drop_index(op.f("ix_tasks_assignee_id"), table_name="tasks")
     op.drop_column("users", "full_name")

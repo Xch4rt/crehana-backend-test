@@ -44,3 +44,8 @@ CK_TASKS_COMPLETED_AT_MATCHES_STATUS: Final[str] = (
 )
 
 IX_TASKS_TASK_LIST_ID: Final[str] = "ix_tasks_task_list_id"
+# D-25, added by revision 0002: the index behind
+# `GET /api/v1/tasks/assigned-to-me` and behind every ON DELETE SET NULL the
+# `tasks.assignee_id` foreign key performs. `models.py` argues why it exists
+# where it refuses two others.
+IX_TASKS_ASSIGNEE_ID: Final[str] = "ix_tasks_assignee_id"

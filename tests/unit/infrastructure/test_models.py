@@ -95,8 +95,10 @@ def test_the_naming_convention_produces_every_d12_constraint_name() -> None:
     ddl = _schema_ddl()
 
     # Vacuity guard: an empty constant set would make the loop below assert
-    # nothing at all.
-    assert len(D12_CONSTRAINT_NAMES) == 12
+    # nothing at all. Thirteen since revision 0002 added `ix_tasks_assignee_id`
+    # (D-25). Exact, never a subset check: a name the convention stopped
+    # producing is precisely what this test exists to catch.
+    assert len(D12_CONSTRAINT_NAMES) == 13
 
     missing = sorted(name for name in D12_CONSTRAINT_NAMES if name not in ddl)
 
