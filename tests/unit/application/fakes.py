@@ -232,7 +232,24 @@ class FakeUserRepository:
         self.added.append(user)
 
     async def list_all(self) -> Sequence[User]:
-        return list(self.stored.values())
+        # Ordered by `(created_at, id)`, exactly as the SQLAlchemy adapter's
+        # `ORDER BY` is (D-25). This fake used to return insertion order, and
+        # that is a divergence with teeth: an ASGN-03 assertion about the first
+        # entry of the directory would pass here and fail over HTTP, where
+        # PostgreSQL is free to answer in whatever order the plan produced.
+        # `created_at` alone is not a total order either - a seed script or a
+        # fixture writes several accounts under one clock reading - which is why
+        # the adapter took the `id` tie-break as review fix WR-03.
+        #
+        # It is the last of the three fakes to be fixed: the sibling list
+        # methods were brought into line in 04-02 and 04-06 and this one was
+        # missed, so the divergence was falsified before being removed. The
+        # failing run is in
+        # `.planning/phases/05-auth-assignment-notifications/evidence/
+        # 05-02-fake-user-ordering.txt`.
+        return sorted(
+            self.stored.values(), key=lambda entry: (entry.created_at, entry.id)
+        )
 
 
 class FakeUnitOfWork:

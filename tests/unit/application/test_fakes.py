@@ -20,8 +20,16 @@ divergence 04-PATTERNS §11 names: `list_for_owner` had no ordering at all while
 the adapter has always sorted by `(created_at, id)`, so a D-13 assertion about
 the first element would pass in a unit test and fail over HTTP.
 
-The rejected alternative in both cases is trusting the integration tests to catch
-it. They would - eventually, in a later phase, as a confusing 500 from a
+`FakeUserRepository.list_all` was the same defect, still open: the adapter has
+ordered by `(created_at, id)` since Phase 3, the fake answered in insertion
+order, and the two sibling fakes were fixed in 04-02 and 04-06 while this one
+was missed. D-25 asks for it to be falsified rather than asserted, so the
+divergence was observed red first - the capture is in
+`.planning/phases/05-auth-assignment-notifications/evidence/
+05-02-fake-user-ordering.txt` - and the test below is what keeps it closed.
+
+The rejected alternative in every case is trusting the integration tests to
+catch it. They would - eventually, in a later phase, as a confusing 500 from a
 duplicate insert, or as a flaky ordering assertion. This file fails instead, in
 milliseconds, at the line that would have to change.
 """
@@ -31,8 +39,13 @@ from uuid import UUID
 
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
-from tests.unit.application.fakes import FakeTaskListRepository, FakeTaskRepository
+from tests.unit.application.fakes import (
+    FakeTaskListRepository,
+    FakeTaskRepository,
+    FakeUserRepository,
+)
 
 # Fixed literals, never uuid4()/now(): an assertion about a lookup key must be
 # reproducible from the source alone.
@@ -51,6 +64,12 @@ TIED_LOWER_TASK_ID = UUID("99999999-0000-4000-8000-000000000001")
 TIED_HIGHER_TASK_ID = UUID("99999999-0000-4000-8000-000000000002")
 OLDEST_TASK_ID = UUID("99999999-0000-4000-8000-000000000003")
 UNASSIGNED_TASK_ID = UUID("99999999-0000-4000-8000-000000000004")
+# The user fake's ordering, same shape: two accounts share an instant and the
+# lower id is registered second.
+TIED_LOWER_USER_ID = UUID("aaaaaaaa-0000-4000-8000-000000000001")
+TIED_HIGHER_USER_ID = UUID("aaaaaaaa-0000-4000-8000-000000000002")
+OLDEST_USER_ID = UUID("aaaaaaaa-0000-4000-8000-000000000003")
+PASSWORD_HASH = "fake-hash:irrelevant"
 
 
 def _stored_list(
@@ -340,3 +359,51 @@ async def test_listing_with_stats_is_ordered_by_created_at_then_id() -> None:
     # Asserted of both methods in one test, because the point is that they
     # agree: the endpoint reads one of them and a Phase 4 use case the other.
     assert [task_list.id for task_list in plain] == expected
+
+
+async def test_list_all_is_ordered_by_created_at_then_id() -> None:
+    """ASGN-03's directory order, in the fake as in the adapter (D-25).
+
+    This fake was the last one still answering in insertion order, and the
+    divergence was observed rather than anticipated: the failing run is in
+    `.planning/phases/05-auth-assignment-notifications/evidence/
+    05-02-fake-user-ordering.txt`.
+
+    Two of the three accounts share an instant to the microsecond, which a seed
+    script or a fixture produces routinely, and the registration order below
+    disagrees with the expected order on both axes - so neither `dict` ordering
+    nor a sort on `created_at` alone can produce it.
+    """
+    repository = FakeUserRepository()
+    await repository.add(
+        User.create(
+            user_id=TIED_HIGHER_USER_ID,
+            email="tied-higher@example.test",
+            password_hash=PASSWORD_HASH,
+            now=NOW,
+        )
+    )
+    await repository.add(
+        User.create(
+            user_id=OLDEST_USER_ID,
+            email="oldest@example.test",
+            password_hash=PASSWORD_HASH,
+            now=EARLIER,
+        )
+    )
+    await repository.add(
+        User.create(
+            user_id=TIED_LOWER_USER_ID,
+            email="tied-lower@example.test",
+            password_hash=PASSWORD_HASH,
+            now=NOW,
+        )
+    )
+
+    listed = await repository.list_all()
+
+    assert [user.id for user in listed] == [
+        OLDEST_USER_ID,
+        TIED_LOWER_USER_ID,
+        TIED_HIGHER_USER_ID,
+    ]

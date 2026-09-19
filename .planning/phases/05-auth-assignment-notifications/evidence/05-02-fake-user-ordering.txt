@@ -1,0 +1,87 @@
+# 05-02 Task 3 falsification: FakeUserRepository.list_all returned insertion order
+# Captured 2026-09-19 on the developer host.
+#
+# The adapter, SqlAlchemyUserRepository.list_all, has ordered by
+# (created_at, id) since Phase 3 - the `id` tie-break is review fix WR-03. The
+# fake was `return list(self.stored.values())`. The two sibling fakes were
+# brought into line in 04-02 (list_for_owner) and 04-06 (list_for_task_list);
+# this one was missed, and 05-RESEARCH Pitfall 9 found it.
+#
+# D-25 asks for it to be falsified the way 04-06 did, so the divergence is
+# observed here rather than asserted. The red step is not a separate commit:
+# CLAUDE.md forbids committing a red tree and --no-verify is forbidden, so the
+# capture and the fix are committed together (the 02-01 and 04-02 compromise).
+
+=== RED: return list(self.stored.values()) - the fake as it shipped ===
+
+$ .venv/bin/pytest tests/unit/application/test_fakes.py -k list_all -q --no-cov
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_list_all_is_ordered_by_created_at_then_id ________________
+
+    async def test_list_all_is_ordered_by_created_at_then_id() -> None:
+        """ASGN-03's directory order, in the fake as in the adapter (D-25).
+
+        This fake was the last one still answering in insertion order, and the
+        divergence was observed rather than anticipated: the failing run is in
+        `.planning/phases/05-auth-assignment-notifications/evidence/
+        05-02-fake-user-ordering.txt`.
+
+        Two of the three accounts share an instant to the microsecond, which a seed
+        script or a fixture produces routinely, and the registration order below
+        disagrees with the expected order on both axes - so neither `dict` ordering
+        nor a sort on `created_at` alone can produce it.
+        """
+        repository = FakeUserRepository()
+        await repository.add(
+            User.create(
+                user_id=TIED_HIGHER_USER_ID,
+                email="tied-higher@example.test",
+                password_hash=PASSWORD_HASH,
+                now=NOW,
+            )
+        )
+        await repository.add(
+            User.create(
+                user_id=OLDEST_USER_ID,
+                email="oldest@example.test",
+                password_hash=PASSWORD_HASH,
+                now=EARLIER,
+            )
+        )
+        await repository.add(
+            User.create(
+                user_id=TIED_LOWER_USER_ID,
+                email="tied-lower@example.test",
+                password_hash=PASSWORD_HASH,
+                now=NOW,
+            )
+        )
+
+        listed = await repository.list_all()
+
+>       assert [user.id for user in listed] == [
+            OLDEST_USER_ID,
+            TIED_LOWER_USER_ID,
+            TIED_HIGHER_USER_ID,
+        ]
+E       AssertionError: assert [UUID('aaaaaa...00000000001')] == [UUID('aaaaaa...00000000002')]
+E
+E         At index 0 diff: UUID('aaaaaaaa-0000-4000-8000-000000000002') != UUID('aaaaaaaa-0000-4000-8000-000000000003')
+E         Use -v to get more diff
+
+tests/unit/application/test_fakes.py:397: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/application/test_fakes.py::test_list_all_is_ordered_by_created_at_then_id
+1 failed, 9 deselected in 0.03s
+
+=== GREEN: sorted(self.stored.values(), key=lambda entry: (entry.created_at, entry.id)) ===
+
+$ .venv/bin/pytest tests/unit/application/test_fakes.py -k list_all -q --no-cov
+.                                                                        [100%]
+1 passed, 9 deselected in 0.01s
+
+$ .venv/bin/pytest tests/unit tests/architecture -q --no-cov
+........................................................................ [ 92%]
+.....................................                                    [100%]
+469 passed in 0.52s
