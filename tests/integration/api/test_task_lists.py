@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from taskmanager.domain.entities.task import Task
@@ -34,7 +34,14 @@ from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
 from taskmanager.presentation.api.actor import DEMO_USER_ID
-from tests.integration.conftest import seed
+
+# Imported rather than re-declared. The media type and the six-member list
+# are the error contract Phase 2 fixed, and `tests/api/test_error_contract.py`
+# is where they are stated; a second copy here would be the one that quietly
+# disagreed the first time the contract moved. A rename over there breaks this
+# import loudly, which is the failure mode to prefer.
+from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
+from tests.integration.conftest import acting_as, seed
 
 # The `session_factory` fixture's type, spelled once: every seeding call below
 # takes it, and repeating the two-part annotation per test would add noise
@@ -54,6 +61,7 @@ FOREIGN_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000013")
 TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000021")
 SECOND_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000022")
 THIRD_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000023")
+MISSING_LIST_ID = uuid.UUID("00000000-0000-4000-8000-0000000000ff")
 
 NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
 
@@ -525,3 +533,433 @@ async def test_deleting_a_list_removes_its_tasks(
     tasks = SqlAlchemyTaskRepository(session)
     assert await tasks.get(uuid.UUID(first.json()["id"])) is None
     assert await tasks.get(uuid.UUID(second.json()["id"])) is None
+
+
+def anonymised(response: Response, *identifiers: uuid.UUID) -> str:
+    """The serialised body with every named identifier replaced by one token.
+
+    This is what makes "a list you do not own answers exactly like an absent
+    one" a test rather than a claim (D-04, T-4-51, T-4-52). The two bodies being
+    compared necessarily *mention* two different identifiers - in `detail`, in
+    `errors` and in `instance`, which is the request path - so comparing them
+    raw proves nothing and comparing only their status codes proves almost
+    nothing: a difference in `code`, in `title` or in the presence of an
+    `errors` member would sail straight through.
+
+    Replacing each response's own identifier with a fixed token leaves exactly
+    the part that should be identical, `instance` included. That is strictly
+    stronger than "identical apart from `instance`": the paths are compared too,
+    modulo the id they each carry.
+    """
+    text = response.text
+    for identifier in identifiers:
+        text = text.replace(str(identifier), "<identifier>")
+    return text
+
+
+def assert_not_found(response: Response, task_list_id: uuid.UUID) -> None:
+    """The one shape every task-list 404 in this module has to have."""
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == [*MEMBERS, "errors"]
+    assert body["code"] == "task_list_not_found"
+    assert body["title"] == "Task list not found"
+    assert body["errors"] == {"task_list_id": str(task_list_id)}
+
+
+async def test_get_a_list_the_actor_does_not_own_is_404_exactly_like_an_absent_one(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-04 on GET: a stranger learns nothing, not even that the list exists."""
+    await seed(
+        session_factory,
+        users=[a_user(), a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL)],
+        task_lists=[a_task_list()],
+    )
+    client, app = api_client
+
+    with acting_as(app, OTHER_USER_ID):
+        not_owned = await client.get(f"{TASK_LISTS}/{LIST_ID}")
+        absent = await client.get(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(not_owned, LIST_ID)
+    assert_not_found(absent, MISSING_LIST_ID)
+    assert anonymised(not_owned, LIST_ID) == anonymised(absent, MISSING_LIST_ID)
+
+
+async def test_patch_a_list_the_actor_does_not_own_is_404_exactly_like_an_absent_one(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-04 on PATCH, and the write is refused before it is attempted."""
+    await seed(
+        session_factory,
+        users=[a_user(), a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL)],
+        task_lists=[a_task_list()],
+    )
+    client, app = api_client
+    payload = {"name": "Hijacked"}
+
+    with acting_as(app, OTHER_USER_ID):
+        not_owned = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json=payload)
+        absent = await client.patch(f"{TASK_LISTS}/{MISSING_LIST_ID}", json=payload)
+
+    assert_not_found(not_owned, LIST_ID)
+    assert_not_found(absent, MISSING_LIST_ID)
+    assert anonymised(not_owned, LIST_ID) == anonymised(absent, MISSING_LIST_ID)
+
+    # The owner's list is untouched: a refused PATCH must not be a half-applied
+    # one, and only a read as the owner can say so.
+    survivor = await client.get(f"{TASK_LISTS}/{LIST_ID}")
+
+    assert survivor.json()["name"] == "Groceries"
+
+
+async def test_delete_a_list_the_actor_does_not_own_is_404_exactly_like_an_absent_one(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-04 on DELETE, the verb where a 204 would be the loudest possible leak."""
+    await seed(
+        session_factory,
+        users=[a_user(), a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL)],
+        task_lists=[a_task_list()],
+    )
+    client, app = api_client
+
+    with acting_as(app, OTHER_USER_ID):
+        not_owned = await client.delete(f"{TASK_LISTS}/{LIST_ID}")
+        absent = await client.delete(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(not_owned, LIST_ID)
+    assert_not_found(absent, MISSING_LIST_ID)
+    assert anonymised(not_owned, LIST_ID) == anonymised(absent, MISSING_LIST_ID)
+
+    survivor = await client.get(f"{TASK_LISTS}/{LIST_ID}")
+
+    assert survivor.status_code == 200
+
+
+async def test_get_an_absent_list_is_404(
+    api_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """The counterpart the three tests above are measured against."""
+    client, _ = api_client
+
+    response = await client.get(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(response, MISSING_LIST_ID)
+    assert response.json()["instance"] == f"{TASK_LISTS}/{MISSING_LIST_ID}"
+
+
+async def test_patch_an_absent_list_is_404(
+    api_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """A well-formed body against nothing is still a 404, never a 422."""
+    client, _ = api_client
+
+    response = await client.patch(
+        f"{TASK_LISTS}/{MISSING_LIST_ID}", json={"name": "Anything"}
+    )
+
+    assert_not_found(response, MISSING_LIST_ID)
+
+
+async def test_delete_an_absent_list_is_404(
+    api_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """Delete is not idempotent-by-silence here: nothing deleted is nothing found."""
+    client, _ = api_client
+
+    response = await client.delete(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(response, MISSING_LIST_ID)
+
+
+async def test_creating_a_list_with_a_name_the_actor_already_uses_is_a_duplicate_409(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """LIST-06 on create: the conflict names the field and the offending name."""
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.post(TASK_LISTS, json={"name": "Groceries"})
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == [*MEMBERS, "errors"]
+    assert body["code"] == "duplicate_task_list_name"
+    assert body["title"] == "Duplicate task list name"
+    assert body["errors"] == {"field": "name", "name": "Groceries"}
+
+
+async def test_renaming_a_list_to_a_name_the_actor_already_uses_is_a_duplicate_409(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """LIST-06 on rename - the leg a create-only test would miss entirely."""
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[
+            a_task_list(),
+            a_task_list(task_list_id=OTHER_LIST_ID, name="Chores"),
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.patch(
+        f"{TASK_LISTS}/{OTHER_LIST_ID}", json={"name": "Groceries"}
+    )
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert body["code"] == "duplicate_task_list_name"
+    assert body["errors"] == {"field": "name", "name": "Groceries"}
+
+    unchanged = await client.get(f"{TASK_LISTS}/{OTHER_LIST_ID}")
+
+    assert unchanged.json()["name"] == "Chores"
+
+
+async def test_a_name_another_actor_uses_is_not_a_conflict(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """Uniqueness is per owner: two people may each have a list called Groceries."""
+    await seed(
+        session_factory,
+        users=[a_user(), a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL)],
+        task_lists=[
+            a_task_list(
+                task_list_id=FOREIGN_LIST_ID,
+                owner_id=OTHER_USER_ID,
+                name="Groceries",
+            )
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.post(TASK_LISTS, json={"name": "Groceries"})
+
+    assert response.status_code == 201
+    assert response.json()["owner_id"] == str(DEMO_USER_ID)
+
+
+async def test_a_name_differing_only_in_case_is_not_a_conflict(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-12 over HTTP: the list name folds no case, and the index agrees."""
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.post(TASK_LISTS, json={"name": "groceries"})
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "groceries"
+
+    both = await client.get(TASK_LISTS)
+
+    assert sorted(entry["name"] for entry in both.json()) == ["Groceries", "groceries"]
+
+
+async def test_renaming_a_list_to_its_own_current_name_succeeds(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """The guard that stops a row conflicting with itself.
+
+    An unconditional pre-check would refuse this request on the strength of the
+    very row it is about to write, which is the one 409 that would be a bug
+    rather than a rule.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"name": "Groceries"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Groceries"
+
+
+async def test_an_empty_patch_body_is_a_request_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-06: a body that asks for nothing is refused, not treated as a no-op.
+
+    This is the **list** `errors` shape - the request-validation producer - and
+    the title is what tells the two apart at a glance (04-RESEARCH Pitfall 5).
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == [*MEMBERS, "errors"]
+    assert body["code"] == "validation_error"
+    assert body["title"] == "Request validation failed"
+    assert isinstance(body["errors"], list)
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["field"] == "body"
+    assert body["errors"][0]["type"] == "value_error"
+
+
+async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-06: a typo is refused at the named field, never silently ignored.
+
+    This is also the mass-assignment proof (T-4-54): `extra="forbid"` reaching
+    the client as `extra_forbidden` at `body.nmae` is the difference between a
+    key that was rejected and a key that was quietly dropped.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"nmae": "Weekly"})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert body["title"] == "Request validation failed"
+    assert isinstance(body["errors"], list)
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["field"] == "body.nmae"
+    assert body["errors"][0]["type"] == "extra_forbidden"
+
+
+async def test_an_explicit_null_name_is_a_request_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-05: `name` has no null to be cleared to, so sending one is a 422."""
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"name": None})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert body["title"] == "Request validation failed"
+    assert isinstance(body["errors"], list)
+    assert [entry["field"] for entry in body["errors"]] == ["body.name"]
+
+
+async def test_a_blank_name_is_a_domain_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """The **object** `errors` shape: a domain rule, not a schema one.
+
+    Pydantic declares no length and no blankness constraint on `name` (Phase 2
+    D-04 keeps every business limit in the entity), so this request is
+    well-formed all the way to `TaskList.create`, and the refusal comes back
+    with the other 422's code and a different title and `errors` shape.
+    """
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    response = await client.post(TASK_LISTS, json={"name": "   "})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert list(body) == [*MEMBERS, "errors"]
+    assert body["code"] == "validation_error"
+    assert body["title"] == "Validation error"
+    assert body["errors"] == {"field": "name"}
+
+
+async def test_an_over_length_name_is_a_domain_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """The same object shape, from the limit the entity owns.
+
+    The string is built from `TaskList.NAME_MAX_LENGTH` rather than from a
+    literal, so raising the entity's limit cannot leave this test asserting a
+    refusal that no longer happens.
+    """
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    response = await client.post(
+        TASK_LISTS, json={"name": "x" * (TaskList.NAME_MAX_LENGTH + 1)}
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert body["code"] == "validation_error"
+    assert body["title"] == "Validation error"
+    assert body["errors"] == {"field": "name"}
+
+
+async def test_a_malformed_list_id_is_a_request_validation_error(
+    api_client: tuple[AsyncClient, FastAPI],
+) -> None:
+    """A path segment that is not a UUID is refused before any use case runs."""
+    client, _ = api_client
+
+    response = await client.get(f"{TASK_LISTS}/not-a-uuid")
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+
+    body = response.json()
+
+    assert body["title"] == "Request validation failed"
+    assert [entry["field"] for entry in body["errors"]] == ["path.list_id"]
+
+
+async def test_a_refusal_never_echoes_the_clients_input(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """T-4-53, at the HTTP level: what a refusal reveals is attack surface.
+
+    The HTTP counterpart of `test_validation_problem_never_echoes_the_client_input`.
+    A marker string goes in as an over-length name and must not come back in any
+    member of the body - not in `detail`, which names the field and the limit but
+    never the value, and not in `errors`, which is the field name alone.
+    """
+    marker = "canary-4d09"
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    over_length = marker * (TaskList.NAME_MAX_LENGTH // len(marker) + 1)
+    response = await client.post(TASK_LISTS, json={"name": over_length})
+
+    assert response.status_code == 422
+    assert len(over_length) > TaskList.NAME_MAX_LENGTH
+    assert marker not in response.text
+    assert "input" not in response.text
+    assert "ctx" not in response.text
