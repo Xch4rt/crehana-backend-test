@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-17-PLAN.md (Phase 5 gap closure)
-last_updated: "2026-09-19T19:50:00.000Z"
+status: ready_to_plan
+stopped_at: Phase 5 complete (17/17) — ready to discuss Phase 6
+last_updated: 2026-09-19T19:51:31.511Z
 last_activity: 2026-09-19 -- Phase 05 gap closure executed (05-17); placeholder JWT secret refused at boot, four review warnings closed
 progress:
   total_phases: 7
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 05 — auth-assignment-notifications
+**Current focus:** Phase 6 — test hardening & coverage
 
 ## Current Position
 
-Phase: 05 (auth-assignment-notifications) — AWAITING RE-VERIFICATION
-Plan: 17 of 17
-Status: Phase 05 plans 01-17 complete; the gap closure shipped (`make env`, the boot-time refusal, WR-01/02/03/04); awaiting re-verification
-Last activity: 2026-09-19 -- Phase 05 gap closure executed (05-17); placeholder JWT secret refused at boot, four review warnings closed
+Phase: 6
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-19 -- Phase 05 complete (17/17) after gap closure 05-17 and a passing re-verification (6/6)
 
 Progress: [██████████] 100%
 
@@ -55,6 +55,7 @@ means "every plan written so far has been executed", not "the milestone is finis
 | 03 | 11 | - | - |
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
+| 5 | 17 | - | - |
 
 **Recent Trend:**
 
