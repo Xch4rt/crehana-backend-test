@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-09-19T15:48:23.613Z"
-last_activity: 2026-09-19 -- Phase 05 plan 06 complete
+stopped_at: Completed 05-07-PLAN.md
+last_updated: "2026-09-19T16:07:36.726Z"
+last_activity: 2026-09-19 -- Phase 05 plan 07 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 44
-  percent: 81
+  completed_plans: 45
+  percent: 83
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 7 of 16
-Status: Executing Phase 05 (plans 01-06 complete; plan 07 next)
-Last activity: 2026-09-19 -- Phase 05 plan 06 complete
+Plan: 8 of 16
+Status: Executing Phase 05 (plans 01-07 complete; plan 08 next)
+Last activity: 2026-09-19 -- Phase 05 plan 07 complete
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -100,6 +100,7 @@ Progress: [████████░░] 81%
 | Phase 05 P03 | 12min | 3 tasks | 21 files |
 | Phase 05 P05 | 14min | 3 tasks | 10 files |
 | Phase 05 P06 | 5min | 2 tasks | 7 files |
+| Phase 05 P07 | 16min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -450,6 +451,37 @@ Recent decisions affecting current work:
   eighth consecutive plan in this phase to make the same call: nothing calls configure_logging()
   and nothing constructs LoggingEmailNotifier in production until 05-10 and 05-11
 
+- [Phase 05-07]: the 401 message moved onto AuthenticationError itself, as a ClassVar REFUSAL
+  defaulted into __init__, and infrastructure/security/tokens.py lost its private _REFUSAL copy -
+  D-11 requires a junk token and a token whose subject has no row to produce the same body, and
+  two constants in two layers agree only until one is edited, with no test able to notice
+  (test_tokens.py asserts the adapter's refusals share ONE message without asserting which)
+- [Phase 05-07]: Login keeps a refusal constant of its own rather than reusing that default - the
+  two endpoints answer different questions, D-12 requires only that LOGIN's two legs match, and
+  one object referenced by two raise statements is what makes them match by construction
+- [Phase 05-07]: FakeUserRepository.add compares against `stored` directly, never through its own
+  get_by_email - the race-backstop test blinds the lookup, which is what an interleaved
+  transaction sees, and the delegating form disabled the refusal too; observed DID NOT RAISE
+  before the fix. PostgreSQL does not consult a repository method before enforcing a constraint
+- [Phase 05-07]: COMMAND_CASES now holds all fourteen commands while the actor-first gate runs
+  over a filtered subset, with ACTORLESS_COMMANDS declared AND re-derived from the table - three
+  of this plan's four commands break the rule that gate asserts, and dropping them from the table
+  would have taken them out of the immutability and slots gates too
+- [Phase 05-07]: FakePasswordHasher gained `hashed` and `verifications` beside 05-02's
+  dummy_verifications - T-5-07's 'the hasher was never called' and D-12's per-leg counts are
+  unassertable without them, and the only alternative is a stopwatch, which the plan itself bans
+- [Phase 05-07]: the plan's 'the id comes from uuid4() inside User.create' is imprecise - the
+  entity takes user_id as a keyword argument (Phase 2 D-11/D-12 put id generation in the
+  application layer), so RegisterUser calls uuid4() at the call site exactly as CreateTaskList
+  does; the property the plan wanted holds and a test asserts two registrations differ
+- [Phase 05-07]: two grep criteria met by rewording prose rather than code - SecretStr prints 0
+  and require_password prints 2 - and the plan's per-module coverage command cannot run as
+  written, because pytest.ini's addopts already carry --cov=taskmanager --cov-fail-under=75, so
+  measuring one module while running a subset exits at ~71% (the 02-04 --include artifact again)
+- [Phase 05-07]: requirement ticks AUTH-01/AUTH-02/AUTH-04/AUTH-05 deliberately NOT taken - 05-16
+  is the last claimant, the ninth consecutive plan in this phase to make the same call, and these
+  four use cases have no route above them until 05-11
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -484,6 +516,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T15:48:23.603Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-09-19T16:07:36.718Z
+Stopped at: Completed 05-07-PLAN.md
 Resume file: None
