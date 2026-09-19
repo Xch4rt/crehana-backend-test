@@ -1,5 +1,6 @@
 """Unit tests for the environment-backed application settings."""
 
+import secrets
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,77 @@ def test_a_secret_exactly_at_the_floor_is_accepted(
     monkeypatch.setenv("JWT_SECRET", "a" * 32)
 
     assert Settings(_env_file=None).jwt_secret == "a" * 32
+
+
+def shipped_placeholder() -> str:
+    """The JWT_SECRET value `.env.example` actually ships.
+
+    Read from the file rather than restated here, so the tests below track
+    whatever the repository publishes instead of a copy that can go stale.
+    """
+    for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
+        if line.startswith("JWT_SECRET="):
+            return line.split("=", 1)[1]
+    raise AssertionError("no JWT_SECRET line in .env.example")
+
+
+def test_the_shipped_placeholder_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The value published in this repository cannot boot the application.
+
+    It is 34 characters, so `min_length=32` accepted it and the documented
+    setup signed every token with a string any reader of the public repository
+    already has (ADR-084). The refusal names the remedy, so the message is the
+    whole fix rather than half of it.
+    """
+    monkeypatch.setenv("DATABASE_URL", ENV["DATABASE_URL"])
+    monkeypatch.setenv("JWT_SECRET", shipped_placeholder())
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+
+    assert "jwt_secret" in str(excinfo.value).lower()
+    assert "make env" in str(excinfo.value)
+
+
+def test_a_half_edited_placeholder_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clearing the length floor is not enough: the prefix is the rule."""
+    monkeypatch.setenv("DATABASE_URL", ENV["DATABASE_URL"])
+    monkeypatch.setenv("JWT_SECRET", "replace-me-later-i-promise-this-is-long-enough")
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+
+    assert "jwt_secret" in str(excinfo.value).lower()
+
+
+def test_a_generated_secret_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What `make env` writes boots, which is the other half of the decision."""
+    generated = secrets.token_urlsafe(32)
+    monkeypatch.setenv("DATABASE_URL", ENV["DATABASE_URL"])
+    monkeypatch.setenv("JWT_SECRET", generated)
+
+    assert Settings(_env_file=None).jwt_secret == generated
+
+
+@pytest.mark.parametrize("algorithm", ["none", "HS256 ", "RS256", "HS512"])
+def test_the_algorithm_is_a_closed_set(
+    monkeypatch: pytest.MonkeyPatch, algorithm: str
+) -> None:
+    """Anything but HS256 fails at boot instead of at the first login (WR-03).
+
+    `none` and `RS256` made every login a 500, a trailing space is an ordinary
+    `.env` typo, and HS512 booted against a floor sized for a 32-byte key.
+    """
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("JWT_ALGORITHM", algorithm)
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+
+    assert "jwt_algorithm" in str(excinfo.value).lower()
 
 
 def test_test_database_url_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
