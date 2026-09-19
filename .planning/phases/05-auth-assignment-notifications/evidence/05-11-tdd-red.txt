@@ -31,3 +31,192 @@ tests/architecture/test_routers_raise_no_http_exception.py:239: AssertionError
 FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_the_presentation_api_package_is_actually_scanned
 1 failed, 6 passed in 0.04s
 exit=1
+
+## Task 2 RED - the composition root does not yet configure logging or register the auth router
+
+$ .venv/bin/pytest tests/unit/test_app_factory.py -q --no-cov
+...FF........FFF                                                         [100%]
+=================================== FAILURES ===================================
+____________ test_create_app_publishes_exactly_the_expected_routes _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10ad77790>
+
+    def test_create_app_publishes_exactly_the_expected_routes(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """These routes, at these paths, on these verbs - no more, no fewer.
+
+        An inventory rather than a count. A length comparison would stay green if a
+        route were re-pathed, if a verb changed, or if one route were deleted while
+        another was added; comparing the whole set means the failure message names
+        which route moved.
+
+        The name lost its "phase four" qualifier when plan 05-11 added the three
+        auth routes, because the set is no longer one phase's.
+        """
+        monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+        monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+        app = create_app(Settings(_env_file=None))
+
+>       assert set(_api_operations(app)) == EXPECTED_API_ENDPOINTS
+E       AssertionError: assert {('DELETE', '...sk_id}'), ...} == frozenset({('...tasks'), ...})
+E
+E         Extra items in the right set:
+E         ('GET', '/api/v1/auth/me')
+E         ('POST', '/api/v1/auth/register')
+E         ('POST', '/api/v1/auth/login')
+E         Use -v to get more diff
+
+tests/unit/test_app_factory.py:220: AssertionError
+_____ test_every_api_route_declares_a_response_model_or_returns_no_content _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10adf0650>
+
+    def test_every_api_route_declares_a_response_model_or_returns_no_content(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ARC-05's mechanical half: a *presentation* Pydantic schema, or a bodiless 204.
+
+        A handler annotated with an application result dataclass and no explicit
+        model makes FastAPI infer the published schema from that dataclass. The
+        endpoint would answer a `curl` perfectly, the response would even look
+        right, and ARC-05's claim that Pydantic types every HTTP boundary would
+        have quietly stopped being true. Here it fails instead.
+
+        **This test could not fail until the Phase 4 review's WR-04.** It asserted
+        only that a 2xx response had a `content` member, and FastAPI publishes one
+        for the dataclass case (a `$ref` to a component named after the dataclass)
+        and for a handler with no annotation at all (`"schema": {}`). Both were
+        "modelled", so the gate was green by construction. It now asserts *which*
+        component each route publishes, against a hand-written table, and that every
+        name in that table is a `BaseModel` defined under
+        `presentation/api/schemas/` - so an application DTO cannot be written into
+        the table to make a wrong route pass. Driven red by pointing `get_task` at
+        `TaskResult`; the capture is
+        `.planning/phases/04-task-lists-tasks/evidence/04-review-fix-WR-04-red.txt`.
+        """
+        monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+        monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+        app = create_app(Settings(_env_file=None))
+        presentation_models = _presentation_models()
+
+        # The table is only a gate if it names presentation models and nothing else.
+        named = {name for name in EXPECTED_RESPONSE_MODELS.values() if name is not None}
+        assert named <= set(presentation_models), named - set(presentation_models)
+        # And it has to cover the inventory exactly, or a twelfth route is unchecked.
+        assert set(EXPECTED_RESPONSE_MODELS) == EXPECTED_API_ENDPOINTS
+
+        published = {
+            endpoint: _published_success_models(operation)
+            for endpoint, operation in _api_operations(app).items()
+        }
+        expected = {
+            endpoint: [model] for endpoint, model in EXPECTED_RESPONSE_MODELS.items()
+        }
+
+>       assert published == expected, (
+            "Every route must publish its presentation response model, or answer "
+            "204 with no body (ARC-05)."
+        )
+E       AssertionError: Every route must publish its presentation response model, or answer 204 with no body (ARC-05).
+E       assert {('GET', '/ap...sponse'], ...} == {('POST', '/a...sponse'], ...}
+E
+E         Omitting 11 identical items, use -vv to show
+E         Right contains 3 more items:
+E         {('GET', '/api/v1/auth/me'): ['UserResponse'],
+E          ('POST', '/api/v1/auth/login'): ['TokenResponse'],
+E          ('POST', '/api/v1/auth/register'): ['UserResponse']}
+E         Use -v to get more diff
+
+tests/unit/test_app_factory.py:323: AssertionError
+________ test_create_app_configures_logging_once_however_often_it_runs _________
+
+a_package_logger_with_no_handlers = <Logger taskmanager (WARNING)>
+
+    def test_create_app_configures_logging_once_however_often_it_runs(
+        a_package_logger_with_no_handlers: logging.Logger,
+    ) -> None:
+        """One handler after three factories, and records still reach the root.
+
+        Without this call nothing under `taskmanager` is written at all: uvicorn
+        configures its own loggers and leaves the root one at WARNING, so D-15's
+        INFO notification line would be dropped and NOTF-02 would have nothing an
+        evaluator can grep for (D-24). The factory runs hundreds of times across
+        this suite, so the second half of the property is the one that matters -
+        each run must not attach another handler and multiply every line.
+
+        `propagate` is asserted deliberately: the assertions in
+        `tests/api/test_error_contract.py` read records off `caplog`, whose handler
+        sits on the root logger, so a record that stopped here would never reach
+        them.
+        """
+        logger = a_package_logger_with_no_handlers
+        assert logger.handlers == []
+
+        for _ in range(3):
+            _app_with_a_security_container()
+
+>       assert len(logger.handlers) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = <Logger taskmanager (WARNING)>.handlers
+
+tests/unit/test_app_factory.py:561: AssertionError
+______ test_logging_is_configured_by_the_factory_and_not_by_the_lifespan _______
+
+a_package_logger_with_no_handlers = <Logger taskmanager (WARNING)>
+
+    async def test_logging_is_configured_by_the_factory_and_not_by_the_lifespan(
+        a_package_logger_with_no_handlers: logging.Logger,
+    ) -> None:
+        """The handler exists before any lifespan is entered, and adds nothing on
+        the way in.
+
+        ADR-056: the HTTP harness drives the application without ever entering the
+        lifespan, so anything put in its startup half would be untested by every
+        test in this project that speaks HTTP - and the notification line would be
+        missing in exactly the runs that assert on it. The startup half stays
+        empty (D-06), which is also what keeps
+        `test_creating_the_app_opens_no_connection` and
+        `test_the_lifespan_disposes_the_engine` in `tests/unit/presentation/
+        test_health.py` true of a factory that now does one more thing.
+        """
+        logger = a_package_logger_with_no_handlers
+
+        app = _app_with_a_security_container()
+
+        # Before the lifespan: the assertion is the ordering, not the count.
+>       assert len(logger.handlers) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = <Logger taskmanager (WARNING)>.handlers
+
+tests/unit/test_app_factory.py:586: AssertionError
+_______________ test_the_description_names_the_evaluator_s_path ________________
+
+    def test_the_description_names_the_evaluator_s_path() -> None:
+        """There is no seeded account, so `/docs` has to say where to start (D-14).
+
+        This is the copy an evaluator reads first - before the README, because
+        `/docs` is what `docker compose up` hands them - and the stack ships with
+        zero users, so an evaluator who clicks Authorize before registering has no
+        credential to type. The three things the description must name are
+        therefore the three steps of that path, and it names a procedure rather
+        than a credential: there is no password anywhere in this repository
+        (T-5-03).
+        """
+>       description = _app_with_a_security_container().openapi()["info"]["description"]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'description'
+
+tests/unit/test_app_factory.py:603: KeyError
+=========================== short test summary info ============================
+FAILED tests/unit/test_app_factory.py::test_create_app_publishes_exactly_the_expected_routes
+FAILED tests/unit/test_app_factory.py::test_every_api_route_declares_a_response_model_or_returns_no_content
+FAILED tests/unit/test_app_factory.py::test_create_app_configures_logging_once_however_often_it_runs
+FAILED tests/unit/test_app_factory.py::test_logging_is_configured_by_the_factory_and_not_by_the_lifespan
+FAILED tests/unit/test_app_factory.py::test_the_description_names_the_evaluator_s_path
+5 failed, 11 passed in 0.17s
+exit=1

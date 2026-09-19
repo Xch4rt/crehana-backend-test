@@ -1,6 +1,8 @@
 """Unit tests for the FastAPI composition root."""
 
 import inspect
+import logging
+from collections.abc import Iterator
 from typing import Annotated, Any, Final, get_args, get_origin, get_type_hints
 
 import pytest
@@ -16,14 +18,17 @@ from taskmanager.application.ports.notifications import EmailNotifier
 from taskmanager.application.ports.security import PasswordHasher, TokenService
 from taskmanager.domain.exceptions import DomainError
 from taskmanager.infrastructure.config.settings import Settings
+from taskmanager.infrastructure.logging import PACKAGE_LOGGER
 from taskmanager.infrastructure.notifications.logging import LoggingEmailNotifier
 from taskmanager.infrastructure.security.resources import SecurityResources
 from taskmanager.main import create_app
 from taskmanager.presentation.api import dependencies as dependencies_module
 from taskmanager.presentation.api.dependencies import (
+    AccessTokenExpiryDependency,
     EmailNotifierDependency,
     PasswordHasherDependency,
     TokenServiceDependency,
+    get_access_token_expire_minutes,
     get_email_notifier,
     get_password_hasher,
     get_token_service,
@@ -34,6 +39,7 @@ from taskmanager.presentation.api.errors.handlers import (
     handle_unexpected_error,
     handle_validation_error,
 )
+from taskmanager.presentation.api.schemas import auth as auth_schemas
 from taskmanager.presentation.api.schemas import task_lists as task_list_schemas
 from taskmanager.presentation.api.schemas import tasks as task_schemas
 from tests.integration.test_dependencies import uow_probe_router
@@ -44,13 +50,22 @@ JWT_SECRET = "b" * 32
 
 API_PREFIX = "/api/v1"
 
-# The eleven routes Phase 4 owes, written down rather than derived. A derived
+# Every published route, written down rather than derived. A derived
 # expectation would agree with whatever the application happens to expose, which
 # is the one thing an inventory must not do: a route silently added, removed or
 # re-pathed has to fail here, and a typo in a path is exactly the defect a
 # generated list would reproduce faithfully on both sides.
+#
+# Phase 4's eleven, plus the three auth routes plan 05-11 registers. The login
+# path in particular is not decoration in this list: `actor.py` constructs the
+# bearer scheme with that exact path, and a mismatch would leave Swagger's
+# Authorize button visible and posting into a 404. This inventory pins the
+# route's existence; `test_security_scheme.py` pins the agreement.
 EXPECTED_API_ENDPOINTS: Final[frozenset[tuple[str, str]]] = frozenset(
     {
+        ("POST", "/api/v1/auth/register"),
+        ("POST", "/api/v1/auth/login"),
+        ("GET", "/api/v1/auth/me"),
         ("POST", "/api/v1/task-lists"),
         ("GET", "/api/v1/task-lists"),
         ("GET", "/api/v1/task-lists/{list_id}"),
@@ -184,15 +199,18 @@ async def test_production_app_answers_no_probe_route(
             assert response.status_code == 404, f"{method} {path} is reachable"
 
 
-def test_create_app_publishes_exactly_the_phase_four_routes(
+def test_create_app_publishes_exactly_the_expected_routes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The eleven routes, at these paths, on these verbs - no more, no fewer.
+    """These routes, at these paths, on these verbs - no more, no fewer.
 
-    An inventory rather than a count. `len(...) == 11` would stay green if a
+    An inventory rather than a count. A length comparison would stay green if a
     route were re-pathed, if a verb changed, or if one route were deleted while
     another was added; comparing the whole set means the failure message names
     which route moved.
+
+    The name lost its "phase four" qualifier when plan 05-11 added the three
+    auth routes, because the set is no longer one phase's.
     """
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
@@ -207,6 +225,9 @@ def test_create_app_publishes_exactly_the_phase_four_routes(
 # a table derived from the application would agree with whatever the application
 # says, including when it is wrong.
 EXPECTED_RESPONSE_MODELS: Final[dict[tuple[str, str], str | None]] = {
+    ("POST", "/api/v1/auth/register"): "UserResponse",
+    ("POST", "/api/v1/auth/login"): "TokenResponse",
+    ("GET", "/api/v1/auth/me"): "UserResponse",
     ("POST", "/api/v1/task-lists"): "TaskListResponse",
     ("GET", "/api/v1/task-lists"): "TaskListResponse",
     ("GET", "/api/v1/task-lists/{list_id}"): "TaskListResponse",
@@ -222,10 +243,10 @@ EXPECTED_RESPONSE_MODELS: Final[dict[tuple[str, str], str | None]] = {
 
 
 def _presentation_models() -> dict[str, type[BaseModel]]:
-    """Every Pydantic model the two presentation schema modules define, by name."""
+    """Every Pydantic model the presentation schema modules define, by name."""
     return {
         name: member
-        for module in (task_list_schemas, task_schemas)
+        for module in (auth_schemas, task_list_schemas, task_schemas)
         for name, member in vars(module).items()
         if isinstance(member, type)
         and issubclass(member, BaseModel)
@@ -460,3 +481,127 @@ def test_the_dependency_module_reads_no_settings_per_request() -> None:
     source = inspect.getsource(dependencies_module)
 
     assert "get_settings" not in source
+
+
+def test_the_access_token_lifetime_provider_reads_the_container() -> None:
+    """`expires_in` and the signed token come from one number (05-11).
+
+    The provider that hands out an integer rather than a port. The login route
+    publishes how many seconds its token is good for, and that claim is only
+    true if the value it publishes is the value the token service signed with;
+    both now come from the container the composition root built, so the two
+    cannot drift apart. Asserted against the settings object the application
+    was built from, not against the literal default, so a changed default does
+    not turn into a changed assertion.
+    """
+    settings = Settings(
+        _env_file=None, database_url=DATABASE_URL, jwt_secret=JWT_SECRET
+    )
+    app = create_app(settings)
+    request = _request_for(app)
+
+    assert get_access_token_expire_minutes(request) == settings.jwt_expire_minutes
+    assert (
+        get_access_token_expire_minutes(request)
+        == app.state.security.access_token_expire_minutes
+    )
+    assert get_type_hints(get_access_token_expire_minutes)["return"] is int
+    assert get_origin(AccessTokenExpiryDependency) is Annotated
+    annotated_type, marker = get_args(AccessTokenExpiryDependency)
+    assert annotated_type is int
+    assert marker.dependency is get_access_token_expire_minutes
+
+
+# --- Logging, and the description an evaluator reads first (05-11) -----------
+
+
+@pytest.fixture
+def a_package_logger_with_no_handlers() -> Iterator[logging.Logger]:
+    """The `taskmanager` logger, emptied for the test and restored after it.
+
+    `configure_logging` is idempotent by design, so by the time any of these
+    tests runs the handler is almost certainly already attached by some earlier
+    `create_app()` - and a test that merely counted handlers would then pass
+    whether or not the factory ever called it. Emptying the logger first is
+    what makes the count below evidence of this call rather than of a previous
+    one. The state is global, so it is put back.
+    """
+    logger = logging.getLogger(PACKAGE_LOGGER)
+    saved_handlers = list(logger.handlers)
+    saved_level = logger.level
+    logger.handlers.clear()
+    yield logger
+    logger.handlers[:] = saved_handlers
+    logger.setLevel(saved_level)
+
+
+def test_create_app_configures_logging_once_however_often_it_runs(
+    a_package_logger_with_no_handlers: logging.Logger,
+) -> None:
+    """One handler after three factories, and records still reach the root.
+
+    Without this call nothing under `taskmanager` is written at all: uvicorn
+    configures its own loggers and leaves the root one at WARNING, so D-15's
+    INFO notification line would be dropped and NOTF-02 would have nothing an
+    evaluator can grep for (D-24). The factory runs hundreds of times across
+    this suite, so the second half of the property is the one that matters -
+    each run must not attach another handler and multiply every line.
+
+    `propagate` is asserted deliberately: the assertions in
+    `tests/api/test_error_contract.py` read records off `caplog`, whose handler
+    sits on the root logger, so a record that stopped here would never reach
+    them.
+    """
+    logger = a_package_logger_with_no_handlers
+    assert logger.handlers == []
+
+    for _ in range(3):
+        _app_with_a_security_container()
+
+    assert len(logger.handlers) == 1
+    assert logger.propagate
+    assert logger.level == logging.INFO
+
+
+async def test_logging_is_configured_by_the_factory_and_not_by_the_lifespan(
+    a_package_logger_with_no_handlers: logging.Logger,
+) -> None:
+    """The handler exists before any lifespan is entered, and adds nothing on
+    the way in.
+
+    ADR-056: the HTTP harness drives the application without ever entering the
+    lifespan, so anything put in its startup half would be untested by every
+    test in this project that speaks HTTP - and the notification line would be
+    missing in exactly the runs that assert on it. The startup half stays
+    empty (D-06), which is also what keeps
+    `test_creating_the_app_opens_no_connection` and
+    `test_the_lifespan_disposes_the_engine` in `tests/unit/presentation/
+    test_health.py` true of a factory that now does one more thing.
+    """
+    logger = a_package_logger_with_no_handlers
+
+    app = _app_with_a_security_container()
+
+    # Before the lifespan: the assertion is the ordering, not the count.
+    assert len(logger.handlers) == 1
+    async with app.router.lifespan_context(app):
+        assert len(logger.handlers) == 1
+    assert len(logger.handlers) == 1
+
+
+def test_the_description_names_the_evaluator_s_path() -> None:
+    """There is no seeded account, so `/docs` has to say where to start (D-14).
+
+    This is the copy an evaluator reads first - before the README, because
+    `/docs` is what `docker compose up` hands them - and the stack ships with
+    zero users, so an evaluator who clicks Authorize before registering has no
+    credential to type. The three things the description must name are
+    therefore the three steps of that path, and it names a procedure rather
+    than a credential: there is no password anywhere in this repository
+    (T-5-03).
+    """
+    description = _app_with_a_security_container().openapi()["info"]["description"]
+
+    assert "/api/v1/auth/register" in description
+    assert "Authorize" in description
+    assert "/docs" in description

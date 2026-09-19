@@ -45,15 +45,49 @@ from taskmanager import __version__
 from taskmanager.infrastructure.clock import SystemClock
 from taskmanager.infrastructure.config.settings import Settings, get_settings
 from taskmanager.infrastructure.db.engine import create_database_resources
+from taskmanager.infrastructure.logging import configure_logging
 from taskmanager.infrastructure.security.resources import create_security_resources
 from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 from taskmanager.presentation.api.health import register_health_routes
+from taskmanager.presentation.api.routers.auth import register_auth_routes
 from taskmanager.presentation.api.routers.task_lists import register_task_list_routes
 from taskmanager.presentation.api.routers.tasks import register_task_routes
+
+# The first thing an evaluator reads, because `docker compose up` hands them
+# `/docs` before it hands them the README - which repeats this in Phase 7. It
+# is a procedure and never a credential: the stack ships with no seeded
+# account (D-14), so there is no password in this repository to leak into a
+# published document (T-5-03).
+DESCRIPTION: str = """
+A REST API for task lists and the tasks inside them.
+
+**There is no seeded account, so start by making one.**
+
+1. `POST /api/v1/auth/register` with an email, a full name and a password.
+2. Click **Authorize** at the top right of `/docs` and enter that same email
+   (in the `username` field - OAuth2 fixes the name, this API's usernames are
+   email addresses) and password.
+3. Every other route is then callable, and each one acts as the account you
+   registered.
+
+Errors are RFC 9457 `application/problem+json` documents, from every route.
+"""
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application, optionally with explicitly injected settings."""
+    # First, and in the factory rather than in the lifespan. Nothing under
+    # `taskmanager` is written at all without it: uvicorn attaches handlers to
+    # its own loggers and leaves the root one at WARNING, so D-15's INFO
+    # notification line is dropped and NOTF-02 has nothing an evaluator can
+    # grep for (D-24). The lifespan would be the wrong home twice over - the
+    # HTTP harness never enters it (ADR-056), so the call would be untested by
+    # every test that drives this application over HTTP, and the startup half
+    # must stay empty (D-06). Attaching a stream handler opens nothing, so
+    # `test_creating_the_app_opens_no_connection` still holds; the function is
+    # idempotent, so the hundreds of factory calls in the test suite leave one
+    # handler rather than hundreds.
+    configure_logging()
     resolved = settings or get_settings()
     resources = create_database_resources(resolved)
     # The second container, built here for the reason the first one is: this is
@@ -80,6 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=resolved.app_name,
         version=__version__,
+        description=DESCRIPTION,
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
@@ -92,6 +127,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.security = security
     register_exception_handlers(app)
     register_health_routes(app)
+    # Before the two authenticated routers, matching the order of the document
+    # an evaluator reads: the two open routes come first because they are what
+    # makes the rest reachable.
+    register_auth_routes(app)
     register_task_list_routes(app)
     register_task_routes(app)
     return app
