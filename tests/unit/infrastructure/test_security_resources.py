@@ -53,16 +53,26 @@ def a_settings() -> Settings:
     )
 
 
-def test_the_fields_are_the_two_ports_in_order() -> None:
-    """Annotated with the contracts, never with the adapters that satisfy them."""
+def test_the_fields_are_the_two_ports_and_the_token_lifetime() -> None:
+    """Annotated with the contracts, never with the adapters that satisfy them.
+
+    The third member is a plain integer and joined the two adapters in plan
+    05-11: `POST /auth/login` answers `expires_in`, which has to describe the
+    lifetime the token service actually signs with, so both come from the one
+    builder call below instead of from two reads of the same setting. The
+    whole list is asserted rather than the two annotations alone, so a fourth
+    member cannot arrive here unnoticed.
+    """
     assert dataclasses.is_dataclass(SecurityResources)
     assert [f.name for f in dataclasses.fields(SecurityResources)] == [
         "password_hasher",
         "token_service",
+        "access_token_expire_minutes",
     ]
     assert get_type_hints(SecurityResources) == {
         "password_hasher": PasswordHasher,
         "token_service": TokenService,
+        "access_token_expire_minutes": int,
     }
 
 
@@ -94,6 +104,10 @@ def test_the_builder_populates_both_halves_from_settings() -> None:
     assert isinstance(resources.token_service, JwtTokenService)
     assert resources.token_service._secret == settings.jwt_secret
     assert resources.token_service._algorithm == settings.jwt_algorithm
+    # The lifetime the login route will publish, read off the same settings
+    # object the token service was built from - which is the whole reason the
+    # number is in the container rather than read again per request.
+    assert resources.access_token_expire_minutes == settings.jwt_expire_minutes
 
 
 def test_building_the_container_opens_no_socket_and_reads_no_file(

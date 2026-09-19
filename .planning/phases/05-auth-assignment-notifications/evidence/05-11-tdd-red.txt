@@ -1,0 +1,33 @@
+# 05-11 TDD RED capture
+
+Recorded 2026-09-19T16:55:47Z.
+
+## Task 1 RED - routers/auth.py joins REQUIRED_SCANNED_MODULES before the module exists
+
+$ .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py -q --no-cov
+F......                                                                  [100%]
+=================================== FAILURES ===================================
+____________ test_the_presentation_api_package_is_actually_scanned _____________
+
+    def test_the_presentation_api_package_is_actually_scanned() -> None:
+        """A glob that matches nothing passes vacuously; assert it matched the tree.
+
+        Without this guard a moved package, a renamed directory or a typo in
+        `PRESENTATION_API` would leave both tests below asserting that an empty list
+        is empty - green forever, checking nothing, which is worse than no gate at
+        all.
+        """
+        scanned = {_relative(path) for path in _scanned_modules()}
+
+        assert scanned
+>       assert REQUIRED_SCANNED_MODULES <= scanned
+E       AssertionError: assert frozenset({'a...sks.py', ...}) <= {'__init__.py...blem.py', ...}
+E
+E         Extra items in the left set:
+E         'routers/auth.py'
+
+tests/architecture/test_routers_raise_no_http_exception.py:239: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_the_presentation_api_package_is_actually_scanned
+1 failed, 6 passed in 0.04s
+exit=1

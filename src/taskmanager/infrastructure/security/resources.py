@@ -13,7 +13,12 @@ after the application is built. A token service replaced mid-flight would
 invalidate every token already issued, and a password hasher replaced after the
 first login would throw away the cached work described below.
 
-The fields are annotated with the **ports**, never with the adapters. Nothing
+A third member joined the two adapters in plan 05-11, and it is a plain
+integer: the access token's lifetime in minutes. The field comment below argues
+why it belongs beside them rather than being read per request.
+
+The two adapter fields are annotated with the **ports**, never with the
+adapters. Nothing
 at runtime depends on that and mypy accepts either, because both adapters
 satisfy their ports - but the narrower annotation would hand a provider's
 caller the implementation instead of the contract, and it is the contract a
@@ -49,10 +54,23 @@ from taskmanager.infrastructure.security.tokens import JwtTokenService
 
 @dataclass(frozen=True, slots=True)
 class SecurityResources:
-    """The password hasher and the token service, as one typed value."""
+    """The password hasher, the token service, and the lifetime they agree on."""
 
     password_hasher: PasswordHasher
     token_service: TokenService
+    # Not an adapter, and the odd member out - so why it is here rather than
+    # read per request. `POST /auth/login` answers `expires_in`, which has to
+    # describe the very lifetime the token was signed with; if the router read
+    # the setting for itself, the answer and the token would agree only for as
+    # long as two call sites kept reading the same key. Putting the number in
+    # this container means both come from one builder call below, so they
+    # cannot disagree - and `dependencies.py` still reads no configuration per
+    # request (RC-3), which is the property this container exists to keep.
+    #
+    # Minutes rather than seconds, because that is the unit `Settings` and
+    # `JwtTokenService` both use; `Login` owns the conversion to the seconds
+    # the wire format wants, and owns it in exactly one place.
+    access_token_expire_minutes: int
 
 
 def create_security_resources(settings: Settings, clock: Clock) -> SecurityResources:
@@ -71,4 +89,7 @@ def create_security_resources(settings: Settings, clock: Clock) -> SecurityResou
             expire_minutes=settings.jwt_expire_minutes,
             clock=clock,
         ),
+        # The same expression the token service was built with, two lines up.
+        # One setting, read once, reaching both halves of the login answer.
+        access_token_expire_minutes=settings.jwt_expire_minutes,
     )

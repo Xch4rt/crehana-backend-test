@@ -155,6 +155,21 @@ def get_token_service(request: Request) -> TokenService:
     return _security(request).token_service
 
 
+def get_access_token_expire_minutes(request: Request) -> int:
+    """How long an access token lives, from the container that signed it.
+
+    The one provider here that hands out a number rather than a port, and the
+    reason is `POST /auth/login`: its `expires_in` member must describe the
+    lifetime the token actually has. Reading the setting again in the router
+    would make that true by coincidence - two call sites reading one key - and
+    it would also be the first configuration read per request in this module,
+    which is the shape RC-3 exists to keep out. The composition root reads the
+    key once, hands it to the token service and stores the same value in the
+    container, and this provider passes it on.
+    """
+    return _security(request).access_token_expire_minutes
+
+
 def get_email_notifier() -> EmailNotifier:
     """The invitation notifier, built fresh for whoever asks.
 
@@ -176,3 +191,4 @@ ClockDependency = Annotated[Clock, Depends(get_clock)]
 PasswordHasherDependency = Annotated[PasswordHasher, Depends(get_password_hasher)]
 TokenServiceDependency = Annotated[TokenService, Depends(get_token_service)]
 EmailNotifierDependency = Annotated[EmailNotifier, Depends(get_email_notifier)]
+AccessTokenExpiryDependency = Annotated[int, Depends(get_access_token_expire_minutes)]

@@ -118,6 +118,7 @@ REQUIRED_SCANNED_MODULES: Final[frozenset[str]] = frozenset(
         "actor.py",
         "dependencies.py",
         "health.py",
+        "routers/auth.py",
         "routers/task_lists.py",
         "routers/tasks.py",
         "schemas/auth.py",
