@@ -12,9 +12,11 @@ that resends the list's *current* name is not a conflict: the only row wearing
 that name is this list's own, so an unconditional pre-check would refuse the
 request on the strength of the very thing it is about to write. Comparing the
 incoming name with the stored one first is what keeps a re-send idempotent
-instead of fatal. Everything `create.py`'s docstring says about the check being
-a convenience rather than the guard applies here unchanged - the unique index is
-still the authority, and the adapter already translates its refusal.
+instead of fatal - and the comparison is between *normalised* names, because a
+re-send padded with whitespace is still a re-send (review fix WR-01). Everything
+`create.py`'s docstring says about the check being a convenience rather than the
+guard applies here unchanged - the unique index is still the authority, and the
+adapter already translates its refusal.
 
 **`updated_at` moves whenever a field is provided, even when the value it
 carries is the one already stored.** That is a decision (04-PATTERNS Pitfall 10),
@@ -37,6 +39,7 @@ from taskmanager.application.dto.unset import UNSET
 from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.unit_of_work import UnitOfWork
 from taskmanager.application.use_cases.access import visible_task_list
+from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.exceptions import DuplicateTaskListNameError
 
 
@@ -65,14 +68,24 @@ class UpdateTaskList:
                 # LIST-06 on the rename leg. The comparison comes first: see the
                 # module docstring for why a re-sent name must not conflict with
                 # the row that already carries it.
+                #
+                # Both sides of that comparison are the *normalised* name (review
+                # fix WR-01). The stored one was trimmed on its way in, so
+                # comparing it with the raw client string made `" Alpha "` a
+                # different name from `Alpha`, and the pre-check then found this
+                # list's own row and refused the request with a false 409. The
+                # entity is asked for the normal form, so the trimming rule still
+                # has one home; the conflict echoes that form too, which is the
+                # spelling the adapter's constraint path has always reported.
+                name = TaskList.normalised_name(command.name)
                 if (
-                    command.name != task_list.name
+                    name != task_list.name
                     and await self._uow.task_lists.exists_with_name(
-                        command.actor_id, command.name
+                        command.actor_id, name
                     )
                 ):
-                    raise DuplicateTaskListNameError(command.name)
-                task_list.rename(command.name, now=now)
+                    raise DuplicateTaskListNameError(name)
+                task_list.rename(name, now=now)
             if command.description is not UNSET:
                 # An explicit null arrives here as `None` and clears the field,
                 # which is the whole of D-05; the entity folds "" the same way.

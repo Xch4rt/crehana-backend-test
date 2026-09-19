@@ -130,6 +130,24 @@ async def test_create_task_list_refuses_a_name_the_owner_already_uses() -> None:
     assert unit_of_work.rollbacks == 1
 
 
+async def test_a_refused_create_reports_the_normalised_name() -> None:
+    """Review fix WR-01: the 409 echoes the name as it would have been stored.
+
+    The adapter's constraint path reports the trimmed `task_list.name`; the
+    pre-check used to echo the client's untrimmed string, so one error had two
+    spellings depending on which road caught it.
+    """
+    unit_of_work = _uow(existing_name=NAME)
+    use_case = CreateTaskList(unit_of_work, FrozenClock(LATER))
+
+    with pytest.raises(DuplicateTaskListNameError) as excinfo:
+        await use_case.execute(_command(name=f"  {NAME} "))
+
+    assert excinfo.value.details == {"field": "name", "name": NAME}
+    assert unit_of_work.task_list_repository.added == []
+    assert unit_of_work.commits == 0
+
+
 async def test_a_name_differing_only_in_case_is_not_a_duplicate() -> None:
     """D-12: uniqueness is case-sensitive, because the entity folds no case.
 

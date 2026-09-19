@@ -794,6 +794,54 @@ async def test_renaming_a_list_to_its_own_current_name_succeeds(
     assert response.json()["name"] == "Groceries"
 
 
+async def test_renaming_a_list_to_its_own_name_padded_with_whitespace_succeeds(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """Review fix WR-01, over HTTP and against the real `exists_with_name`.
+
+    `PATCH {"name": " Groceries "}` on the list named `Groceries` used to answer
+    409 `duplicate_task_list_name`: the raw string differed from the stored one,
+    so the pre-check ran, trimmed its argument, and found the list's own row.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.patch(
+        f"{TASK_LISTS}/{LIST_ID}", json={"name": "  Groceries "}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Groceries"
+
+
+async def test_a_duplicate_409_reports_the_trimmed_name_on_both_verbs(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """One error, one spelling: `detail` and `errors.name` carry the stored form."""
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[
+            a_task_list(),
+            a_task_list(task_list_id=OTHER_LIST_ID, name="Chores"),
+        ],
+    )
+    client, _ = api_client
+
+    created = await client.post(TASK_LISTS, json={"name": " Groceries  "})
+    renamed = await client.patch(
+        f"{TASK_LISTS}/{OTHER_LIST_ID}", json={"name": " Groceries  "}
+    )
+
+    for response in (created, renamed):
+        assert response.status_code == 409
+        body = response.json()
+        assert body["errors"] == {"field": "name", "name": "Groceries"}
+        assert "'Groceries'" in body["detail"]
+
+
 async def test_an_empty_patch_body_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,

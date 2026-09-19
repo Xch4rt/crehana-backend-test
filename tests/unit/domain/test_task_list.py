@@ -121,6 +121,25 @@ def test_task_list_rename_strips_and_revalidates_the_name() -> None:
     assert task_list.updated_at == LATER
 
 
+def test_normalised_name_is_the_name_the_entity_would_store() -> None:
+    """Review fix WR-01: one normaliser, shared with whoever must compare names.
+
+    A use case that pre-checks a name has to ask about the form that will be
+    stored, and asking the entity is what keeps `strip()` out of the application
+    layer. Both halves are asserted: the normal form, and the same refusal - the
+    same `field` - construction and `rename` raise.
+    """
+    assert TaskList.normalised_name("  Work\t") == _task_list().name
+
+    with pytest.raises(ValidationError) as excinfo:
+        TaskList.normalised_name("   ")
+
+    assert excinfo.value.details == {"field": "name"}
+
+    with pytest.raises(ValidationError):
+        TaskList.normalised_name("x" * (TaskList.NAME_MAX_LENGTH + 1))
+
+
 def test_task_list_rename_rejects_a_blank_name() -> None:
     """A mutator cannot be used to slip past a constructor invariant."""
     task_list = _task_list()

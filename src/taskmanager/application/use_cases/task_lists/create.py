@@ -61,12 +61,6 @@ class CreateTaskList:
             # Read once and handed down, so `created_at` and `updated_at` are
             # the same instant by construction rather than by coincidence (D-13).
             now = self._clock.now()
-            # LIST-06. See the module docstring for why this is the convenience
-            # and the unique index is the authority.
-            if await self._uow.task_lists.exists_with_name(
-                command.actor_id, command.name
-            ):
-                raise DuplicateTaskListNameError(command.name)
             # `owner_id` comes from the command's actor and from nothing else:
             # `CreateTaskListCommand` has no owner field at all, so a request
             # cannot nominate a victim to own the list it just made (T-4-27).
@@ -79,6 +73,17 @@ class CreateTaskList:
                 description=command.description,
                 now=now,
             )
+            # LIST-06. See the module docstring for why this is the convenience
+            # and the unique index is the authority. It comes after the entity
+            # is built, and asks about `task_list.name` rather than the command's
+            # string, so the conflict reports the normalised name - the one
+            # spelling the adapter's constraint path reports too (review fix
+            # WR-01). Nothing has been written yet: building an entity is not a
+            # write, so "raised before anything is written" still holds.
+            if await self._uow.task_lists.exists_with_name(
+                command.actor_id, task_list.name
+            ):
+                raise DuplicateTaskListNameError(task_list.name)
             await self._uow.task_lists.add(task_list)
             await self._uow.commit()
         # Mapped outside the block: the result describes a transaction that has

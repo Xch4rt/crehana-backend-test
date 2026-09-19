@@ -52,9 +52,7 @@ class TaskList:
 
     def __post_init__(self) -> None:
         """Normalise and validate every field, however the list was built."""
-        self.name = require_text(
-            self.name, field="name", max_length=self.NAME_MAX_LENGTH
-        )
+        self.name = self.normalised_name(self.name)
         self.description = optional_text(
             self.description,
             field="description",
@@ -62,6 +60,21 @@ class TaskList:
         )
         self.created_at = require_utc(self.created_at, field="created_at")
         self.updated_at = require_utc(self.updated_at, field="updated_at")
+
+    @classmethod
+    def normalised_name(cls, name: str) -> str:
+        """The name as this entity would store it, or the refusal it would raise.
+
+        The one normaliser, called by `__post_init__` and `rename` and offered to
+        the use cases that must *compare* names before anything is assigned
+        (Phase 4 review WR-01). LIST-06's pre-check asked the repository about
+        the raw client string while the repository and this entity both trimmed
+        it, so `" Alpha "` re-sent to a list named `Alpha` was compared as a
+        different name, matched the list's own row, and was refused with a false
+        409. A use case that needs "the name this would become" asks here rather
+        than calling `strip()` itself, which would be a second copy of the rule.
+        """
+        return require_text(name, field="name", max_length=cls.NAME_MAX_LENGTH)
 
     @classmethod
     def create(
@@ -94,7 +107,7 @@ class TaskList:
         # out in `Task.rename`: a refused call must leave the aggregate exactly
         # as it found it.
         moment = require_utc(now, field="now")
-        self.name = require_text(name, field="name", max_length=self.NAME_MAX_LENGTH)
+        self.name = self.normalised_name(name)
         self.updated_at = moment
 
     def describe(self, description: str | None, *, now: datetime) -> None:

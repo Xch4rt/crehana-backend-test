@@ -196,6 +196,42 @@ async def test_resending_the_lists_own_name_is_not_a_conflict() -> None:
     assert unit_of_work.rollbacks == 0
 
 
+async def test_resending_the_lists_own_name_padded_is_not_a_conflict() -> None:
+    """Review fix WR-01: a re-send with surrounding whitespace is still a re-send.
+
+    Unlike the test above there is no rival list here, and that is the point. The
+    only row that can match `" Phase 4 "` once it is trimmed is this list's own -
+    so a comparison made on the raw string sees a "new" name, asks the
+    repository, finds the list itself and answers 409. The exact-spelling test
+    passed over that defect by coincidence of its input.
+    """
+    unit_of_work = _uow()
+    use_case = UpdateTaskList(unit_of_work, FrozenClock(LATER))
+
+    result = await use_case.execute(_command(name=f"  {NAME}\t"))
+
+    assert result.name == NAME
+    assert unit_of_work.commits == 1
+    assert unit_of_work.rollbacks == 0
+
+
+async def test_a_refused_rename_reports_the_normalised_name() -> None:
+    """One spelling of one error: the 409 echoes the name as it would be stored.
+
+    The adapter's constraint path has always reported the trimmed
+    `task_list.name`; the pre-check used to echo the client's untrimmed string.
+    """
+    unit_of_work = _uow(also_named=TAKEN_NAME)
+    use_case = UpdateTaskList(unit_of_work, FrozenClock(LATER))
+
+    with pytest.raises(DuplicateTaskListNameError) as excinfo:
+        await use_case.execute(_command(name=f" {TAKEN_NAME} "))
+
+    assert excinfo.value.details == {"field": "name", "name": TAKEN_NAME}
+    assert unit_of_work.task_list_repository.stored[LIST_ID].name == NAME
+    assert unit_of_work.task_list_repository.stored[LIST_ID].updated_at == NOW
+
+
 async def test_update_task_list_refuses_a_rename_onto_a_name_the_owner_uses() -> None:
     """LIST-06's rename leg: the conflict is raised before anything is written."""
     unit_of_work = _uow(also_named=TAKEN_NAME)
