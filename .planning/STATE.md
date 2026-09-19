@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: planning
 stopped_at: Phase 5 context gathered
-last_updated: "2026-09-19T07:37:11.592Z"
+last_updated: "2026-09-19T07:59:23.376Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
@@ -343,7 +343,6 @@ None yet.
   would undermine the project's own thesis.
 
 - Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same 599 tests - host 100.00% over 1155 statements, container 99.20% over 1267. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image) and is pre-existing, visible in Phase 3 at 730 vs 772. The eleven missed lines are the trailing statements of the 04-08 route handlers and are proven executed by the labelled probe in `.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to the same coverage measurement rather than argue the number down; no pragma and no omit.
-- Phase 4 review CR-01 (04-REVIEW.md): write paths read-validate-write without a row lock or version column; concurrent writes reproduced a forbidden completed->pending transition and a lost update. Unowned by any roadmap phase - decide: fix via /gsd-code-review 4 --fix, fold into Phase 6, or document as a known limitation. Also WR-01 (padded own-name false 409), WR-02/WR-03 (due_date overflow and NUL -> 500).
 
 ## Deferred Items
 

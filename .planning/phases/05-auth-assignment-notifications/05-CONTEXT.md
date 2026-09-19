@@ -145,6 +145,29 @@ verification (AUTH-08), roles beyond owner/assignee, real email delivery, pagina
   only `routers/`) is relevant here because `actor.py` is rewritten in this phase: the gate's
   scope should cover it.
 
+- **D-18 (D-17 discharged, 2026-09-19):** The debt was fixed before planning — commits
+  `63f6ee4` (CR-01), `0869013` (WR-01), `93c4d2c` (WR-02), `5299d7d` (WR-03), `b68686c` (WR-04),
+  `6f30d07` (WR-05); report in `.planning/phases/04-task-lists-tasks/04-REVIEW-FIX.md`; suite at
+  643 passed, 100% coverage. What Phase 5 must build on:
+  - **Write paths lock.** ADR-058: `TaskRepository.get_for_update(task_id)` and
+    `TaskListRepository.get_for_update(task_list_id)` on the ports (adapters use
+    `.with_for_update()` + `populate_existing`), reached through
+    `visible_task_list(..., for_update=True)` / `visible_task(..., for_update=True)` in
+    `access.py`. Read paths never lock. Lock only the addressed resource: a task's writer never
+    holds its list. **Every new Phase 5 write path — the assignee's status change, `AssignTask`,
+    `UnassignTask` — loads through the `for_update` door**, and the concurrency suite
+    (`tests/integration/test_concurrent_writes.py`) gains a case for owner-vs-assignee writes.
+  - **The `HTTPException` AST gate now covers all of `presentation/api`** except the exempt
+    error-handling module, including aliased and star imports. The rewritten `actor.py` and the
+    new auth router must raise `AuthenticationError`, never `HTTPException` — which also means
+    FastAPI's `OAuth2PasswordBearer(auto_error=True)` default (it raises `HTTPException`) has to
+    be dealt with explicitly (for example `auto_error=False` and raising the domain error).
+  - Text fields refuse NUL and `due_date` refuses values with no UTC form, in
+    `domain/validation.py`; the new `full_name` and any other new text field go through the same
+    helpers.
+  - `CLAUDE.md` § Project Rules still describes the AST gate as `routers/` only and has no rule
+    for write-path locking; this phase's closing plan updates both, each naming its gate.
+
 ### Claude's Discretion
 - JWT claims beyond `sub` and `exp` (for example `iat`), clock-skew leeway, and the exact token
   response shape (`access_token`, `token_type: "bearer"`, optionally `expires_in`).
@@ -194,8 +217,10 @@ verification (AUTH-08), roles beyond owner/assignee, real email delivery, pagina
 - `.planning/phases/02-domain-error-contract/02-CONTEXT.md` — error taxonomy, port declarations,
   D-18 (visibility is decided by the use case)
 
-### Open debt that gates this phase
-- `.planning/phases/04-task-lists-tasks/04-REVIEW.md` — CR-01, WR-01..WR-05 (see D-17)
+### Review debt (discharged — see D-18)
+- `.planning/phases/04-task-lists-tasks/04-REVIEW.md` and `04-REVIEW-FIX.md` — CR-01, WR-01..WR-05, all fixed
+- `DECISION_LOG.md` ADR-058 — write paths serialise concurrent writers with a locking read
+- `tests/integration/test_concurrent_writes.py` — the two-connection concurrency tests to extend
 - `.planning/STATE.md` § "Blockers/Concerns" — CR-01 entry, the Phase 5 research flag, the
   host/container coverage note
 
