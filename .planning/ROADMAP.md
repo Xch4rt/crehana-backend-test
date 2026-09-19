@@ -240,7 +240,7 @@ Plans:
   4. A list owner can assign a task to an existing user and unassign it, a non-existent assignee is rejected, task responses expose the assignee, and `GET /users` makes assignee ids discoverable.
   5. Assigning a task produces a simulated invitation email through the `EmailNotifier` port after the transaction commits — the runtime adapter only logs a structured message, the in-memory adapter lets tests assert on it without mocks, and a notifier that raises still leaves the assignment succeeding.
 
-**Plans**: 16 plans (11 waves)
+**Plans**: 17 plans (12 waves)
 
 Plans:
 **Wave 1**
@@ -291,6 +291,10 @@ Plans:
 **Wave 11** *(blocked on Wave 10 completion)*
 
 - [x] 05-16-PLAN.md — Phase 5 ADRs, the AI_WORKFLOW entries, the twelve requirement ticks and the full phase gate
+
+**Wave 12** *(gap closure, from 05-VERIFICATION.md)*
+
+- [ ] 05-17-PLAN.md — The published placeholder refused at boot, `make env` in place of `cp .env.example .env`, and the four review warnings closed
 
 ### Phase 6: Test Hardening & Coverage
 

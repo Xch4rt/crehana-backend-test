@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-16-PLAN.md
-last_updated: "2026-09-19T18:45:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 plan 16 complete
+stopped_at: Phase 5 gap closure planned (05-17)
+last_updated: "2026-09-19T19:35:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 gap closure planned (05-17) after verification found gaps
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 54
+  total_plans: 55
   completed_plans: 54
-  percent: 100
+  percent: 98
 ---
 
 # Project State
@@ -27,16 +27,16 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — AWAITING VERIFICATION
-Plan: 16 of 16
-Status: Phase 05 plans 01-16 all complete; awaiting verification before the phase is marked complete
-Last activity: 2026-09-19 -- Phase 05 plan 16 complete
+Plan: 17 of 17
+Status: Phase 05 plans 01-16 complete; verification found gaps (placeholder JWT secret accepted); gap-closure plan 05-17 ready to execute
+Last activity: 2026-09-19 -- Phase 05 gap closure planned (05-17) after verification found gaps
 
-Progress: [██████████] 100%
+Progress: [██████████] 98%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 54/54
-means "every plan that exists has been executed", not "the milestone is finished".
+`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 54/55
+means "every plan but the 05-17 gap closure has been executed", not "the milestone is nearly finished".
 
 ## Performance Metrics
 
