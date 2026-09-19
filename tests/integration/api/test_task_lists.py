@@ -277,6 +277,11 @@ async def test_create_accepts_a_list_with_no_description(
     assert list(body) == TASK_LIST_MEMBERS
     assert body["description"] is None
 
+    stored = await client.get(f"{TASK_LISTS}/{body['id']}")
+
+    assert stored.status_code == 200
+    assert stored.json() == body
+
 
 async def test_get_returns_the_list_with_its_statistics(
     api_client: tuple[AsyncClient, FastAPI],
@@ -677,6 +682,12 @@ async def test_patch_an_absent_list_is_404(
 
     assert_not_found(response, MISSING_LIST_ID)
 
+    # D-06 on a refused write: a PATCH that refuses must not have brought the
+    # list into existence on its way to refusing it, which an upsert would.
+    after = await client.get(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(after, MISSING_LIST_ID)
+
 
 async def test_delete_an_absent_list_is_404(
     api_client: tuple[AsyncClient, FastAPI],
@@ -688,6 +699,10 @@ async def test_delete_an_absent_list_is_404(
 
     assert_not_found(response, MISSING_LIST_ID)
 
+    after = await client.get(f"{TASK_LISTS}/{MISSING_LIST_ID}")
+
+    assert_not_found(after, MISSING_LIST_ID)
+
 
 async def test_creating_a_list_with_a_name_the_actor_already_uses_is_a_duplicate_409(
     api_client: tuple[AsyncClient, FastAPI],
@@ -696,6 +711,7 @@ async def test_creating_a_list_with_a_name_the_actor_already_uses_is_a_duplicate
     """LIST-06 on create: the conflict names the field and the offending name."""
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(TASK_LISTS)).json()
 
     response = await client.post(TASK_LISTS, json={"name": "Groceries"})
 
@@ -708,6 +724,14 @@ async def test_creating_a_list_with_a_name_the_actor_already_uses_is_a_duplicate
     assert body["code"] == "duplicate_task_list_name"
     assert body["title"] == "Duplicate task list name"
     assert body["errors"] == {"field": "name", "name": "Groceries"}
+
+    # D-06: the collection is what a duplicate would show up in, and a 409
+    # reported by a handler that inserted the row anyway is exactly the failure
+    # a status-and-body assertion cannot see.
+    after = (await client.get(TASK_LISTS)).json()
+
+    assert after == before
+    assert len(after) == 1
 
 
 async def test_renaming_a_list_to_a_name_the_actor_already_uses_is_a_duplicate_409(
@@ -765,6 +789,11 @@ async def test_a_name_another_actor_uses_is_not_a_conflict(
     assert response.status_code == 201
     assert response.json()["owner_id"] == str(OWNER_ID)
 
+    mine = await client.get(TASK_LISTS)
+
+    assert mine.json() == [response.json()]
+    assert str(FOREIGN_LIST_ID) not in mine.text
+
 
 async def test_a_name_differing_only_in_case_is_not_a_conflict(
     api_client: tuple[AsyncClient, FastAPI],
@@ -796,11 +825,18 @@ async def test_renaming_a_list_to_its_own_current_name_succeeds(
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
 
     response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"name": "Groceries"})
 
     assert response.status_code == 200
     assert response.json()["name"] == "Groceries"
+
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after["name"] == "Groceries"
+    assert after["description"] == before["description"]
+    assert moment(after["updated_at"]) > moment(before["updated_at"])
 
 
 async def test_renaming_a_list_to_its_own_name_padded_with_whitespace_succeeds(
@@ -815,6 +851,7 @@ async def test_renaming_a_list_to_its_own_name_padded_with_whitespace_succeeds(
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
 
     response = await client.patch(
         f"{TASK_LISTS}/{LIST_ID}", json={"name": "  Groceries "}
@@ -822,6 +859,12 @@ async def test_renaming_a_list_to_its_own_name_padded_with_whitespace_succeeds(
 
     assert response.status_code == 200
     assert response.json()["name"] == "Groceries"
+
+    # The stored name is the trimmed one, so the padding never reached the row.
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after["name"] == "Groceries"
+    assert after["description"] == before["description"]
 
 
 async def test_a_duplicate_409_reports_the_trimmed_name_on_both_verbs(
@@ -838,6 +881,7 @@ async def test_a_duplicate_409_reports_the_trimmed_name_on_both_verbs(
         ],
     )
     client, _ = api_client
+    before = (await client.get(TASK_LISTS)).json()
 
     created = await client.post(TASK_LISTS, json={"name": " Groceries  "})
     renamed = await client.patch(
@@ -849,6 +893,13 @@ async def test_a_duplicate_409_reports_the_trimmed_name_on_both_verbs(
         body = response.json()
         assert body["errors"] == {"field": "name", "name": "Groceries"}
         assert "'Groceries'" in body["detail"]
+
+    # Both refusals left the two lists exactly as they were: neither a third row
+    # nor a renamed second one.
+    after = (await client.get(TASK_LISTS)).json()
+
+    assert after == before
+    assert [entry["name"] for entry in after] == ["Groceries", "Chores"]
 
 
 @pytest.mark.parametrize(
@@ -872,6 +923,7 @@ async def test_a_nul_character_in_a_list_field_is_a_domain_validation_error(
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(TASK_LISTS)).json()
 
     created = await client.post(TASK_LISTS, json=body)
     patched = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json=body)
@@ -883,6 +935,13 @@ async def test_a_nul_character_in_a_list_field_is_a_domain_validation_error(
         assert problem["code"] == "validation_error"
         assert problem["title"] == "Validation error"
         assert problem["errors"] == {"field": field}
+
+    # The NUL reached PostgreSQL on the `name` road, so "refused" has to mean
+    # the row is untouched as well as the answer being a 422.
+    after = (await client.get(TASK_LISTS)).json()
+
+    assert after == before
+    assert "\x00" not in (await client.get(TASK_LISTS)).text
 
 
 async def test_an_empty_patch_body_is_a_request_validation_error(
@@ -896,6 +955,7 @@ async def test_an_empty_patch_body_is_a_request_validation_error(
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
 
     response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={})
 
@@ -912,6 +972,12 @@ async def test_an_empty_patch_body_is_a_request_validation_error(
     assert body["errors"][0]["field"] == "body"
     assert body["errors"][0]["type"] == "value_error"
 
+    # D-06: refused, so nothing moved - `updated_at` included. A handler that
+    # stamped the row before validating the body would answer this same 422.
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after == before
+
 
 async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -925,6 +991,7 @@ async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
 
     response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"nmae": "Weekly"})
 
@@ -939,6 +1006,11 @@ async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     assert body["errors"][0]["field"] == "body.nmae"
     assert body["errors"][0]["type"] == "extra_forbidden"
 
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after == before
+    assert "Weekly" not in (await client.get(f"{TASK_LISTS}/{LIST_ID}")).text
+
 
 async def test_an_explicit_null_name_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -947,6 +1019,7 @@ async def test_an_explicit_null_name_is_a_request_validation_error(
     """D-05: `name` has no null to be cleared to, so sending one is a 422."""
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
     client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
 
     response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"name": None})
 
@@ -958,6 +1031,13 @@ async def test_an_explicit_null_name_is_a_request_validation_error(
     assert body["title"] == "Request validation failed"
     assert isinstance(body["errors"], list)
     assert [entry["field"] for entry in body["errors"]] == ["body.name"]
+
+    # The name survives. A schema that accepted the null and let the entity
+    # refuse it later would be a different bug with the same status code.
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after == before
+    assert after["name"] == "Groceries"
 
 
 async def test_a_blank_name_is_a_domain_validation_error(
@@ -986,6 +1066,10 @@ async def test_a_blank_name_is_a_domain_validation_error(
     assert body["title"] == "Validation error"
     assert body["errors"] == {"field": "name"}
 
+    # D-06 on a refused create: the collection is where a row that was written
+    # anyway would appear, and it is still empty.
+    assert (await client.get(TASK_LISTS)).json() == []
+
 
 async def test_an_over_length_name_is_a_domain_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -1012,6 +1096,8 @@ async def test_an_over_length_name_is_a_domain_validation_error(
     assert body["code"] == "validation_error"
     assert body["title"] == "Validation error"
     assert body["errors"] == {"field": "name"}
+
+    assert (await client.get(TASK_LISTS)).json() == []
 
 
 async def test_a_malformed_list_id_is_a_request_validation_error(
@@ -1054,3 +1140,11 @@ async def test_a_refusal_never_echoes_the_clients_input(
     assert marker not in response.text
     assert "input" not in response.text
     assert "ctx" not in response.text
+
+    # The marker must not be readable back out of the collection either: a
+    # refusal that leaked nothing into its own body and everything into the
+    # database would satisfy every assertion above.
+    nothing = await client.get(TASK_LISTS)
+
+    assert nothing.json() == []
+    assert marker not in nothing.text

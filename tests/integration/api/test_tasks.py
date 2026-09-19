@@ -549,6 +549,11 @@ async def test_a_patch_without_due_date_leaves_an_overdue_task_patchable(
     assert body["title"] == "Buy oats"
     assert moment(body["due_date"]) == PAST_DUE_DATE
 
+    after = (await client.get(task_url(LIST_ID, TASK_ID))).json()
+
+    assert after == body
+    assert moment(after["due_date"]) == PAST_DUE_DATE
+
 
 async def test_delete_returns_204_with_an_empty_body(
     api_client: tuple[AsyncClient, FastAPI],
@@ -880,6 +885,10 @@ async def test_an_over_length_title_is_a_domain_validation_error(
     assert body["title"] == "Validation error"
     assert body["errors"] == {"field": "title"}
 
+    # D-06 on a refused create: the collection is where a row written anyway
+    # would appear, and it is still empty.
+    assert (await client.get(tasks_url(LIST_ID))).json()["items"] == []
+
 
 async def test_the_collection_of_a_list_the_actor_does_not_own_is_404(
     api_client: tuple[AsyncClient, FastAPI],
@@ -1109,6 +1118,7 @@ async def test_the_status_endpoint_rejects_an_unknown_value(
     """
     await given_a_task(session_factory)
     client, _ = api_client
+    before = (await client.get(task_url(LIST_ID, TASK_ID))).json()
 
     response = await client.patch(
         status_url(LIST_ID, TASK_ID), json={"status": "abandoned"}
@@ -1123,6 +1133,12 @@ async def test_the_status_endpoint_rejects_an_unknown_value(
     assert body["title"] == "Request validation failed"
     assert isinstance(body["errors"], list)
     assert [entry["field"] for entry in body["errors"]] == ["body.status"]
+
+    # D-06: refused at the boundary means the column never saw the free text.
+    after = (await client.get(task_url(LIST_ID, TASK_ID))).json()
+
+    assert after == before
+    assert after["status"] == TaskStatus.PENDING.value
 
 
 async def test_the_status_endpoint_rejects_an_unknown_key(
@@ -1472,6 +1488,8 @@ async def test_a_blank_title_is_a_domain_validation_error(
     assert body["title"] == "Validation error"
     assert body["errors"] == {"field": "title"}
 
+    assert (await client.get(tasks_url(LIST_ID))).json()["items"] == []
+
 
 async def test_a_past_due_date_is_a_domain_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -1502,6 +1520,8 @@ async def test_a_past_due_date_is_a_domain_validation_error(
     assert body["title"] == "Validation error"
     assert body["errors"] == {"field": "due_date"}
 
+    assert (await client.get(tasks_url(LIST_ID))).json()["items"] == []
+
 
 @pytest.mark.parametrize(
     "due_date", ["9999-12-31T23:59:59-12:00", "0001-01-01T00:00:00+14:00"]
@@ -1519,6 +1539,7 @@ async def test_a_due_date_with_no_utc_form_is_a_domain_validation_error(
     """
     await given_a_task(session_factory)
     client, _ = api_client
+    before = (await client.get(tasks_url(LIST_ID))).json()
 
     created = await client.post(
         tasks_url(LIST_ID), json={"title": "Buy milk", "due_date": due_date}
@@ -1534,6 +1555,13 @@ async def test_a_due_date_with_no_utc_form_is_a_domain_validation_error(
         assert body["code"] == "validation_error"
         assert body["title"] == "Validation error"
         assert body["errors"] == {"field": "due_date"}
+
+    # Neither verb left a trace: no second task, and the first one's deadline
+    # is still the one it was seeded with.
+    after = (await client.get(tasks_url(LIST_ID))).json()
+
+    assert after == before
+    assert after["items"][0]["due_date"] is None
 
 
 @pytest.mark.parametrize(
@@ -1552,6 +1580,7 @@ async def test_a_nul_character_in_a_task_field_is_a_domain_validation_error(
     """Phase 4 review WR-03, on the task routes: a 422 naming the field, not a 500."""
     await given_a_task(session_factory)
     client, _ = api_client
+    before = (await client.get(tasks_url(LIST_ID))).json()
 
     created = await client.post(tasks_url(LIST_ID), json=body)
     patched = await client.patch(task_url(LIST_ID, TASK_ID), json=body)
@@ -1564,6 +1593,11 @@ async def test_a_nul_character_in_a_task_field_is_a_domain_validation_error(
         assert problem["title"] == "Validation error"
         assert problem["errors"] == {"field": field}
 
+    after = await client.get(tasks_url(LIST_ID))
+
+    assert after.json() == before
+    assert "\x00" not in after.text
+
 
 async def test_an_empty_patch_body_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -1572,6 +1606,7 @@ async def test_an_empty_patch_body_is_a_request_validation_error(
     """D-06: a body that asks for nothing is refused, not treated as a no-op."""
     await given_a_task(session_factory)
     client, _ = api_client
+    before = (await client.get(task_url(LIST_ID, TASK_ID))).json()
 
     response = await client.patch(task_url(LIST_ID, TASK_ID), json={})
 
@@ -1588,6 +1623,12 @@ async def test_an_empty_patch_body_is_a_request_validation_error(
     assert body["errors"][0]["field"] == "body"
     assert body["errors"][0]["type"] == "value_error"
 
+    # `updated_at` included: a handler that stamped the row before validating
+    # the body would answer this same 422.
+    after = (await client.get(task_url(LIST_ID, TASK_ID))).json()
+
+    assert after == before
+
 
 async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     api_client: tuple[AsyncClient, FastAPI],
@@ -1596,6 +1637,7 @@ async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     """D-06: a typo is refused at the named field, never silently ignored."""
     await given_a_task(session_factory)
     client, _ = api_client
+    before = (await client.get(task_url(LIST_ID, TASK_ID))).json()
 
     response = await client.patch(
         task_url(LIST_ID, TASK_ID), json={"titel": "Buy oats"}
@@ -1610,6 +1652,11 @@ async def test_an_unknown_key_in_a_patch_is_a_request_validation_error(
     assert len(body["errors"]) == 1
     assert body["errors"][0]["field"] == "body.titel"
     assert body["errors"][0]["type"] == "extra_forbidden"
+
+    after = await client.get(task_url(LIST_ID, TASK_ID))
+
+    assert after.json() == before
+    assert "Buy oats" not in after.text
 
 
 async def test_status_is_not_writable_through_the_generic_patch(

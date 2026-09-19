@@ -66,6 +66,9 @@ AUTH = "/api/v1/auth"
 REGISTER = f"{AUTH}/register"
 LOGIN = f"{AUTH}/login"
 ME = f"{AUTH}/me"
+# The one published route that lists accounts, and therefore the only place a
+# registration can be read back from. See `directory` below.
+USERS = "/api/v1/users"
 
 # `UserResponse`'s four members, in declaration order - which is serialisation
 # order, and therefore contract. The fifth member this list does not have is
@@ -123,6 +126,26 @@ def a_login_form(
     return {"username": username, "password": password}
 
 
+async def as_the_caller(app: FastAPI) -> dict[str, str]:
+    """A bearer header for the seeded caller, for reading `USERS` back.
+
+    Registering has no resource of its own to read back. `GET /auth/me` answers
+    about the *caller*, and a freshly created account has no token yet, so the
+    account's existence is read out of the user directory instead - the one
+    published route that lists accounts (ASGN-03).
+
+    That route is closed (D-11), so the re-read costs a seeded caller and a
+    token minted for it. This is why every register test below takes
+    `session_factory` and seeds `a_user()`: the caller exists so that the
+    directory can be read, and it is never the account under test.
+
+    Only the header is built here. The `GET` itself stays written out in each
+    test, because a re-read hidden inside a helper is a re-read a reader has to
+    go looking for - and the D-05 gate reads the test, not the helper.
+    """
+    return {"Authorization": await bearer_header(app, OWNER_ID)}
+
+
 def configured_settings() -> Settings:
     """The settings the harness's application was built from.
 
@@ -160,9 +183,11 @@ class StoppedClock:
 
 async def test_register_answers_201_with_the_profile_and_a_location_header(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """AUTH-01, D-09: the account, the four members, and no token (D-19)."""
-    client, _ = authenticated_client
+    await seed(session_factory, users=[a_user()])
+    client, app = authenticated_client
 
     response = await client.post(REGISTER, json=a_registration())
 
@@ -180,6 +205,13 @@ async def test_register_answers_201_with_the_profile_and_a_location_header(
     # No token, and no credential: registering and logging in are two steps.
     assert "access_token" not in response.text
     assert PASSWORD not in response.text
+
+    listed = await client.get(USERS, headers=await as_the_caller(app))
+
+    assert listed.status_code == 200
+    assert body["id"] in [entry["id"] for entry in listed.json()]
+    assert NEW_EMAIL in listed.text
+    assert PASSWORD not in listed.text
 
 
 async def test_register_then_login_then_get_me_reads_back_the_same_profile(
@@ -210,6 +242,7 @@ async def test_register_then_login_then_get_me_reads_back_the_same_profile(
 
 async def test_register_with_the_same_address_in_another_case_is_a_duplicate_409(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """AUTH-01's conflict, and D-23's bound on what it is allowed to say.
 
@@ -218,7 +251,8 @@ async def test_register_with_the_same_address_in_another_case_is_a_duplicate_409
     the address: the caller already knows what they submitted, and a body
     carrying it would put the value into logs and error trackers as well.
     """
-    client, _ = authenticated_client
+    await seed(session_factory, users=[a_user()])
+    client, app = authenticated_client
 
     first = await client.post(REGISTER, json=a_registration(email=MIXED_CASE_EMAIL))
     assert first.status_code == 201
@@ -237,9 +271,18 @@ async def test_register_with_the_same_address_in_another_case_is_a_duplicate_409
     assert MIXED_CASE_EMAIL not in second.text
     assert LOWER_CASE_EMAIL not in second.text
 
+    # The refusal left one account, not two. `User.__post_init__` lower-cases
+    # the whole address, so the stored spelling is the lower-case one whichever
+    # way it was typed - which is what makes counting it the right assertion.
+    after = await client.get(USERS, headers=await as_the_caller(app))
+
+    assert [entry["email"] for entry in after.json()].count(LOWER_CASE_EMAIL) == 1
+    assert MIXED_CASE_EMAIL not in after.text
+
 
 async def test_register_with_a_seven_character_password_is_422_and_never_echoes_it(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """The domain's 8-to-128 policy over HTTP, naming the field and not the value.
 
@@ -248,7 +291,8 @@ async def test_register_with_a_seven_character_password_is_422_and_never_echoes_
     project's domain-validation 422 rather than the request-validation one, and
     its `errors` member is an object naming the field.
     """
-    client, _ = authenticated_client
+    await seed(session_factory, users=[a_user()])
+    client, app = authenticated_client
 
     response = await client.post(REGISTER, json=a_registration(password=SHORT_PASSWORD))
 
@@ -262,9 +306,17 @@ async def test_register_with_a_seven_character_password_is_422_and_never_echoes_
     assert body["errors"] == {"field": "password"}
     assert SHORT_PASSWORD not in response.text
 
+    # D-06: no account, and therefore no Argon2 hash of a password the policy
+    # refused. The directory holds the seeded caller alone.
+    after = await client.get(USERS, headers=await as_the_caller(app))
+
+    assert [entry["email"] for entry in after.json()] == [DEMO_EMAIL]
+    assert NEW_EMAIL not in after.text
+
 
 async def test_register_with_an_unknown_key_is_one_extra_forbidden_error(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """T-5-09: a privilege cannot be smuggled in as an extra member.
 
@@ -272,7 +324,8 @@ async def test_register_with_an_unknown_key_is_one_extra_forbidden_error(
     client invents is one named 422 rather than a value quietly accepted and
     ignored - or, worse, quietly used.
     """
-    client, _ = authenticated_client
+    await seed(session_factory, users=[a_user()])
+    client, app = authenticated_client
     payload = {**a_registration(), "is_admin": "true"}
 
     response = await client.post(REGISTER, json=payload)
@@ -288,6 +341,12 @@ async def test_register_with_an_unknown_key_is_one_extra_forbidden_error(
     assert body["errors"][0]["type"] == "extra_forbidden"
     assert body["errors"][0]["field"] == "body.is_admin"
     assert PASSWORD not in response.text
+
+    # Refused as a whole, not accepted with the extra member dropped.
+    after = await client.get(USERS, headers=await as_the_caller(app))
+
+    assert [entry["email"] for entry in after.json()] == [DEMO_EMAIL]
+    assert NEW_EMAIL not in after.text
 
 
 async def test_login_answers_a_bearer_token_and_the_configured_lifetime(
@@ -419,6 +478,7 @@ async def test_login_with_an_unstorable_username_is_the_same_401(
 
 async def test_register_with_an_unstorable_name_is_the_domains_422(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """WR-04: an unpaired surrogate in `full_name` is refused by the domain.
 
@@ -428,7 +488,8 @@ async def test_register_with_an_unstorable_name_is_the_domains_422(
     psycopg bound the INSERT - after a full Argon2 hash had been paid for by an
     unauthenticated request.
     """
-    client, _ = authenticated_client
+    await seed(session_factory, users=[a_user()])
+    client, app = authenticated_client
 
     response = await client.post(
         REGISTER,
@@ -448,6 +509,13 @@ async def test_register_with_an_unstorable_name_is_the_domains_422(
     assert list(body) == [*MEMBERS, "errors"]
     assert body["code"] == "validation_error"
     assert body["errors"] == {"field": "full_name"}
+
+    # Refused before the INSERT rather than after it: the directory holds the
+    # seeded caller alone, and nothing addressed `surrogate@example.com`.
+    after = await client.get(USERS, headers=await as_the_caller(app))
+
+    assert [entry["email"] for entry in after.json()] == [DEMO_EMAIL]
+    assert "surrogate@example.com" not in after.text
     assert "ud800" not in response.text
 
 
