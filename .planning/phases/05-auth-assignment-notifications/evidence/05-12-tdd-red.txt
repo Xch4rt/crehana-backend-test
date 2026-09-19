@@ -25,3 +25,23 @@ tests/architecture/test_routers_raise_no_http_exception.py:240: AssertionError
 =========================== short test summary info ============================
 FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_the_presentation_api_package_is_actually_scanned
 1 failed, 6 passed in 0.04s
+
+=== Task 2 RED: routers/assignments.py required by the scan, module does not exist yet ===
+$ .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py -q --no-cov
+        """
+        scanned = {_relative(path) for path in _scanned_modules()}
+
+        assert scanned
+>       assert REQUIRED_SCANNED_MODULES <= scanned
+E       AssertionError: assert frozenset({'a...sts.py', ...}) <= {'__init__.py...blem.py', ...}
+E
+E         Extra items in the left set:
+E         'routers/assignments.py'
+
+tests/architecture/test_routers_raise_no_http_exception.py:241: AssertionError
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_the_presentation_api_package_is_actually_scanned
+1 failed, 6 passed in 0.06s
+-> module created; gates re-run green:
+.......                                                                  [100%]
+7 passed in 0.02s
