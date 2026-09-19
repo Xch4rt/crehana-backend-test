@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-10-PLAN.md
-last_updated: "2026-09-19T06:52:33.000Z"
+status: verifying
+stopped_at: Completed 04-12-PLAN.md
+last_updated: "2026-09-19T07:12:54.542Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 38
-  completed_plans: 37
-  percent: 43
+  completed_plans: 38
+  percent: 57
 ---
 
 # Project State
@@ -28,10 +28,10 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 04 (task-lists-tasks) — EXECUTING
 Plan: 12 of 12
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-19
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Progress: [██████████] 97%
 | Phase 04 P09 | 10min | 3 tasks | 3 files |
 | Phase 04 P11 | 14min | 2 tasks | 3 files |
 | Phase 04 P10 | 12min | 3 tasks | 2 files |
+| Phase 04 P12 | 18min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -310,6 +311,13 @@ Recent decisions affecting current work:
 - [Phase 04-10]: GET /api/v1/task-lists/{id}/tasks issues THREE statements, not the two 04-10-PLAN's interfaces block predicted - the third is 04-03's visible_task_list guard, which the plan forgot to count; the measured number shipped with all three named in TASK_COLLECTION_STATEMENTS, because removing the guard would trade a security property of this same phase for a number in a plan, and D-17 is about invariance rather than a magic number
 - [Phase 04-10]: two status tests are named ..._rejects_an_unknown_value/_key rather than the plan's ..._is_422 - pytest exits 5, not 0, when -k matches nothing, so the plan's own prescribed names would have failed its own '-k rejects exits 0' clause; both halves of the either/or criterion are now literally true (the 04-09 precedent for renaming to contain the matched word)
 - [Phase 04-10]: requirement ticks TASK-01..TASK-08 deliberately NOT taken despite this plan's own frontmatter naming all eight - 04-12 is the last claimant, the eleventh consecutive plan in this phase to make the same call, though the behaviour those ticks rest on is now proved over HTTP
+- [Phase 04-12]: DECISION_LOG.md gains FOURTEEN ADRs (044-057), not the plan's enumerated nine - the eleven summaries handed forward five more (access.py and the dropped assignee clause, CreateTask's list-shaped refusal, the app.routes opacity, the HTTP harness design, the grouped LIST-03 statement with its three-statement D-17 finding); the 03-11 precedent of writing one too many rather than leaving one owed
+- [Phase 04-12]: the log stayed append-only mechanically - git diff DECISION_LOG.md | grep -c '^-' prints 1, the diff header alone - and every refining entry names its predecessor by id (ADR-046 refines ADR-020, ADR-049 refines ADR-009, ADR-045 names ADR-037, ADR-051 names ADR-015)
+- [Phase 04-12]: Roadmap Phase 4 SC-5 AMENDED, not reinterpreted: its 'no router imports SQLAlchemy' clause is true of both routers by inspection but is gated by nothing, and presentation as a whole deliberately imports SQLAlchemy in health.py and dependencies.py; the replacement names the two gates that exist and is stronger about HTTPException, since the AST gate refuses the import as well as the raise (the Phase 2 SC-1 and Phase 3 SC-4 precedent)
+- [Phase 04-12]: all fifteen requirement ticks taken (ARC-05, LIST-01..06, TASK-01..08), each against a command that was run and exited 0 with at least one test collected, each naming a test in a new re-verification table in REQUIREMENTS.md - eleven consecutive Phase 4 plans deferred them to the last claimant and this is where that convention pays out
+- [Phase 04-12]: the host and container gate runs disagree on coverage - 100.00% over 1155 statements vs 99.20% over 1267, same 599 tests - and the difference was explained rather than reported: the statement count is PEP 649 (visible in Phase 3 too at 730 vs 772), and the eleven missed lines are shown to be a measurement artifact by a labelled one-test probe in which test_create_returns_201_with_a_location_header_and_the_full_representation PASSES while coverage calls missed the only lines that set the header it asserts
+- [Phase 04-12]: nothing was suppressed in response to that discrepancy - a pragma is forbidden by CLAUDE.md and would turn an artifact into a permanent exemption; the finding is handed to Phase 6, which owns TEST-03 and therefore the honesty of the coverage number
+- [Phase 04-12]: the phase itself is deliberately NOT marked complete here - roadmap.update-plan-progress set the Phase 4 checkbox, its Progress-table status and its date, and all three were reverted by hand; plan-level progress (12/12) and the fifteen requirement ticks are this plan's, phase completion belongs to the orchestrator after verification
 
 ### Pending Todos
 
@@ -333,6 +341,8 @@ None yet.
 - `AI_WORKFLOW.md` must be appended to at the end of every phase; reconstructing it in Phase 7
   would undermine the project's own thesis.
 
+- Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same 599 tests - host 100.00% over 1155 statements, container 99.20% over 1267. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image) and is pre-existing, visible in Phase 3 at 730 vs 772. The eleven missed lines are the trailing statements of the 04-08 route handlers and are proven executed by the labelled probe in `.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to the same coverage measurement rather than argue the number down; no pragma and no omit.
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -343,6 +353,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:52:26.141Z
-Stopped at: Completed 04-10-PLAN.md
+Last session: 2026-09-19T07:12:19.804Z
+Stopped at: Completed 04-12-PLAN.md
 Resume file: None
