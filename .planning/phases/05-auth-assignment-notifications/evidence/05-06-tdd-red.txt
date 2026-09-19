@@ -1,0 +1,21 @@
+TDD RED - plan 05-06, Task 1: tests/unit/infrastructure/test_logging.py
+Run at 2026-09-19T15:42:09Z, with src/taskmanager/infrastructure/logging.py absent.
+
+$ .venv/bin/pytest tests/unit/infrastructure/test_logging.py -q --no-cov
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/unit/infrastructure/test_logging.py __________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/infrastructure/test_logging.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/infrastructure/test_logging.py:31: in <module>
+    from taskmanager.infrastructure.logging import (
+E   ModuleNotFoundError: No module named 'taskmanager.infrastructure.logging'
+=========================== short test summary info ============================
+ERROR tests/unit/infrastructure/test_logging.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.08s
+exit status: 2
