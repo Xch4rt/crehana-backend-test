@@ -3,9 +3,13 @@
 # No top-level `version:` key. It has been obsolete since Compose v2 and only
 # earns a deprecation warning on every single invocation.
 #
-# Only `db` is defined so far. The `api` and `test` services arrive with the
-# Dockerfile entrypoint and the /health route later in this phase; `db` lands
-# first because nothing under tests/integration/ can run without it.
+# Three services, two of which are long-running (D-14): `db` and `api` are what
+# `docker compose up` starts, and `test` is built from the Dockerfile's test
+# stage to be *invoked* rather than started.
+#
+# Configuration enters through `env_file: .env`, so the evaluator's setup is
+# `cp .env.example .env` once (D-15). No secret has a default anywhere in this
+# project, and this file adds none.
 
 services:
   db:
@@ -47,6 +51,70 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  api:
+    build:
+      context: .
+      target: runtime
+    # `env_file` entries are required by default, so a missing .env stops compose
+    # with an error naming this file instead of starting the API on defaults it
+    # does not have. That failure is the intended D-15 behaviour, not a rough
+    # edge: `cp .env.example .env` is step one of the README, and an application
+    # silently running on half a configuration is the outcome worth preventing.
+    env_file: .env
+    environment:
+      # `environment` takes precedence over `env_file` (verified against the
+      # Compose specification). That ordering is what lets a developer's .env keep
+      # `localhost` for `make test`, `make run` and host-side alembic while the
+      # container - which has no localhost database - talks to the `db` service
+      # over the compose network. Nobody has to edit .env between the two paths.
+      DATABASE_URL: postgresql+psycopg://taskmanager:taskmanager@db:5432/taskmanager
+    depends_on:
+      db:
+        # Half of the D-07 belt and braces. The other half is the bounded retry
+        # loop in docker/entrypoint.sh, which is what keeps the image correct
+        # under a plain `docker run` and after a database restart - neither of
+        # which this condition covers.
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # No `healthcheck:` block here, and that omission is deliberate rather than
+    # forgotten: Compose inherits the image's HEALTHCHECK unless the service
+    # overrides it, and the Dockerfile already declares one against /health
+    # (D-09). Repeating it here would create a second copy to keep in sync.
+    #
+    # No bind mount of src/, no auto-restart-on-edit watcher and no `user:`
+    # override either (D-16): `docker compose up` runs the production-like image,
+    # non-root, with the real entrypoint. The host-side fast loop is `make run`,
+    # which is why no docker-compose.override.yml ships with this repository.
+    # Those two flag names are described rather than spelled here on purpose, so
+    # that grepping this file for either of them stays a meaningful gate.
+
+  test:
+    build:
+      context: .
+      target: test
+    env_file: .env
+    environment:
+      # Both variables, and both pointing at taskmanager_test. DATABASE_URL is
+      # what Settings reads at import; TEST_DATABASE_URL is what the integration
+      # fixtures read. Setting only one would leave the other resolving to the
+      # application database, and the schema fixture runs `downgrade base`.
+      DATABASE_URL: postgresql+psycopg://taskmanager:taskmanager@db:5432/taskmanager_test
+      TEST_DATABASE_URL: postgresql+psycopg://taskmanager:taskmanager@db:5432/taskmanager_test
+    depends_on:
+      db:
+        condition: service_healthy
+    # This service is invoked, never started: `docker compose run --rm --build
+    # test`, which is exactly what `make docker-test` runs (D-14). Consequences,
+    # all intentional:
+    #   * no published ports - it serves nothing;
+    #   * no entrypoint override - the test stage's own `CMD ["pytest"]` is the
+    #     command, and the stage deliberately does not carry
+    #     docker/entrypoint.sh, because the pytest fixture owns the test schema
+    #     and must not race an `alembic upgrade head` run beside it (D-06);
+    #   * no compose profile - `docker compose run test` names the service
+    #     explicitly, so a profile would only add a flag the README must explain.
 
 volumes:
   pgdata:
