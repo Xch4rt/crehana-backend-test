@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-15-PLAN.md
-last_updated: "2026-09-19T18:15:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 plan 15 complete
+stopped_at: Completed 05-16-PLAN.md
+last_updated: "2026-09-19T18:45:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 plan 16 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 53
-  percent: 98
+  completed_plans: 54
+  percent: 100
 ---
 
 # Project State
@@ -26,18 +26,23 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 ## Current Position
 
-Phase: 05 (auth-assignment-notifications) — EXECUTING
+Phase: 05 (auth-assignment-notifications) — AWAITING VERIFICATION
 Plan: 16 of 16
-Status: Executing Phase 05 (plans 01-15 complete; 05-16 next)
-Last activity: 2026-09-19 -- Phase 05 plan 15 complete
+Status: Phase 05 plans 01-16 all complete. The phase is NOT marked complete here: the
+phase checkbox in ROADMAP.md, its Progress-table status cell and its completion date
+belong to the orchestrator after verification.
+Last activity: 2026-09-19 -- Phase 05 plan 16 complete
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
+
+(`total_plans` counts planned plans only. Phases 6 and 7 are not yet planned, so 54/54
+means "every plan that exists has been executed", not "the milestone is finished".)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 52
+- Total plans completed: 54
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -49,6 +54,7 @@ Progress: [██████████] 98%
 | 02 | 7 | - | - |
 | 03 | 11 | - | - |
 | 04 | 12 | - | - |
+| 05 | 16 | - | - |
 
 **Recent Trend:**
 
@@ -109,6 +115,7 @@ Progress: [██████████] 98%
 | Phase 05 P13 | 11min | 3 tasks | 4 files |
 | Phase 05 P14 | 34min | 3 tasks | 4 files |
 | Phase 05 P15 | 20min | 2 tasks | 2 files |
+| Phase 05 P16 | 30min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -718,6 +725,39 @@ Recent decisions affecting current work:
   entrypoint already makes about container logs, applied to a transcript in the repository
 - [Phase 05-15]: requirement ticks AUTH-03/AUTH-06/ASGN-02/NOTF-02 deliberately NOT taken - 05-16 is
   the last claimant, the seventeenth consecutive plan in this phase to make the same call
+- [Phase 05-16]: DECISION_LOG.md gains TWENTY-FIVE ADRs (059-083), not the plan's enumerated
+  fifteen - the fifteen Phase 5 summaries handed forward ten more, and writing only the enumerated
+  set would have satisfied the acceptance criterion while pushing the debt into Phase 7; the same
+  call 03-11 (21 for 12) and 04-12 (14 for 9) made
+- [Phase 05-16]: the log stays append-only mechanically rather than by intention - `git diff
+  DECISION_LOG.md | grep -c '^-'` prints 1, the diff header alone - and the three refining entries
+  name their predecessors by id: ADR-059 refines ADR-055, ADR-075 refines ADR-045, ADR-076 refines
+  ADR-054
+- [Phase 05-16]: ADR-066 and ADR-067 are written as concessions in those words. ADR-066 says the
+  register 409 is an enumeration oracle AUTH-01 requires and states the bound (the error carries no
+  address, GET /users already discloses every address to authenticated callers, so the residual
+  leak is to unauthenticated ones); ADR-067 says Argon2's ~25 ms floor is an incidental throttle
+  and not a control. Neither is described as mitigated
+- [Phase 05-16]: CLAUDE.md § Project Rules records the widened HTTPException AST gate scope (all of
+  presentation/api, exempting errors/handlers.py, with REQUIRED_SCANNED_MODULES as the non-vacuity
+  guard) and the ADR-058 write-path locking rule, each transcribed from the gate file and naming
+  it; the auto_error=True consequence is written beside the first, because that is the shape a
+  future agent would otherwise reach for
+- [Phase 05-16]: ROADMAP Phase 5 SC-1 amended - it credited "use Swagger's Authorize button
+  successfully", which nobody in this project does: no human ran the browser flow and no test
+  drives one. It now names the published contract and test_security_scheme.py, the gate that reads
+  it. The Phase 2 SC-1 / Phase 3 SC-4 / Phase 4 SC-5 precedent; the other four criteria were
+  re-read and are accurate as written
+- [Phase 05-16]: all twelve requirement ticks taken (AUTH-01..06, ASGN-01..03, NOTF-01..03), each
+  re-verified by running its command inside the gate capture rather than inherited from a plan
+  header, after fifteen consecutive plans deferred them
+- [Phase 05-16]: the phase is deliberately NOT marked complete - the ROADMAP phase checkbox, the
+  Progress table's status cell and its completion date are the orchestrator's after verification;
+  only the sixteenth plan box and the 16/16 count were taken here
+- [Phase 05-16]: STATE.md and ROADMAP.md were updated by hand in their existing conventions rather
+  than through the SDK state handlers, as every plan in this phase did, because those handlers
+  regressed both files in all sixteen plans (a phase-based percent, a reset Status line, injected
+  blank lines, a blanked progress row, a bogus `[Phase ?]:` decision prefix)
 
 ### Pending Todos
 
@@ -729,10 +769,12 @@ None yet.
 
 [Issues that affect future work]
 
-- Phase 5 (JWT/hashing libraries, 403-vs-404 matrix) is flagged by research as needing
-  `/gsd:plan-phase --research-phase`. The same flag on Phase 3 (async session lifecycle,
-  transactional test fixtures, Alembic `env.py`) is discharged: the phase was planned with
-  `--research-phase` and all five of its open questions are resolved in `03-RESEARCH.md`.
+- Both research flags are now discharged. Phase 5 (JWT/hashing libraries, the 403-vs-404
+  matrix) was planned with `/gsd:plan-phase --research-phase`; `05-RESEARCH.md` resolved it,
+  and three of its findings changed the shape of the plan (the bearer scheme that raises no
+  `HTTPException`, the INFO line uvicorn was dropping entirely, and D-11's statement-count
+  consequence being conditional on the harness). The same flag on Phase 3 (async session
+  lifecycle, transactional test fixtures, Alembic `env.py`) was discharged in that phase.
 
 - `DECISION_LOG.md` ADR-019 still claims "the workflow has never run on a real runner", which
   has been false since plan 01-08 (CI run 35301518310 concluded success on the first attempt).
@@ -741,7 +783,7 @@ None yet.
 - `AI_WORKFLOW.md` must be appended to at the end of every phase; reconstructing it in Phase 7
   would undermine the project's own thesis.
 
-- Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same 599 tests - host 100.00% over 1155 statements, container 99.20% over 1267. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image) and is pre-existing, visible in Phase 3 at 730 vs 772. The eleven missed lines are the trailing statements of the 04-08 route handlers and are proven executed by the labelled probe in `.planning/phases/04-task-lists-tasks/evidence/04-12-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to the same coverage measurement rather than argue the number down; no pragma and no omit.
+- Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same suite. **Re-measured by plan 05-16 on the closing gate: the same 998 tests give host 100.00% over 1619 statements and container 99.06% over 1772, with 18 missed.** The Phase 4 figures were host 100.00% over 1155 vs container 99.20% over 1267 with 11 missed, and Phase 3's were 730 vs 772 - so the divergence is pre-existing and has widened with the number of route handlers. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image), and the 18 missed lines are again the trailing statements of route handlers - `routers/assignments.py` 147/204/252, `routers/auth.py` 152-153/234, `routers/task_lists.py` 161-164/197/226/260, `routers/tasks.py` 170-173/218/251/292/366, `routers/users.py` 99 - every one of which the integration suite drives over HTTP and the host run reports covered. Both runs are in `.planning/phases/05-auth-assignment-notifications/evidence/05-16-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to one measurement rather than argue the number down; no pragma and no omit.
 
 ## Deferred Items
 
@@ -753,6 +795,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T18:15:00.000Z
-Stopped at: Completed 05-15-PLAN.md
+Last session: 2026-09-19T18:45:00.000Z
+Stopped at: Completed 05-16-PLAN.md
 Resume file: None
