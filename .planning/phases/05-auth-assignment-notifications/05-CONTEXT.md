@@ -196,6 +196,21 @@ verification (AUTH-08), roles beyond owner/assignee, real email delivery, pagina
   `FakeUserRepository.list_all` is brought into line with the adapter's `created_at, id` order,
   falsified the way 04-06 did for the task fake.
 
+- **D-26:** `Settings.jwt_secret` minimum length rises from 16 to **32** characters. PyJWT emits
+  `InsecureKeyLengthWarning` below 32 bytes for HS256 and `pytest.ini` has
+  `filterwarnings = error`; every existing secret (local `.env`, `.env.example`, CI) is already
+  at least 32, so nothing breaks. `.env.example`, `test_short_secret_is_rejected` and
+  `test_env_example_documents_every_field` follow.
+- **D-27 (pattern-map corrections to the research, to be honoured by plans):**
+  `FakePasswordHasher`, `FakeTokenService`, `FakeEmailNotifier` and `FrozenClock` **already
+  exist** in `tests/unit/application/fakes.py` with conformance assertions in `test_ports.py` —
+  plans extend them (`dummy_verify`, `list_for_assignee`, the `list_all` ordering fix), they do
+  not write new ones, and the in-memory notifier keeps its name `FakeEmailNotifier`.
+  `presentation/api/dependencies.py` reads nothing from settings: security adapters are built
+  once in the composition root into a typed container on `app.state` (the `DatabaseResources`
+  shape), narrowed once — no per-request `get_settings()` and no per-request dummy-hash
+  computation.
+
 ### Claude's Discretion
 - JWT claims beyond `sub` and `exp` (for example `iat`), clock-skew leeway, and the exact token
   response shape (`access_token`, `token_type: "bearer"`, optionally `expires_in`).
