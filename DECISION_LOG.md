@@ -778,3 +778,855 @@ sets differ (290 names against 297) and the test passes on both.
   rather than resolved, so the test never has to model Python's import system, only read it.
 
 ---
+
+## ADR-023: per-owner task-list name uniqueness is case-sensitive
+
+**Context**
+Three artifacts disagreed about one index. `02-CONTEXT.md` D-12 specifies a plain
+`UNIQUE (owner_id, name)` on `task_lists`. The `TaskList` entity docstring and
+`tests/unit/application/fakes.py` both described it as `(owner_id, lower(name))`, and the fake
+implemented a case-folded comparison. One of the three had to be wrong before any repository
+could be written against it, because D-13's `IntegrityError` translation keys on the constraint
+and the in-memory fake is the behavioural model the SQLAlchemy adapter has to match.
+
+**Options**
+
+- **`lower(name)`, matching the two comments** — superficially friendlier, and symmetric with
+  the `users` index. Rejected on a concrete consequence, not on the word count of the
+  specification: `TaskList` performs no case folding on its name, so a case-insensitive index
+  would make PostgreSQL refuse `alpha` for an owner who already has `Alpha` — a rejection the
+  domain has no concept of, surfacing as a 409 for two values the entity considers distinct.
+- **Plain `UNIQUE (owner_id, name)`, matching D-12** — the database defends exactly the rule the
+  entity states and nothing more.
+
+**Decision**
+D-12 wins. `uq_task_lists_owner_id_name` is `UNIQUE (owner_id, name)`, case-sensitive. The
+entity docstring, the model comment and the fake were corrected in plan 03-01 (`1b3b65e`) so all
+three now say the same thing.
+
+The deliberate contrast is `uq_users_email_lower`, a unique index on `lower(email)`. The two
+differ because the two entities differ: `User.__post_init__` lowercases the address before it can
+ever be stored, so the expression index defends a rule the entity already enforces and can never
+reject a value the domain accepts. `TaskList` folds no case, so the same shape there would
+overreach.
+
+**Consequences**
+
+- `Alpha` and `alpha` are two lists for one owner. That is the domain's answer, and it is now
+  stated in the entity docstring rather than left for a reviewer to infer from an index.
+- The asymmetry between the two indexes will look like an oversight to anyone who reads the
+  schema alone. It is commented at both `__table_args__` entries and in `constraints.py`, and it
+  is recorded here so the question has an answer that is not "nobody noticed".
+- It is proven at the server, not at the model:
+  `tests/integration/test_constraints.py` accepts `Groceries` beside `groceries` for one owner
+  and refuses `OWNER@EXAMPLE.TEST` after `owner@example.test` in the same file, so the contrast
+  is one pair of tests rather than one sentence.
+
+---
+
+## ADR-024: `users.updated_at` and `task_lists.description` are in the baseline revision
+
+**Context**
+`03-CONTEXT.md` D-10 enumerates the baseline columns and omits both `users.updated_at` and
+`task_lists.description`. The Phase 2 entities declare both. Read literally, D-10 would have
+produced a baseline schema the mappers could not round-trip.
+
+**Options**
+
+- **Ship D-10 literally and add a second revision later** — defensible as "follow the
+  specification", and it would have produced a second migration file, which superficially
+  demonstrates that migrations are versioned. Rejected twice over: the phase context explicitly
+  rejects a revision written to *show* versioning, and until that revision existed the mappers
+  could not persist two fields the entities require.
+- **Treat D-10's column list as an incomplete transcription of the entities and correct it in
+  place.**
+
+**Decision**
+Both columns are in `0001_baseline`. D-10's intent is the schema the entities already describe;
+its column list was a summary, not a specification, and the entities are the authority.
+
+**Consequences**
+
+- There is no fake second migration. A second revision will appear in this repository the first
+  time a genuine change requires one, which is the only way its presence means anything.
+- The mapper round-trip tests in `tests/unit/infrastructure/test_mappers.py` can assert every
+  field of all three aggregates, rather than carrying two known gaps with a note attached.
+- Anyone comparing `03-CONTEXT.md` D-10 against the shipped schema will find two extra columns.
+  That discrepancy is deliberate and is recorded here, because an unexplained difference between
+  a context document and a migration is exactly the kind of thing that reads as drift.
+
+---
+
+## ADR-025: a revision file spells its constraint names as literals
+
+**Context**
+`src/taskmanager/infrastructure/db/constraints.py` holds the twelve D-12 constraint names as
+`Final` constants, and it exists precisely so that one name lives in one place — D-13's
+`IntegrityError` translation compares `diag.constraint_name` against those constants. Plan 03-01
+handed forward a request that `0001_baseline` import them too, so the migration and the
+translation could not disagree.
+
+**Options**
+
+- **`from taskmanager.infrastructure.db.constraints import UQ_TASK_LISTS_OWNER_ID_NAME`** inside
+  the revision. Rejected: a revision is a frozen record of what a database was migrated *to*. A
+  name read from a constant silently rewrites that record the day the constant is renamed —
+  freshly created databases would get the new name while every existing database kept the old,
+  and nothing would report it.
+- **Literal strings in the revision, with the agreement checked elsewhere.**
+
+**Decision**
+`migrations/versions/0001_baseline.py` carries literal constraint names. The link plan 03-01
+wanted is not lost; it runs through two existing hops instead of one import:
+`tests/unit/infrastructure/test_models.py` asserts all twelve constants against the DDL the
+models render, and `alembic check` asserts the live schema against those same models.
+
+**Consequences**
+
+- A rename applied to the models but not to the revision is caught by `alembic check`; a rename
+  applied to the schema but not to `constraints.py` is caught by
+  `tests/integration/test_constraints.py`, which asserts constraint *names* through
+  `violated_constraint()` rather than asserting `IntegrityError` alone.
+- Two spellings of the expression index coexist by design — `sa.literal_column("lower(email)")`
+  in the revision against `text("lower(email)")` in the model — and they never meet, because
+  `alembic check` compares the reflected database to the model metadata and never to the revision
+  file.
+- **Assumption A1 is settled empirically, and the answer is split.** RESEARCH A1 assumed Alembic
+  autogenerate is blind to `CHECK` constraints. Observed in plan 03-02: autogenerate *did* emit
+  `ck_tasks_status`, `ck_tasks_priority` and `ck_tasks_completed_at_matches_status` with the
+  right names and the right SQL, because the blindness applies to *comparing* an existing table,
+  not to rendering one being added for the first time — none was hand-written. But `alembic
+  check` still cannot notice one disappearing later, so DB-04 rests on the insert-and-refuse
+  tests of plan 03-05, and the migration says so at the constraint list. On the `lower(email)`
+  expression index the observed outcome was `No new upgrade operations detected.` — Alembic 1.20
+  does compare PostgreSQL expression indexes, reported no drift, and emitted no warning, which
+  mattered because `filterwarnings = error` would have turned one into a failure.
+
+---
+
+## ADR-026: the `postgres:18-alpine` data volume mounts at `/var/lib/postgresql`
+
+**Context**
+Every pre-18 PostgreSQL compose example — including this project's own research, Pattern 6 —
+mounts the named volume at `/var/lib/postgresql/data`. The image this project pins is
+`postgres:18-alpine`.
+
+**Options**
+
+- **`/var/lib/postgresql/data`**, the convention an evaluator will have seen everywhere.
+  Rejected on observation: `postgres:18-alpine` exits 1 on it with a multi-paragraph error
+  — *"in 18+, these Docker images are configured to store database data in a format which is
+  compatible with pg_ctlcluster (specifically, using major-version-specific directory names)
+  ... Counter to that, there appears to be PostgreSQL data in: /var/lib/postgresql/data (unused
+  mount/volume)"*. The image declares `VOLUME /var/lib/postgresql` and sets
+  `PGDATA=/var/lib/postgresql/18/docker`.
+- **`/var/lib/postgresql`**, the path the image itself declares.
+
+**Decision**
+`pgdata:/var/lib/postgresql`. The compose file carries both the reason and the observed error
+text, so the next reader does not re-derive it from pre-18 documentation.
+
+**Consequences**
+
+- Left unfixed, this would have failed `docker compose up` — the first command of this
+  project's own README — on the evaluator's first attempt. It is recorded as an ADR rather than
+  as a comment because the correct value contradicts almost every example in circulation.
+- The cold-volume rehearsal is the only run that exercises it, and it is the one that was
+  performed: `down -v` → `up -d db` → `db healthy`, with `docker-entrypoint-initdb.d` visible in
+  the container log creating the second database.
+
+---
+
+## ADR-027: `test_database_url` is a field on the production `Settings` object
+
+**Context**
+Integration tests need a DSN for `taskmanager_test`, and `.env.example` is the file an evaluator
+copies (`cp .env.example .env`). Two Phase 1 gates constrain how that key may be introduced:
+`Settings` is configured `extra="forbid"`, so an undeclared key in a copied `.env` is a
+boot-time `ValidationError`; and `test_env_example_documents_every_field` asserts *exact set
+equality* between `Settings.model_fields` and the keys in `.env.example`, not a subset.
+
+**Options** (the three from RESEARCH Pitfall 6)
+
+- **(b) Keep the key out of both files and read it with `os.environ` in the integration
+  conftest.** Rejected: it contradicts the phase context's own canonical-reference note, and it
+  leaves the variable documented nowhere except a README — which is where configuration goes to
+  be forgotten.
+- **(c) Loosen the parity assertion from set equality to a subset.** Rejected outright: it
+  weakens an existing gate to accommodate a new key, which is the wrong direction for a
+  repository whose entire thesis is that its gates are real.
+- **(a) Declare `test_database_url: str | None = None` on `Settings` and add
+  `TEST_DATABASE_URL` to `.env.example`.**
+
+**Decision**
+Option (a). The rule that matters is one sentence: **the key exists in both places or in
+neither.** `cp .env.example .env && docker compose up` keeps working, and the parity gate was
+not touched.
+
+**Consequences**
+
+- A test-only key lives on the production settings object. That is mildly wrong and it is
+  written down rather than hidden — the field comment states that it is never read in
+  production, and that declaring it is what stops a copied `.env` from becoming a *production*
+  failure rather than a test failure.
+- The only new default is `None`, on the one field that touches the database without being a
+  credential. `database_url` and `jwt_secret` still have no default at all.
+- The fallback is a library call, never a substring edit:
+  `make_url(url).set(database=TEST_DATABASE_NAME).render_as_string(hide_password=False)`. The
+  compose credential pair puts the word `taskmanager` in the user, the password *and* the
+  database name, so a `str.replace` would rewrite three occurrences where exactly one must
+  change — which is a test, not a warning.
+- The compose form of `DATABASE_URL` is documented as a **commented** line. An uncommented
+  second assignment would contribute the same key name and sail through the parity gate, while
+  `python-dotenv` reads the last assignment and the application quietly dials a host that does
+  not exist outside the compose network.
+
+---
+
+## ADR-028: WR-05 — a naive datetime read from the database is an infrastructure fault, refining ADR-021's classification of D-14
+
+**Context**
+The Phase 2 review raised **WR-05**: server-side clock and persistence faults surface to the
+caller as a `422 validation_error` naming a field no request contains. The fix it proposed
+contradicted locked decision D-14 of `02-CONTEXT.md` — "a naive `datetime` reaching the domain is
+a `ValidationError`" — whose HTTP consequence is decided in **ADR-021** (a domain
+`ValidationError` is 422, on the well-formed-but-semantically-invalid reading). The review fix
+therefore **skipped** WR-05 and deferred it to this phase, on the grounds that changing the error
+type for four of the five temporal fields is a decision for the user and an ADR, not for a
+review pass. Phase 3 is the first phase in which the adapters that can produce a naive value —
+the clock and the mappers — actually exist.
+
+**Options**
+
+- **Refine by error type**, as WR-05 proposed: split `require_utc` so internal temporal values
+  (`now`, `created_at`, `updated_at`, `completed_at`) raise a `TypeError` while only `due_date`
+  keeps `ValidationError`. Rejected: it changes five existing domain tests, reverses a locked
+  decision, and alters the observable HTTP contract of the domain layer for values that reach it
+  from three different directions.
+- **Do nothing** and accept that a schema regression is reported as the caller's validation
+  problem. Rejected: that *is* the defect.
+- **Refine by scope.** Leave D-14 untouched at the domain boundary, and add a second, earlier
+  check at the infrastructure boundary.
+
+**Decision**
+D-14 is refined by **scope**, not by error type, exactly as RESEARCH Open Question 5 recommends.
+
+A naive datetime *reaching the domain* is still a `ValidationError` — no domain test changed and
+no HTTP contract moved. In addition, every datetime read *from a database row* passes through
+`_aware()` in `src/taskmanager/infrastructure/db/mappers.py`, which raises
+`NaiveDatetimeFromDatabaseError(column=...)` — a plain `RuntimeError`, **deliberately outside the
+`DomainError` hierarchy**.
+
+This **refines ADR-021** rather than overturning it. ADR-021's claim — one status per meaning,
+422 for well-formed-but-invalid — is unchanged; what narrows is the set of faults that can reach
+it, because a schema regression is now intercepted one layer earlier and never becomes a domain
+error at all.
+
+**Consequences**
+
+- A schema that stopped promising `TIMESTAMP WITH TIME ZONE` surfaces as Phase 2's fixed 500
+  body with no message, which is the honest answer for this process's own fault — rather than a
+  422 naming a column no request contains, sending a client hunting for a mistake they did not
+  make.
+- Four tests pin the classification, one per aggregate plus one nullable column, and one of them
+  asserts `not isinstance(raised, DomainError)` explicitly, so the type cannot be quietly
+  re-parented into the hierarchy later.
+- The guard is a **tripwire, not a live path**, and that is now a fact rather than an assumption.
+  RESEARCH A4 assumed psycopg 3 returns aware datetimes for `timestamptz`;
+  `tests/integration/test_schema.py` round-trips an aware UTC value with non-zero microseconds
+  and gets back an equal, aware, zero-offset instant. The branch is unreachable from a correct
+  schema, which is the point of having it.
+- The cost is one `if` on every timestamp read from every row, on all three aggregates including
+  the nullable columns. One overloaded private guard serves both mandatory and nullable columns,
+  so no call site needs a `cast` and none can silently widen a required field into an optional
+  one.
+
+---
+
+## ADR-029: `make test` requires a reachable PostgreSQL from this phase onward
+
+**Context**
+Before Phase 3 the whole suite ran with nothing installed but Python. From plan 03-05 the suite
+includes integration tests against a real server, and `pytest.ini`'s `--cov-fail-under=75` is
+computed over the whole run. A suite that quietly skipped the database half would report green
+having exercised none of the persistence layer.
+
+**Options**
+
+- **Auto-skip the integration tests when the database is unreachable** — the friendliest
+  behaviour, and the most common. Rejected: on a graded deliverable, a green run that proves
+  nothing is worse than a red one that says what to do. It would also make the coverage number
+  meaningless, since the modules those tests cover would drop out of the denominator's numerator
+  while staying in the denominator.
+- **A separate `make test-unit` / `make test-integration` split** — considered; `-m "not
+  integration"` already provides it for the inner loop, and the `integration` marker is
+  informational rather than a switch that changes what `make test` runs (D-05).
+- **Fail once, fast, with an instruction** (D-03).
+
+**Decision**
+`make test` runs the whole suite and requires PostgreSQL. A session-scoped fixture opens one
+connection, and on failure the entire run produces three lines and nothing else:
+
+```
+PostgreSQL is not reachable at postgresql+psycopg://x:***@127.0.0.1:1/x.
+Start it with `make up`, or run the whole suite inside Docker with `make docker-test`.
+Underlying error: OperationalError: (psycopg.OperationalError) connection failed: ...
+```
+
+**Consequences**
+
+- The failure message is part of the deliverable, and getting it right needed a non-obvious
+  shape: `pytest.fail` is called *after* the `except` block, never inside it. Raised inside, the
+  `Failed` carries the driver error in `__context__` and pytest prints two chained tracebacks
+  above the one line of instruction — the exact outcome D-03 exists to prevent. Both forms were
+  run and compared.
+- The URL in the message is rendered with `render_as_string()`'s **masking default**; a run with
+  a literal password greps zero matches. `hide_password=False` appears exactly once in the
+  repository, at the one call that must produce a live connection string.
+- The destructive schema fixture refuses any database whose name is not `taskmanager_test`
+  *before opening a connection*, because it runs `downgrade base`, which drops every table. The
+  check sits after the reachability probe so an unreachable host still produces the instruction
+  above rather than a name complaint.
+- `make docker-test` remains the zero-host-setup path and is not a fallback of last resort: it
+  runs the identical suite, integration tests included, against the compose database.
+
+---
+
+## ADR-030: `IntegrityError` translation is one private helper per adapter
+
+**Context**
+D-13 requires each repository to catch `sqlalchemy.exc.IntegrityError`, read the violated
+constraint name, and raise the same `DomainError` the use case's pre-check would have raised.
+Both write paths of every adapter — `add()` and `update()` — can raise it, so the obvious
+implementation is the same `try`/`except` block written twice per adapter.
+
+**Options**
+
+- **The block copied into `add()` and `update()`** — what the research sketched. Rejected on two
+  grounds. First, two copies are two places for the constraint-name comparison to age
+  separately. Second, and concretely: the foreign-key branch cannot fire from `update()`,
+  because `apply_task_list_to_row` deliberately does not write `owner_id` (ownership is fixed at
+  creation). A copied block would therefore have shipped a branch no test could reach, which on
+  a project holding 100% coverage means either a forbidden `pragma` or a permanently red number.
+- **One private `NoReturn` helper per adapter, called from every write path.**
+
+**Decision**
+Each adapter owns a `_refused(error, entity)` helper annotated `NoReturn`. It compares
+`violated_constraint(error)` against the `Final` constants and re-raises the original exception
+unchanged when it recognises nothing. It is not syntactically inside an `except` clause, so
+flake8-bugbear's B904 has nothing to say about the bare re-raise, and mypy knows the call does
+not fall through.
+
+Every write path calls `flush()` inside the `try`. Without it the `IntegrityError` surfaces at
+the use case's `commit()`, where the *unit of work* is holding it and D-13's "translate in the
+repository" becomes impossible. `autoflush=False` on the session factory is what keeps that
+explicit rather than accidental.
+
+**Consequences**
+
+- **Assumption A2 is settled, and it closed the project's last coverage gap.** RESEARCH A2
+  assumed psycopg populates `diag.constraint_name` for foreign-key violations and not only for
+  unique and check ones. Plan 03-04 left the positive branch of `violated_constraint()`
+  deliberately uncovered — a populated psycopg `Diagnostic` has no public constructor, and a
+  hand-built stand-in would have passed against a broken implementation too. Plan 03-05's
+  `test_a_task_in_a_missing_list_is_refused` asserts
+  `violated_constraint(error) == FK_TASKS_TASK_LIST_ID_TASK_LISTS` against a real server
+  response, which settled A2 and took coverage over `src/taskmanager` to 100.00%.
+- **A savepoint flushes what is already pending, and that decides where a deliberately bad row
+  must be created.** The first version of `test_an_unrecognised_integrity_error_is_re_raised`
+  added the malformed row to the session and *then* opened `begin_nested()` around the
+  repository call. It passed — and the per-test coverage row showed `add()` entirely uncovered,
+  because entering the savepoint flushed the pending row and PostgreSQL refused it there. The
+  cause of an expected refusal now goes **inside** the savepoint. This is recorded as a rule
+  rather than as an anecdote because every refusal test in this phase and in Phase 4 depends on
+  it, and the failure it produces is a green test that never reached the code under test.
+- An expected `IntegrityError` must run inside `connection.begin_nested()` at all, because a
+  refused statement aborts the transaction the isolation fixture owns and every later statement
+  answers `current transaction is aborted` until it is unwound.
+- Nothing translated carries a constraint name or any SQL. The email conflict takes no argument
+  at all, so there is nothing a call site could leak by being helpful.
+
+---
+
+## ADR-031: the three `tasks` CHECK constraints are deliberately not translated, refining D-13
+
+**Context**
+D-13 says repositories translate database rejections into domain errors. `tasks` carries three
+CHECK constraints — `ck_tasks_status`, `ck_tasks_priority` and
+`ck_tasks_completed_at_matches_status` — each of which duplicates an invariant
+`Task.__post_init__` already enforces.
+
+**Options**
+
+- **Translate them, for uniformity with the unique and foreign-key constraints.** Rejected: a
+  CHECK refusal would become a 422 pointing at a field the request never contained, because a
+  value outside the enumeration cannot come from a `Task` at all.
+- **Leave them untranslated and say nothing** — indistinguishable from an oversight.
+- **Leave them untranslated and make the absence a test.**
+
+**Decision**
+The three CHECK constraints are absent from every `_refused()` helper. A refusal from one of them
+means a row reached the database without passing through the entity, which is a defect in this
+process rather than a request a client can fix, and it must reach Phase 2's catch-all as the
+fixed 500.
+
+`test_a_check_constraint_violation_is_not_translated` asserts both that the raw `IntegrityError`
+escaped *and* that `violated_constraint()` names `ck_tasks_status` — the exception type alone
+would also pass for a violation the test never intended to cause.
+
+**Consequences**
+
+- The deliberate gap is pinned rather than merely left. A future contributor who "fixes" the
+  asymmetry by adding the branch turns that test red, with the reasoning one file away.
+- The constraints still earn their place: they are the backstop that makes the invariant true of
+  rows written by a migration, a seed script or a future bulk import — none of which goes
+  through `Task.__post_init__`.
+- The mapper re-validates on the way back out (`TaskStatus(row.status)`), so a value that
+  somehow got past the CHECK raises at the boundary instead of rehydrating into a live entity.
+
+---
+
+## ADR-032: the unit of work refuses use outside its block, and annotates its repositories with the port types
+
+**Context**
+`SqlAlchemyUnitOfWork` is the transaction boundary ARC-08 names, and Phase 4 will hand instances
+out through a FastAPI `Depends`. Two shapes in the research would have compiled and shipped
+wrong.
+
+**Options**
+
+- **RESEARCH Pattern 3's `self._session = ...` created in `__aenter__` only.** It type-checks.
+  It also makes `await uow.commit()` on an unopened unit of work raise
+  `AttributeError: 'SqlAlchemyUnitOfWork' object has no attribute '_session'` — a message about a
+  private field, from a class whose entire contract is "the boundary is the `async with`". A
+  router that forgot the block is a plausible Phase 4 mistake and deserves a sentence, not a
+  traceback about an attribute.
+- **Annotating the repository attributes with their concrete adapter types** — the natural
+  reading. Rejected on evidence: it was tried, and mypy reported `Following member(s) of
+  "SqlAlchemyUnitOfWork" have conflicts: tasks: expected "TaskRepository", got
+  "SqlAlchemyTaskRepository"` at the conformance binding, because a *mutable* Protocol member is
+  checked invariantly. Phase 2's `FakeUnitOfWork` had already recorded the same constraint.
+
+**Decision**
+`_session: AsyncSession | None` is declared in `__init__` and read through an `_open_session`
+property that raises `RuntimeError` naming the rule. `__aexit__` sets it back to `None`, so a
+block is a real lifecycle rather than an attribute that lingers. The three repository attributes
+are annotated with the **port** types (`self.tasks: TaskRepository`), and that annotation is
+load-bearing rather than decorative.
+
+**Consequences**
+
+- The refusal branch has its own unit test, so the safeguard is exercised rather than merely
+  written, and coverage stayed at 100%.
+- Every transaction proof asserts a **read**, never a counter. `commits == 1` is equally true of
+  a unit of work whose `__aexit__` rolled the commit straight back, which is precisely the WR-06
+  failure the suite exists to catch.
+- One test in the module reads from a **second, independent connection**. Every other read
+  shares the fixture's connection, so that is the only vantage point from which a
+  `join_transaction_mode` degraded to `rollback_only` would be visible — and the falsification on
+  disk (commenting out `uow.commit()` turns it red) is what proves the savepoint mode is really
+  working rather than silently swallowing the commit.
+- `__aexit__` returns `None` explicitly. A true return would swallow the exception that left the
+  block and let a failed use case answer 200.
+
+---
+
+## ADR-033: one runtime version string, `taskmanager.__version__`
+
+**Context**
+The application version appeared as a literal in three places, and `/health` (D-08) needed a
+fourth. Three copies of a string that must agree is a defect waiting for a release.
+
+**Options**
+
+- **`importlib.metadata.version("taskmanager")`** — the textbook answer, and it leaves one
+  literal instead of two. Rejected on a concrete failure: it raises `PackageNotFoundError` in
+  exactly the environment `pytest.ini`'s `pythonpath = src` exists to create — a bare checkout
+  where the package has not been installed. That path is a deliberate safety net (ADR-003), so a
+  runtime constant that breaks it is not an improvement.
+- **A module constant, with the packaging copy bound to it by a test.**
+
+**Decision**
+`__version__` lives in `src/taskmanager/__init__.py`, which is now the project's only non-empty
+package `__init__` — the docstring says so and says why, because an unexplained exception to a
+stated convention reads as an oversight. `tests/unit/test_version.py` reads `pyproject.toml`
+with `tomllib` and asserts the two agree.
+
+**Consequences**
+
+- Two copies remain, and that is accepted rather than pretended away: a build backend cannot
+  import the package it is about to build. The parity test is what makes two copies acceptable,
+  in the same spirit as `test_env_example_documents_every_field`.
+- `grep -rn '0\.1\.0' src tests` matches exactly one source line, so the next bump is one edit
+  and a red test if it is forgotten.
+
+---
+
+## ADR-034: dependencies are injected as `Annotated[T, Depends(...)]`, never as an argument default
+
+**Context**
+`.flake8` carries `extend-immutable-calls = fastapi.Depends, fastapi.Query, ...` — added in Phase
+1 precisely so flake8-bugbear's B008 would not fire on FastAPI's dependency injection, and
+`03-PATTERNS.md` concluded from that entry that the default-argument form was safe. It is not.
+
+**Options**
+
+- **`engine: AsyncEngine = Depends(get_engine)`**, the form the research and the older FastAPI
+  documentation use. It failed `make lint` with
+  `health.py:86:47: B008 Do not perform function calls in argument defaults`: bugbear matches the
+  call name **as written in the source**, and the whitelist entry names the *dotted* spelling
+  `fastapi.Depends`, which this project never uses because it imports by name.
+- **Add a bare `Depends` to `extend-immutable-calls`.** Rejected: it loosens a linter rule for
+  the whole repository to accommodate one call site.
+- **`Annotated[AsyncEngine, Depends(get_engine)]`.**
+
+**Decision**
+The annotated form, aliased at module level (`EngineDependency`, and Phase 4's
+`UnitOfWorkDependency`). It needs no configuration change, it is the shape FastAPI's own
+documentation now leads with, and the alias gives Phase 4 a name to reuse rather than a call to
+repeat.
+
+**Consequences**
+
+- **This is the shape Phase 4's routers must copy.** A handler written with the default-argument
+  form will fail `make lint`, and the reason will look like a linter misconfiguration rather
+  than what it is.
+- No `.flake8` change was made, so B008 stays live everywhere else in the repository.
+- `03-PATTERNS.md`'s prediction that B008 could not fire is wrong, and `make lint` proved it.
+  Recorded here because a planning document that has been falsified by execution is worth
+  naming once rather than quietly ignoring.
+
+---
+
+## ADR-035: the engine is built in the composition root and disposed in the lifespan
+
+**Context**
+The project's own research contradicted itself. `.planning/research/STACK.md` sketches a
+module-level `create_async_engine(...)` in `infrastructure/db/engine.py`;
+`.planning/research/ARCHITECTURE.md` Anti-Pattern 10 forbids a module-level global engine.
+`03-CONTEXT.md` flagged the contradiction and handed the resolution to this phase.
+
+**Options**
+
+- **A module-level engine.** Rejected with a concrete consequence rather than a rule number: it
+  would read `Settings` at import time, so `import taskmanager.infrastructure.db.engine` would
+  raise everywhere `DATABASE_URL` is absent — mypy's environment, import-linter's, and a plain
+  `docker build`. That is the same argument `main.py` already makes for not having a
+  module-level `app` object.
+- **Builders in `engine.py`, an engine owned by `create_app()`.**
+
+**Decision**
+`engine.py` exports `create_engine`, `create_session_factory` and `create_database_resources` and
+**instantiates nothing** — an AST assertion in the plan's acceptance criteria proves there is not
+a single module-level assignment in the file. `create_app()` builds `DatabaseResources`, stores
+it on `app.state`, and disposes the engine in the lifespan's shutdown half, closing over the
+value it just built rather than reading it back untyped.
+
+`pool_pre_ping=True` on the engine; `expire_on_commit=False` and `autoflush=False` on the session
+factory. `expire_on_commit=False` is mandatory, not a preference: the default triggers a lazy
+refresh after `commit()` that raises `MissingGreenlet` under async.
+
+**Consequences**
+
+- `create_app()` stays constructible with a fake DSN and no database, which `tests/conftest.py`
+  has silently depended on since Phase 1. That dependency is now a test:
+  `test_creating_the_app_opens_no_connection` builds the real application against a dead DSN and
+  asserts zero connections checked out.
+- `app.state` carries exactly one typed object, so `dependencies.py` needs exactly one `cast`
+  (`grep -c "cast(" ` prints `1`). `starlette.datastructures.State.__getattr__` returns `Any`,
+  so without the container every read would have been its own unverified narrowing.
+- Disposal is asserted by **pool object identity** before and after the lifespan, because
+  `dispose()` replaces the pool. A connection-count assertion would have passed vacuously
+  against an engine that never connected.
+
+---
+
+## ADR-036: migrations run in the container entrypoint, never in the application
+
+**Context**
+The schema has to be applied somewhere. `create_app()` and the FastAPI lifespan are the two
+places it is easiest to put.
+
+**Options**
+
+- **`alembic upgrade head` in the lifespan or in `create_app()`** — one place, no extra file.
+  Rejected: importing the application would then have a database side effect, every unit test
+  that builds the app would need a server, and multiple replicas would race on startup against
+  the same revision.
+- **A container entrypoint that waits, migrates, then execs the server** (D-06).
+
+**Decision**
+`docker/entrypoint.sh` runs three numbered steps — wait for a database that genuinely answers,
+`alembic upgrade head`, then `exec uvicorn --factory taskmanager.main:create_app "$@"` — and the
+`test` image stage deliberately does **not** run it, because the pytest fixture owns the test
+schema.
+
+**Consequences**
+
+- The ordering is read off the log rather than claimed: `docker compose logs api` opens with
+  `Running upgrade  -> 0001, baseline` and only then `Started server process [1]`. That
+  transcript is committed at
+  `.planning/phases/03-persistence-runnable-stack/evidence/03-10-cold-start.txt`.
+- uvicorn is PID 1, because the entrypoint `exec`s rather than spawns, so signals reach the
+  server.
+- The word `downgrade` appears nowhere in the entrypoint. A restart applies pending revisions and
+  can never destroy data.
+- A new migration is picked up automatically by Phase 4 and Phase 5 — the entrypoint runs
+  `upgrade head`, not a pinned revision — so neither phase needs a Dockerfile or compose change
+  to ship a schema change.
+
+---
+
+## ADR-037: the entrypoint's readiness probe lives in a shell heredoc, not under `src/`
+
+**Context**
+The bounded retry loop that waits for PostgreSQL (D-07: thirty attempts, one second apart) is
+real logic with a real failure mode. RESEARCH Open Question 1 asked where it should live.
+
+**Options**
+
+- **A `wait.py` module under `src/taskmanager/`** — unit-testable. Rejected on the coverage
+  policy this project refuses to weaken: that package's coverage denominator has no `omit` and
+  allows no `# pragma: no cover`, so the module would owe a unit test of a `range(30)` loop
+  against a patched clock — a test of the loop's shape rather than of the behaviour anyone cares
+  about.
+- **A Python heredoc inside `docker/entrypoint.sh`.**
+
+**Decision**
+The heredoc, as RESEARCH Open Question 1 recommends. The entrypoint's header names, by path, the
+evidence file that proves it.
+
+**Consequences**
+
+- **The retry bound is not unit tested.** It is proven end to end by the cold-start rehearsal
+  (`evidence/03-10-cold-start.txt`), which an evaluator can re-run, and by the falsification in
+  the same transcript: `docker compose stop db` turns the container `unhealthy` and `/health`
+  answers 503 within the retry window; `docker compose start db` returns both to healthy. A
+  liveness-only healthcheck would have stayed green throughout.
+- This is the cost of the "never lower the coverage gate" rule, paid in the open. The rule is
+  what pushed the code out of the measured package; the honest response is an end-to-end proof,
+  not an `omit` entry.
+- **The probe goes through SQLAlchemy's synchronous engine, never through libpq directly.**
+  `DATABASE_URL` carries a `+psycopg` driver token that libpq reads as a connection-string
+  syntax error, so the naive probe fails *permanently* on attempt 1 and the bounded loop then
+  burns all thirty attempts against a perfectly healthy database (RESEARCH Pitfall 2).
+- **The engine is built once, before the loop** — against RESEARCH Pattern 7, which constructs it
+  inside each iteration. Building an engine parses the URL, so inside the `try` a malformed
+  `DATABASE_URL` is treated as transient and retried thirty times: Pitfall 2's own failure
+  arriving from a second direction. Built first, a bad URL aborts in under a second with the real
+  exception, and only *connecting* — the part that can legitimately succeed later — is retried.
+- The per-attempt log line prints the attempt counter and the exception class name and nothing
+  else: no URL, no host, no password, no driver message.
+
+---
+
+## ADR-038: `ENTRYPOINT` owns the program and `CMD` is the argument list
+
+**Context**
+Phase 1's runtime stage declared `CMD ["uvicorn", "--factory", "taskmanager.main:create_app",
+"--host", "0.0.0.0", "--port", "8000"]` and no `ENTRYPOINT`. Phase 3 adds an `ENTRYPOINT` (ADR-036).
+
+**Options**
+
+- **Keep `CMD` verbatim.** The moment an `ENTRYPOINT` exists, `CMD` becomes *arguments to the
+  entrypoint*. Since the entrypoint ends with its own `exec uvicorn ...`, those arguments would
+  have gone nowhere: `docker run <image> --port 9000` — the documented way to retune a
+  containerised server — would have started on 8000 with no error and no warning.
+- **`CMD` as the argument list**, with the entrypoint forwarding `"$@"`.
+
+**Decision**
+`CMD ["--host", "0.0.0.0", "--port", "8000"]`, and the entrypoint ends with
+`exec uvicorn --factory taskmanager.main:create_app "$@"`. The factory is fixed — there is one,
+and no reason to let it be overridden — and everything else is a real, replaceable default.
+
+**Consequences**
+
+- `docker run <image> --port 9000` does what it looks like it does.
+- A reader comparing this Dockerfile against Phase 1's will see the `CMD` "shrink". It did not
+  shrink; it changed role, and the role is what the `ENTRYPOINT` line above it establishes.
+
+---
+
+## ADR-039: the `test` compose service carries a profile
+
+**Context**
+`docker-compose.yml` defines three services: `db`, `api` and `test` (D-14). The first two are
+long-running; `test` is meant to be *invoked*, not started. Plan 03-10 instructed the executor
+explicitly **not** to add a compose profile, on the grounds that a profile adds a flag the README
+would then have to explain.
+
+**Options**
+
+- **No profile, as the plan instructed.** Falsified by execution rather than by argument. The
+  first `docker compose up --build -d` of the cold-start rehearsal started **three** containers,
+  because `up` starts every declared service. `docker compose logs` then carried a full pytest
+  run, coverage table included, interleaved with the API's startup, and `docker compose ps -a`
+  was left showing `test exited`. For a project whose stated core value is that an evaluator can
+  judge it in five minutes starting from `docker compose up`, that is the single most visible
+  surface in the repository reading like a failure.
+- **`profiles: ["test"]`.** The plan's stated cost was checked rather than assumed:
+  `docker compose run --rm --build test` was run with the profile in place and **works with no
+  flag**, because `run` enables the profiles of the service it names.
+
+**Decision**
+`profiles: ["test"]`. `make docker-test` is unchanged, the README has nothing to explain, and
+`docker compose up` starts exactly `db` and `api`.
+
+**Consequences**
+
+- **This contradicts the text of `03-10-PLAN.md`, deliberately.** The plan's reason was tested
+  and found false; the cost of following it was observed, not predicted. Recorded as an ADR
+  rather than as a deviation note because anyone reading the plan beside the compose file will
+  otherwise read the difference as an executor going off-script.
+- Any command that inspects the full service list must ask for the profile:
+  `docker compose config --services` prints `api db`, and
+  `docker compose --profile test config --services` prints `api db test`. Acceptance criteria and
+  verification scripts that enumerate services must use the second form.
+- `docker compose down -v` does **not** remove containers belonging to a disabled profile, so a
+  `docker compose run test` without `--rm` survives a full reset.
+  `docker compose --profile test down` is the answer if it ever matters; `make down` was left as
+  plain `docker compose down` to match D-14.
+
+---
+
+## ADR-040: the migrations directory is `migrations/`, not `alembic/`
+
+**Context**
+`03-CONTEXT.md` sketched an `alembic/` directory at the repository root. Phase 1's `.flake8`
+already carried `extend-exclude = .venv,build,dist,migrations`.
+
+**Options**
+
+- **`alembic/`**, matching the context sketch and the tool's own default scaffold name. It would
+  have required editing `.flake8` in the same commit — a mandatory task, not an optional tidy-up,
+  because generated revision files do not pass this project's linter.
+- **`migrations/`**, matching the exclusion that already existed.
+
+**Decision**
+`migrations/`, as RESEARCH Open Question 3 recommends. `alembic.ini`'s `script_location`, the
+`.flake8` exclusion and the Dockerfile's two `COPY` lines all name the same directory.
+
+**Consequences**
+
+- No dead configuration line. A `.flake8` entry excluding a directory that does not exist is the
+  kind of thing that survives for years and then silently excludes something real.
+- `migrations/` is still formatted by isort and black through pre-commit even though flake8
+  excludes it and mypy never sees it, and `script.py.mako` is written so a freshly generated
+  revision is already clean under both — the first generated revision was not, and had to be
+  reformatted before it could be committed.
+
+---
+
+## ADR-041: follow-up to ADR-017 and ADR-018 — both promises were kept in plan 03-10
+
+**Context**
+Two Phase 1 ADRs shipped with explicit promises attached. **ADR-017** made `make up` and
+`make down` honest `@echo` placeholders, promising that Phase 3 would replace the recipe bodies
+in place with the target names frozen. **ADR-018** chose a dedicated Dockerfile `test` stage over
+a compose profile *because compose did not exist yet*, promising that Phase 3 would add a compose
+`test` service with `target: test` and swap the body of `make docker-test` without renaming the
+target.
+
+**Options**
+
+- **Leave the promises to be inferred from a diff.** Rejected: a decision log that records
+  promises but never records whether they were kept is a log that cannot be trusted about the
+  next promise.
+- **Record the follow-up explicitly, naming the plan that discharged it.**
+
+**Decision**
+Both promises were kept, in **plan 03-10** (commits `bb1274e`, `15423a9`, `083fd11`):
+
+- ADR-017: `make up` is `docker compose up --build` and `make down` is `docker compose down`,
+  with the `-v` reset documented in a comment. `grep -c` for the placeholder string prints `0`.
+  Neither target was renamed, so no documentation written against Phase 1 had to change.
+- ADR-018: `make docker-test` is now `docker compose run --rm --build test`. The Dockerfile
+  `test` stage still exists and is what the compose service builds (`target: test`); the change
+  is that it now reaches the `db` service over the compose network, so the **integration** tests
+  run there too. The previous body built an image and ran it with no database in sight, which
+  means every integration test added in this phase would have failed under it.
+
+**Consequences**
+
+- ADR-018's reasoning is now fully discharged: the compose profile it deferred exists (ADR-039),
+  and the stage it chose instead was not thrown away but wrapped.
+- `make docker-test` is genuinely the zero-host-setup path it always claimed to be: the same 287
+  tests, integration suite included, reporting `Required test coverage of 75% reached`.
+- Phase 7's README has four settled commands: `cp .env.example .env`, `docker compose up`,
+  `http://localhost:8000/health`, `make docker-test`.
+
+---
+
+## ADR-042: PostgreSQL 5432 is published on the host, with throwaway credentials
+
+**Context**
+D-15 requires the compose `db` service to publish 5432 so a host-side `make test` reaches the
+*same* container the API uses, rather than a second database that can drift from it. That means a
+PostgreSQL server listening on all interfaces of the developer's machine with a well-known
+credential pair.
+
+**Options**
+
+- **Do not publish the port**, and give the host suite its own database. Rejected: two databases
+  that must stay identical is exactly the "works locally, fails in the container" class of bug
+  this project keeps trying to make impossible, and the evaluator would then need a second setup
+  step.
+- **Bind to `127.0.0.1:5432` only.** A real hardening option, and the right one for a machine on
+  an untrusted network. Not taken here: it adds a line whose value depends on facts about the
+  reader's network that this repository cannot know, and the exposure is bounded by what is
+  behind it.
+- **Publish `5432:5432` with obviously-fake credentials**, and say so out loud.
+
+**Decision**
+`"5432:5432"` and `"8000:8000"`, with the credential pair `taskmanager:taskmanager` — identical
+to the one CI's service container already uses, and visible in `docker-compose.yml`,
+`.env.example` and `.github/workflows/ci.yml`. Nothing in this repository carries a real
+credential; `.env` is git-ignored and `.dockerignore`d and is never baked into a layer.
+
+**Consequences**
+
+- **Named rather than omitted:** on a developer machine on an untrusted network, that is a
+  PostgreSQL server reachable from the local link with a guessable password. It holds nothing
+  but throwaway evaluation data, it is started by an explicit `docker compose up` and stopped by
+  `make down`, and `127.0.0.1:5432:5432` is a one-token change for anyone who wants it.
+- A reader is not left guessing whether a real secret was ever involved. The pair is fake by
+  construction and is published in three files on purpose, so there is no scenario in which it
+  looks like a leak.
+- The host port must actually be free. It was held by an unrelated container for three plans of
+  this phase, which produced an *authentication* error rather than a wrong-database one — worth
+  knowing, because the symptom does not point at the cause.
+
+---
+
+## ADR-043: no pagination on task listing in this phase
+
+**Context**
+`GET` on a task list returns every task in it. The threat register carries this as **T-3-22**
+(unbounded listing), dispositioned `accept`.
+
+**Options**
+
+- **Add `limit`/`offset` or cursor pagination now.** Rejected: the challenge brief does not ask
+  for it, and adding an unrequested parameter to a documented endpoint is the kind of initiative
+  that costs more than it earns on a take-home.
+- **Leave it out and say nothing.** Rejected: silence is indistinguishable from not having
+  thought about it.
+- **Leave it out and record the omission as a decision.**
+
+**Decision**
+Out of scope for this deliverable. The work per request is bounded by the per-list scope — a
+listing is always `WHERE task_list_id = :id`, served by `ix_tasks_task_list_id` — rather than by
+a page size.
+
+**Consequences**
+
+- A pathologically large list would return a pathologically large response. Accepted: no use case
+  in the brief creates one, and there is no authenticated path that lets a caller enumerate
+  another owner's lists.
+- The completion percentage is unaffected either way, because it is one `COUNT(*) FILTER (WHERE
+  ...)` aggregate over the whole list rather than a count of returned rows (ADR-009) — so adding
+  pagination later changes the page, not the number.
+- Recorded so that a reviewer reads the absence as a decision rather than as an omission, which
+  is the only reason this ADR exists.
+
+---
