@@ -252,3 +252,8 @@ The three preconditions the rest of the phase depends on are in place:
   D-26 ADR the plan's own frontmatter already schedules there.
 </content>
 </invoke>
+
+## Self-Check: PASSED
+
+All eight modified files and the summary exist on disk; all four commit hashes
+(`ccf3b0a`, `5da085e`, `dfbf265`, `2d191d2`) are present in `git log`.
