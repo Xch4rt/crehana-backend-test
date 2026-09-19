@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-14-PLAN.md
-last_updated: "2026-09-19T17:55:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 plan 14 complete
+stopped_at: Completed 05-15-PLAN.md
+last_updated: "2026-09-19T18:15:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 plan 15 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 52
-  percent: 96
+  completed_plans: 53
+  percent: 98
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 15 of 16
-Status: Executing Phase 05 (plans 01-14 complete; 05-15 next)
-Last activity: 2026-09-19 -- Phase 05 plan 14 complete
+Plan: 16 of 16
+Status: Executing Phase 05 (plans 01-15 complete; 05-16 next)
+Last activity: 2026-09-19 -- Phase 05 plan 15 complete
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -108,6 +108,7 @@ Progress: [██████████] 96%
 | Phase 05 P12 | 7min | 3 tasks | 8 files |
 | Phase 05 P13 | 11min | 3 tasks | 4 files |
 | Phase 05 P14 | 34min | 3 tasks | 4 files |
+| Phase 05 P15 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -681,6 +682,43 @@ Recent decisions affecting current work:
 - [Phase 05-14]: requirement ticks ASGN-01/ASGN-02/NOTF-01/NOTF-02/NOTF-03 deliberately NOT taken -
   05-16 is the last claimant, the sixteenth consecutive plan in this phase to make the same call
 
+- [Phase 05-15]: the matrix's nineteen paths are spelled out in the module instead of imported from
+  the five sibling files that own them - this package's strongest convention, set aside on purpose
+  because a table assembled from fragments is no longer a table and D-04 reuses this one as Phase 7
+  documentation; the coverage test binds every string to app.openapi()["paths"], which is a stronger
+  check than agreeing with a helper
+- [Phase 05-15]: the four expected statuses are POSITIONAL fields of Row, in the research table's
+  own column order, so a row reads across like the markdown it was lifted from; naming each would
+  make every entry three lines long and destroy the readability D-04 asks for above all else
+- [Phase 05-15]: all 76 cells were right on the FIRST run - the table lifted from 05-RESEARCH.md
+  matched the running application exactly, no cell surprised and no production bug was exposed
+- [Phase 05-15]: this API has TWO 401 wordings, discovered by the matrix: AuthenticationError.REFUSAL
+  for anything to do with a token, and use_cases/auth/login.py's own constant for a rejected
+  credential. Both carry code=authentication_failed and the WWW-Authenticate challenge, and the
+  difference is deliberate (the exception's own docstring argues it), so the assertion helper was
+  split rather than the application changed - any future assertion on a 401 detail must say which
+  door it is at
+- [Phase 05-15]: the matrix overrides get_engine and nothing else beyond the harness's own - the
+  shared client aims at a deliberately fictional DSN and /health is the one row that dials the
+  database itself, so row 1 would otherwise have measured 503 against the fixture rather than 200
+  against the route
+- [Phase 05-15]: the owner is seeded with a REAL Argon2 hash so the login row can log in, computed
+  once per session into a module-level dict - the sibling modules' placeholder is not an encoded
+  hash and the adapter answers False for it, which would have made the row assert the opposite of
+  what it says
+- [Phase 05-15]: the cold start ran `up -d --build`, not the plan's bare `up -d` - `down -v` removes
+  containers, network and volume but NOT images, and this machine's test-api image predated 05-11
+  and 05-12; an evaluator cloning the repository has no image and their plain `up` builds one
+- [Phase 05-15]: the capture records the PRE-WIPE state including the old demo row, against the
+  plan's "no reference to a demo account" criterion - the criterion's intent is met and observed
+  (zero users, no seed line, no INSERT INTO users), and recording what `down -v` destroyed is what
+  turns "the volume was empty afterwards" into a change rather than a claim
+- [Phase 05-15]: the only redaction in the capture is the two access tokens, each a live thirty-
+  minute bearer credential signed with the un-committed .env secret - the T-3-31 argument the
+  entrypoint already makes about container logs, applied to a transcript in the repository
+- [Phase 05-15]: requirement ticks AUTH-03/AUTH-06/ASGN-02/NOTF-02 deliberately NOT taken - 05-16 is
+  the last claimant, the seventeenth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -715,6 +753,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:55:00.000Z
-Stopped at: Completed 05-14-PLAN.md
+Last session: 2026-09-19T18:15:00.000Z
+Stopped at: Completed 05-15-PLAN.md
 Resume file: None
