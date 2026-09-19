@@ -688,6 +688,12 @@ async def test_the_assignee_cannot_see_the_list_the_task_lives_in(
     That asymmetry is the whole reason the discovery route exists, and it is
     the pair of answers a reader is most likely to think is a bug - so both
     are asserted in one test, next to each other.
+
+    The visible half is asserted on its **body**, not on its 200 (D-05): "the
+    assignee can see the task" is a claim about what they are shown, and a
+    handler that answered 200 with someone else's task, or with a body missing
+    the `assignee_id` that is the whole reason they may read it, would satisfy a
+    status assertion without satisfying the sentence this test's name is.
     """
     await given_a_task_the_assignee_holds(session_factory)
     client, app = authenticated_client
@@ -698,6 +704,13 @@ async def test_the_assignee_cannot_see_the_list_the_task_lives_in(
 
     assert_not_found(the_list, LIST_ID)
     assert the_task.status_code == 200
+
+    task = the_task.json()
+
+    assert list(task) == TASK_MEMBERS
+    assert task["id"] == str(TASK_ID)
+    assert task["task_list_id"] == str(LIST_ID)
+    assert task["assignee_id"] == str(ASSIGNEE_ID)
 
 
 async def test_the_assignee_cannot_see_the_task_collection_of_that_list(
