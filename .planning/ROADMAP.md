@@ -278,7 +278,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 05-13-PLAN.md — authenticated_client, and the auth and directory routes over real PostgreSQL
+- [x] 05-13-PLAN.md — authenticated_client, and the auth and directory routes over real PostgreSQL
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 12/16 | In Progress | - |
+| 5. Auth, Assignment & Notifications | 13/16 | In Progress | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 

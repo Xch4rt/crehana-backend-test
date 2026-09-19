@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-12-PLAN.md
-last_updated: "2026-09-19T17:17:55.329Z"
-last_activity: 2026-09-19 -- Phase 05 plan 12 complete
+stopped_at: Completed 05-13-PLAN.md
+last_updated: "2026-09-19T17:34:23.959Z"
+last_activity: 2026-09-19 -- Phase 05 plan 13 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 50
-  percent: 93
+  completed_plans: 51
+  percent: 94
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 13 of 16
-Status: Executing Phase 05 (plans 01-12 complete; 05-13 next)
-Last activity: 2026-09-19 -- Phase 05 plan 12 complete
+Plan: 14 of 16
+Status: Executing Phase 05 (plans 01-13 complete; 05-14 next)
+Last activity: 2026-09-19 -- Phase 05 plan 13 complete
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -106,6 +106,7 @@ Progress: [█████████░] 93%
 | Phase 05 P09 | 21min | 3 tasks | 7 files |
 | Phase 05 P11 | 24min | 3 tasks | 10 files |
 | Phase 05 P12 | 7min | 3 tasks | 8 files |
+| Phase 05 P13 | 11min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -620,6 +621,39 @@ Recent decisions affecting current work:
   taken - 05-16 is the last claimant, the fourteenth consecutive plan in this phase to make the same
   call: the routes exist here, but none of the six is asserted over HTTP until 05-13 and 05-15
 
+- [Phase 05-13]: authenticated_client is api_client verbatim minus ONE line, the actor override, and
+  its docstring states what the other fixture therefore cannot measure - the 401 legs, the anonymous
+  column of the D-04 matrix and the statement counts; its price is that every test using it seeds
+  its own caller, because the real dependency confirms the row on every request, which is the
+  property under test rather than a setup tax (D-20)
+- [Phase 05-13]: the forged tokens are built from Settings(_env_file=None) constructed INSIDE the
+  test, never from restated literals - the fixture monkeypatches the same two variables the
+  application was built from, so an identical construction yields the identical secret, algorithm
+  and lifetime, and each forgery therefore differs from a valid token in exactly one property
+- [Phase 05-13]: the expired token needed no freezegun and no sleeping (both greps print 0) - PyJWT
+  compares exp against the real time.time(), so only the ISSUING side is controllable, and a real
+  SecurityResources built on a clock stopped two hours ago mints a token that expired ninety
+  minutes before the request
+- [Phase 05-13]: the seven-case table is asserted TWICE - once per case for shape, and once across
+  all seven in a single test asserting the set of serialised bodies has exactly one member; each
+  parameter runs in its own test, so a leak living in a member no per-case assertion names would
+  satisfy every one of them
+- [Phase 05-13]: `example.test` is refused by email-validator as a reserved name, so six tests
+  failed at the EmailStr boundary before reaching a handler - the registering addresses moved to
+  example.com; the suite's existing demo@example.test constants are safe only because they are
+  seeded as entities and never cross that boundary
+- [Phase 05-13]: expires_in is asserted against configured_settings().jwt_expire_minutes * 60 rather
+  than against 1800 - a literal would assert that somebody typed the same number twice, while the
+  derivation asserts the property SecurityResources exists for
+- [Phase 05-13]: the plan's falsified-sentence rewrite was already done by 05-10 (the grep printed 0
+  on arrival); the half genuinely still missing was written instead - acting_as impersonates rather
+  than authenticates, so combining it with authenticated_client is a contradiction
+- [Phase 05-13]: routers/auth.py and routers/users.py are back at 100%; coverage is 99.66% with SIX
+  uncovered statements, all in routers/assignments.py (144-147, 201-204, 249-252), which 05-14 owns
+  - no pragma and no omit entry was added
+- [Phase 05-13]: requirement ticks AUTH-01..AUTH-05/ASGN-03 deliberately NOT taken - 05-16 is the
+  last claimant, the fifteenth consecutive plan in this phase to make the same call
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -654,6 +688,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:17:55.322Z
-Stopped at: Completed 05-12-PLAN.md
+Last session: 2026-09-19T17:34:23.951Z
+Stopped at: Completed 05-13-PLAN.md
 Resume file: None
