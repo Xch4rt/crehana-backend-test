@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-09-18T23:52:05.626Z"
-last_activity: 2026-09-18
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-09-19T00:18:37.901Z"
+last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 26
-  completed_plans: 22
-  percent: 85
+  completed_plans: 23
+  percent: 88
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 03 (persistence-runnable-stack) — EXECUTING
-Plan: 8 of 11
+Plan: 9 of 11
 Status: Ready to execute
-Last activity: 2026-09-18
+Last activity: 2026-09-19
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [█████████░] 85%
 | Phase 03 P05 | 11min | 3 tasks | 5 files |
 | Phase 03 P06 | 15min | 3 tasks | 7 files |
 | Phase 03 P07 | 10min | 2 tasks | 3 files |
+| Phase 03 P08 | 13min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,13 @@ Recent decisions affecting current work:
 - [Phase 03-07]: SQLAlchemy orders a flush by relationship() declarations, not by raw ForeignKey columns - users and task_lists added in one flush emitted the lists first and PostgreSQL refused them; two flushes in reference order, and 03-08 will meet the same thing
 - [Phase 03-07]: `type(x) is Task` replaces the sibling suite's `not isinstance(x, TaskRow)` - mypy warn_unreachable proves Task and TaskRow can have no common subclass, so the isinstance form is dead code and fails make typecheck
 - [Phase 03-07]: Requirement ticks DB-01/DB-03/DB-04/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the seventh consecutive plan in this phase to make the same call
+- [Phase 03-08]: infrastructure/db/engine.py exports BUILDERS and instantiates nothing - a module-level engine would read Settings at import, so importing the module would crash mypy, import-linter and a plain `docker build`, exactly as main.py's docstring already argues for the app object; this resolves the STACK-vs-ARCHITECTURE contradiction CONTEXT flagged
+- [Phase 03-08]: DatabaseResources is a frozen dataclass carrying the engine and the session factory together, because starlette's State.__getattr__ returns Any - one container means 03-09 casts once in dependencies.py instead of once per read
+- [Phase 03-08]: SqlAlchemyUnitOfWork holds `_session: AsyncSession | None` behind an `_open_session` property that raises a RuntimeError naming the rule; RESEARCH Pattern 3's attribute-in-__aenter__ shape makes a commit outside the block an AttributeError about a private field, and Phase 4 will hand these out through Depends
+- [Phase 03-08]: The unit of work's three repository attributes are annotated with the PORT types, and that was verified by breaking it - the concrete annotation makes mypy report `tasks: expected "TaskRepository", got "SqlAlchemyTaskRepository"`, because a mutable Protocol member is checked invariantly
+- [Phase 03-08]: Transaction proofs assert a READ, never a counter - `commits == 1` is equally true of a unit of work whose __aexit__ rolled the commit straight back, which is precisely the WR-06 failure the suite exists to catch
+- [Phase 03-08]: The commit falsification is on disk (evidence/03-08-commit-falsification.txt): every read in the integration suite shares the fixture's connection, so only the second-connection test and the red/green pair can distinguish a working `create_savepoint` from a silently degraded `rollback_only` (Pitfall 1)
+- [Phase 03-08]: Requirement ticks DB-01/ARC-08 deliberately NOT taken - 03-11 is the last claimant, the eighth consecutive plan in this phase to make the same call
 
 ### Pending Todos
 
