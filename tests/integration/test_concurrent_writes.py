@@ -36,6 +36,21 @@ it succeeded, and A then commits `completed` over it. The first test fails on
 "the second writer must be refused" - a writer was told its change was durable
 and it is gone. The captured run is in
 `.planning/phases/04-task-lists-tasks/evidence/04-review-fix-CR-01-red.txt`.
+
+**The fourth case is Phase 5's, and it is CR-01 arriving from the second actor
+this phase introduced.** Until now the only caller who could write a task was
+the list's owner, so every interleaving above is one person's two requests
+racing each other. ASGN-02 gives the assignee a write of their own - the status
+endpoint - and the two writers are now different *people* with different
+doors: A comes through `owned_task`, B through `visible_task`, and on B's leg
+the parent list is not even read (D-01). Both still load with `for_update=True`,
+so they queue on the same row. Without it, the assignee validates a status
+transition against a copy of the task taken before the owner's `PATCH` landed,
+and the adapter writes every mapped column from that stale copy - so whichever
+of the two commits second silently erases the other's field. The new case pins
+both halves: the owner's rename survives, and it is *visible to B*, which is
+what proves B read the committed state rather than merely happening to write a
+different column.
 """
 
 import asyncio
@@ -60,7 +75,11 @@ from taskmanager.application.dto.commands import (
     UpdateTaskListCommand,
 )
 from taskmanager.application.dto.results import TaskListResult, TaskResult
-from taskmanager.application.use_cases.access import visible_task, visible_task_list
+from taskmanager.application.use_cases.access import (
+    owned_task,
+    visible_task,
+    visible_task_list,
+)
 from taskmanager.application.use_cases.task_lists.update import UpdateTaskList
 from taskmanager.application.use_cases.tasks.change_task_status import (
     ChangeTaskStatus,
@@ -85,6 +104,12 @@ LATER = NOW + timedelta(hours=1)
 OWNER_ID = UUID("c0c0c0c0-0001-4000-8000-000000000001")
 LIST_ID = UUID("c0c0c0c0-0002-4000-8000-000000000002")
 TASK_ID = UUID("c0c0c0c0-0003-4000-8000-000000000003")
+# The second person this phase put on the task. The series continues rather
+# than restarting, and the identifier is this module's own: the readable
+# `00000000-...` series belongs to the HTTP suites, which run inside the
+# rolled-back harness, and a durable row sharing one of their values would be
+# a collision that only appeared when a run died before its cleanup.
+ASSIGNEE_ID = UUID("c0c0c0c0-0004-4000-8000-000000000004")
 
 # The three bounds the module docstring names. Generous beside the milliseconds
 # a healthy run takes, and small beside a CI job's patience.
@@ -140,10 +165,27 @@ class _Database:
 
 
 async def _remove_what_was_committed(engine: AsyncEngine) -> None:
-    """Both foreign keys cascade from `users`, so one row takes the rest along."""
+    """Delete both people; the list and the task cascade from the owner.
+
+    Two rows rather than one since the assignee arrived, and the statement
+    names both explicitly instead of relying on a cascade to reach the second.
+    It cannot: `tasks.assignee_id` is `ON DELETE SET NULL`, which is the right
+    rule for the column and exactly the wrong one for a cleanup - deleting the
+    owner clears the assignee out of the task and leaves the assignee's own
+    `users` row standing, where `test_dependencies.py` would then report it as
+    a leak.
+
+    The argument for cleaning up here at all is unchanged, and it has to stay
+    true: this module deliberately leaves the harness in
+    `tests/integration/conftest.py`, so its writes are durable rather than
+    rolled back, and a test whose subject *is* a durable write has to take it
+    back. Both identifiers are this module's own, so this statement can touch
+    nothing another suite seeded.
+    """
     async with engine.begin() as connection:
         await connection.execute(
-            text("DELETE FROM users WHERE id = :id"), {"id": OWNER_ID}
+            text("DELETE FROM users WHERE id = ANY(:ids)"),
+            {"ids": [OWNER_ID, ASSIGNEE_ID]},
         )
 
 
@@ -151,7 +193,15 @@ async def _remove_what_was_committed(engine: AsyncEngine) -> None:
 async def database(
     migrated_database: None, database_url: str
 ) -> AsyncIterator[_Database]:
-    """An owner, a list and an `in_progress` task, durable for one test."""
+    """An owner, an assignee, a list and an `in_progress` task, durable for one test.
+
+    The task is handed to the assignee here rather than inside the one test
+    that needs it: assigning it is a durable write of its own, and doing it
+    mid-test would put a committed change between the two writers whose
+    interleaving is the subject. The three cases that predate the assignee are
+    unaffected - none of them reads the column, and both writers in each of
+    them still come through the owner's door.
+    """
     engine = create_async_engine(
         database_url,
         poolclass=NullPool,
@@ -166,6 +216,7 @@ async def database(
         task_id=TASK_ID, task_list_id=LIST_ID, title="Contended", now=NOW
     )
     task.change_status(TaskStatus.IN_PROGRESS, now=NOW)
+    task.assign(ASSIGNEE_ID, now=NOW)
     try:
         # A run that died between its commit and its cleanup must not turn every
         # later run red on a duplicate key.
@@ -177,6 +228,17 @@ async def database(
                         user_id=OWNER_ID,
                         email="contended@example.com",
                         full_name="Contended Owner",
+                        password_hash="not-a-real-hash",
+                        now=NOW,
+                    )
+                )
+            )
+            session.add(
+                user_to_row(
+                    User.create(
+                        user_id=ASSIGNEE_ID,
+                        email="contended-assignee@example.com",
+                        full_name="Contended Assignee",
                         password_hash="not-a-real-hash",
                         now=NOW,
                     )
@@ -331,3 +393,62 @@ async def test_a_read_never_waits_on_a_writer(database: _Database) -> None:
     # A never committed, so its block rolled back and the row is untouched.
     status, completed_at, _ = await database.task_columns()
     assert (status, completed_at) == ("in_progress", None)
+
+
+async def test_owner_and_assignee_writes_on_one_row_are_serialised(
+    database: _Database,
+) -> None:
+    """T-5-17: the phase's second writer cannot overwrite the phase's first.
+
+    A is the list's owner, renaming the task through the door only they have
+    (`owned_task`); B is the assignee, completing it through the one write
+    ASGN-02 gives them (`visible_task`, which on their leg never even reads the
+    parent list). Two people, two doors, one row.
+
+    B has to wait, and then has to apply to what A committed. Both halves are
+    asserted, because each alone is weak: that the row ends up with A's title
+    *and* B's status would also be true of a lucky ordering, and that B waited
+    would be true of a B that then wrote a stale copy over the top. The
+    assertion that ties them is `outcome.title` - B answered its caller with
+    A's new name, so it read the committed state rather than the one it would
+    have seen a moment earlier.
+    """
+    first = database.unit_of_work()
+    async with first:
+        task = await owned_task(first, LIST_ID, TASK_ID, OWNER_ID, for_update=True)
+        second: asyncio.Task[TaskResult] = asyncio.create_task(
+            ChangeTaskStatus(database.unit_of_work(), _Clock()).execute(
+                ChangeTaskStatusCommand(
+                    actor_id=ASSIGNEE_ID,
+                    task_list_id=LIST_ID,
+                    task_id=TASK_ID,
+                    new_status=TaskStatus.COMPLETED,
+                )
+            )
+        )
+        try:
+            waited = await _until_it_waits_or_finishes(database, second)
+            task.rename("Renamed by the owner", now=LATER)
+            await first.tasks.update(task)
+            await first.commit()
+        finally:
+            outcome = await _settle(second)
+
+    assert isinstance(outcome, TaskResult), outcome
+    assert outcome.assignee_id == ASSIGNEE_ID
+    assert outcome.status is TaskStatus.COMPLETED
+    assert outcome.title == "Renamed by the owner", (
+        "the assignee answered with a title the owner had already replaced, so "
+        "it validated and wrote a copy taken before the owner's commit"
+    )
+    # And neither writer's field is missing from the row: the owner's rename
+    # survived the assignee's whole-row update, and the assignee's completion
+    # survived the owner's.
+    assert await database.task_columns() == (
+        "completed",
+        LATER,
+        "Renamed by the owner",
+    )
+    # Last, for the reason `_until_it_waits_or_finishes` gives: a run without
+    # the lock should fail on the write it lost, not merely on nobody waiting.
+    assert waited, "the assignee never waited for the owner's write to land"

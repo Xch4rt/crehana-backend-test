@@ -34,6 +34,33 @@ which is attached to the *test* connection. That is the right one and not a
 compromise: `get_uow` is overridden, so the request runs on that connection and
 the application's own engine is never dialled. Attaching a second listener to
 the application's engine here would record nothing and prove nothing.
+
+**The harness here is `authenticated_client`, and that is D-20 rather than a
+preference.** The other fixture overrides `get_current_actor`, and D-11 put a
+confirmation read of the caller's `users` row *inside* that very dependency -
+so a count taken through the override would be missing exactly the statement
+that decision added. A green test still reading the Phase 4 numbers would hide
+D-11 entirely, which 05-CONTEXT names as unacceptable. Every request below
+therefore carries a real bearer token, and every count carries the actor
+lookup.
+
+**The property under test has not changed, and the numbers are a measurement
+rather than a target.** What the `for_one == for_many` assertions check is
+*invariance*: the same count for one row as for many. The absolute number went
+from one to two and from three to four when the actor lookup arrived, and it
+would move again if a future decision added another fixed read - that would be
+a fact to record in the constants below, not a failure. What must never change
+is the invariance, and that is what would break if an N+1 appeared.
+
+**Counts now differ by role, so any new count assertion must say which role it
+measures.** These two are the **owner's**. An assignee's `GET` of a single task
+and their `PATCH .../status` short-circuit in `visible_task` the moment the
+task's assignee matches the caller, before the parent list is read at all, so
+they issue one task `SELECT` where the owner's issue two (D-01, 05-RESEARCH
+Pattern 5). That is a saving and not a regression - and the reason for it is
+the disclosure rather than the statement count: the list's existence and its
+owner stay off the code path of a caller entitled to know nothing about
+either.
 """
 
 import uuid
@@ -57,7 +84,7 @@ from tests.integration.api.test_task_lists import (
     a_user,
 )
 from tests.integration.api.test_tasks import FIFTH_TASK_ID, FOURTH_TASK_ID, tasks_url
-from tests.integration.conftest import seed
+from tests.integration.conftest import OWNER_ID, bearer_header, seed
 
 pytestmark = pytest.mark.integration
 
@@ -72,31 +99,40 @@ FIFTH_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000016")
 # by the id, which is the ordinary case a count should be measured against.
 LATER_MOMENT = NOW.replace(month=4)
 
-# `GET /api/v1/task-lists` is one grouped statement: the lists and every list's
-# counters arrive together (D-10, LIST-03).
-TASK_LISTS_STATEMENTS = ["SELECT"]
-
-# `GET /api/v1/task-lists/{id}/tasks` is **three**, and each one is there for a
-# reason a reader should be able to name:
+# `GET /api/v1/task-lists` as its owner is **two**:
 #
-#   1. the visibility guard - `visible_task_list` loads the parent and discards
+#   1. the actor lookup - `AuthenticateActor` confirms on *every* request that
+#      the token's subject still names a `users` row, so a deleted account's
+#      unexpired token stops working the moment the row is gone rather than
+#      when the token expires (D-11, T-5-15). It is the statement D-20 exists
+#      to make visible: this module measured one before plan 05-13 gave it a
+#      harness that reaches the real dependency.
+#   2. the grouped statement: the lists and every list's counters arrive
+#      together (D-10, LIST-03).
+TASK_LISTS_STATEMENTS = ["SELECT", "SELECT"]
+
+# `GET /api/v1/task-lists/{id}/tasks` as its owner is **four**, and each one is
+# there for a reason a reader should be able to name:
+#
+#   1. the actor lookup again (D-11), for the reason given above.
+#   2. the visibility guard - `visible_task_list` loads the parent and discards
 #      it, so a list this caller cannot see is refused before a single task is
 #      read (D-04, ADR-008). 04-10-PLAN.md predicted two statements and did not
 #      count this one; the guard is a decision of the same phase, so the number
 #      is corrected here rather than the guard being removed to meet it.
-#   2. the page of tasks, narrowed by whatever filter the caller sent.
-#   3. the completion aggregate over the *whole* list, which is why it cannot
+#   3. the page of tasks, narrowed by whatever filter the caller sent.
+#   4. the completion aggregate over the *whole* list, which is why it cannot
 #      share the statement above (ADR-009, D-09, roadmap SC-4).
 #
-# None of the three is issued once per row, and that is the whole claim: the
-# count is three for an empty list and three for a thousand tasks. A reader
-# tempted to "optimise" this to one would be asking the filter and the
-# statistics to share a query, which is the bug TASK-07 is about.
-TASK_COLLECTION_STATEMENTS = ["SELECT", "SELECT", "SELECT"]
+# None of the four is issued once per row, and that is the whole claim: the
+# count is four for an empty list and four for a thousand tasks. A reader
+# tempted to "optimise" the last two into one would be asking the filter and
+# the statistics to share a query, which is the bug TASK-07 is about.
+TASK_COLLECTION_STATEMENTS = ["SELECT", "SELECT", "SELECT", "SELECT"]
 
 
 async def test_the_recorder_sees_statements_at_all(
-    api_client: tuple[AsyncClient, FastAPI],
+    authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
     statements: list[str],
 ) -> None:
@@ -108,10 +144,11 @@ async def test_the_recorder_sees_statements_at_all(
     make every count below compare an empty list with an empty list and pass.
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
-    client, _ = api_client
+    client, app = authenticated_client
+    caller = {"Authorization": await bearer_header(app, OWNER_ID)}
     statements.clear()
 
-    response = await client.get(TASK_LISTS)
+    response = await client.get(TASK_LISTS, headers=caller)
 
     assert response.status_code == 200
     assert statements != []
@@ -119,7 +156,7 @@ async def test_the_recorder_sees_statements_at_all(
 
 
 async def test_the_task_lists_collection_issues_the_same_statements_for_one_list_and_for_many(  # noqa: E501
-    api_client: tuple[AsyncClient, FastAPI],
+    authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
     statements: list[str],
 ) -> None:
@@ -135,10 +172,11 @@ async def test_the_task_lists_collection_issues_the_same_statements_for_one_list
     the request did.
     """
     await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
-    client, _ = api_client
+    client, app = authenticated_client
+    caller = {"Authorization": await bearer_header(app, OWNER_ID)}
     statements.clear()
 
-    one = await client.get(TASK_LISTS)
+    one = await client.get(TASK_LISTS, headers=caller)
     for_one_list = list(statements)
 
     assert one.status_code == 200
@@ -165,7 +203,7 @@ async def test_the_task_lists_collection_issues_the_same_statements_for_one_list
     )
     statements.clear()
 
-    many = await client.get(TASK_LISTS)
+    many = await client.get(TASK_LISTS, headers=caller)
     for_many_lists = list(statements)
 
     assert many.status_code == 200
@@ -174,7 +212,7 @@ async def test_the_task_lists_collection_issues_the_same_statements_for_one_list
 
 
 async def test_the_task_collection_issues_the_same_statements_for_one_task_and_for_many(
-    api_client: tuple[AsyncClient, FastAPI],
+    authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
     statements: list[str],
 ) -> None:
@@ -193,10 +231,11 @@ async def test_the_task_collection_issues_the_same_statements_for_one_task_and_f
         task_lists=[a_task_list()],
         tasks=[a_task(task_id=TASK_ID)],
     )
-    client, _ = api_client
+    client, app = authenticated_client
+    caller = {"Authorization": await bearer_header(app, OWNER_ID)}
     statements.clear()
 
-    one = await client.get(tasks_url(LIST_ID))
+    one = await client.get(tasks_url(LIST_ID), headers=caller)
     for_one_task = list(statements)
 
     assert one.status_code == 200
@@ -221,7 +260,7 @@ async def test_the_task_collection_issues_the_same_statements_for_one_task_and_f
     )
     statements.clear()
 
-    many = await client.get(tasks_url(LIST_ID))
+    many = await client.get(tasks_url(LIST_ID), headers=caller)
     for_many_tasks = list(statements)
 
     assert many.status_code == 200
@@ -231,7 +270,7 @@ async def test_the_task_collection_issues_the_same_statements_for_one_task_and_f
 
 
 async def test_the_task_collection_statement_count_does_not_change_with_a_filter(
-    api_client: tuple[AsyncClient, FastAPI],
+    authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
     statements: list[str],
 ) -> None:
@@ -257,15 +296,18 @@ async def test_the_task_collection_statement_count_does_not_change_with_a_filter
             ),
         ],
     )
-    client, _ = api_client
+    client, app = authenticated_client
+    caller = {"Authorization": await bearer_header(app, OWNER_ID)}
     statements.clear()
 
-    unfiltered = await client.get(tasks_url(LIST_ID))
+    unfiltered = await client.get(tasks_url(LIST_ID), headers=caller)
     without_a_filter = list(statements)
     statements.clear()
 
     filtered = await client.get(
-        tasks_url(LIST_ID), params={"status": TaskStatus.PENDING.value}
+        tasks_url(LIST_ID),
+        params={"status": TaskStatus.PENDING.value},
+        headers=caller,
     )
     with_a_filter = list(statements)
 

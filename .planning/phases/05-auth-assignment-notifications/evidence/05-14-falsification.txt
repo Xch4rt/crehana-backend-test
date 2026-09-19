@@ -80,3 +80,25 @@ E       AssertionError: assert None == '00000000-0000-4000-8000-000000000003'
 
 The 200 and the response body both passed; the re-read is the assertion that
 failed, which is the whole reason it is there.
+
+=== Falsification 4 (T-5-17): the owner's write path not holding the row ===
+
+tests/integration/test_concurrent_writes.py, the new owner-versus-assignee
+case: writer A's `owned_task(..., for_update=True)` changed to `False`, which
+is the same defect as a missing `.with_for_update()` in the adapter, confined
+to the one test so the other three stay meaningful.
+
+$ .venv/bin/pytest tests/integration/test_concurrent_writes.py -k owner_and_assignee -q --no-cov
+>       assert outcome.title == "Renamed by the owner", (
+E       AssertionError: the assignee answered with a title the owner had already replaced, so it validated and wrote a copy taken before the owner's commit
+E       assert 'Contended' == 'Renamed by the owner'
+E
+E         - Renamed by the owner
+E         + Contended
+
+1 failed, 3 deselected
+
+The assignee did not wait, read the task before the rename landed, and its
+whole-row update put "Contended" back over the owner's committed title. The
+assertion that fails first is the lost write rather than "nobody waited",
+which is the ordering `_until_it_waits_or_finishes` asks for.
