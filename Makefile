@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install lint format typecheck arch test docker-test up down run
+.PHONY: install env lint format typecheck arch test docker-test up down run
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -27,6 +27,22 @@ install:
 	$(PY) -m pip install -r requirements-dev.txt
 	$(PY) -m pip install -e .
 	$(VENV)/bin/pre-commit install
+
+# Step one of the evaluator's path, and the replacement for the plain copy of
+# .env.example the setup used to open with (D-15 as amended by ADR-084): the
+# placeholder secret that file publishes is refused at boot, so copying it
+# verbatim no longer produces a runnable configuration. This writes a freshly
+# generated JWT_SECRET into an untracked .env instead, and it never overwrites a
+# secret that is already real - so it is safe to re-run, and a developer's own
+# .env survives it. The old command is described rather than spelled, so that
+# grepping this repository for it stays a meaningful gate (the 01-03 convention).
+#
+# Deliberately the one target that needs neither Python, nor $(VENV), nor
+# Docker: a POSIX shell, awk, cp, mv and either openssl or /dev/urandom. That is
+# the same machine `make up` is written for - an evaluator with Docker and make
+# and nothing else.
+env:
+	sh scripts/init-env.sh
 
 # isort before black, always: the reverse order oscillates.
 format:
