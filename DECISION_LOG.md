@@ -1630,3 +1630,640 @@ a page size.
   is the only reason this ADR exists.
 
 ---
+## ADR-044: `get_current_actor` is a seam, and it is not authentication
+
+**Context**
+Phase 4 ships the brief's mandatory use case 1.a — task lists and tasks over HTTP — before any
+credential exists. Every command in the layer takes `actor_id: UUID` as its first field, and
+`task_lists.owner_id` is a foreign key. Something has to answer "who is calling?" two phases
+before the thing that can really answer it.
+
+**Options**
+
+- **Bring JWT forward into Phase 4.** Rejected: it drags registration, password hashing, the
+  OAuth2 password flow and the 401 leg of the error contract into a phase whose success criteria
+  say nothing about any of them, and it would make the CRUD slice untestable until all of it
+  worked.
+- **Take the identity from a request header** (`X-Actor-Id: <uuid>`). Rejected for being worse
+  than the honest placeholder in the way that matters: it *looks* like a mechanism. A reviewer
+  who sees a header being trusted has to work out whether it is a stub or a vulnerability, and
+  every integration test would have been written against a wire format that Phase 5 deletes.
+- **Get-or-create the user inside the dependency.** Rejected: a dependency that writes to the
+  database on a read request owns a transaction it has no business owning (ARC-08), and it makes
+  `GET /health` and `GET /api/v1/task-lists` differ in their side effects for no stated reason.
+- **One dependency returning a fixed demo id**, in a module of its own.
+
+**Decision**
+`src/taskmanager/presentation/api/actor.py` holds `DEMO_USER_ID: Final[UUID]` and
+`get_current_actor() -> UUID`, exposed as `CurrentActor = Annotated[UUID, Depends(...)]`
+(ADR-034). Every router takes the caller from there and from nowhere else. Phase 5 replaces the
+**body** of that one function with a token decode; no router signature, no schema, no command and
+no use case changes. The module's own docstring opens by saying, in those words, that this is
+**not authentication** — and `test_the_seam_says_it_is_not_authentication` asserts the phrase
+against `inspect.getsource`, so moving the sentence into a comment still satisfies it while
+deleting it fails the suite.
+
+It is a separate module rather than a third provider in `dependencies.py` for two concrete
+reasons: the entrypoint's seed (ADR-045) imports `DEMO_USER_ID`, and importing it from
+`dependencies.py` would drag the whole database stack into a five-line script; and in Phase 5 the
+seam is deleted as a *file* rather than edited out of one.
+
+**Consequences**
+
+- **The API has no access control against a stranger in Phase 4, and that is stated rather than
+  implied.** Ownership *is* enforced — every use case compares `task_list.owner_id` with
+  `actor_id` and answers 404 for anything else (D-04, ADR-008) — but with one fixed actor there is
+  no second caller to enforce it against over HTTP. The rule is proven in the unit suite with two
+  fake actors, and `acting_as(app, other_id)` in the integration harness exercises the same
+  refusals through the real routes.
+- The seeded row's `password_hash` is `!`, which is not a valid Argon2 encoded hash, so a pwdlib
+  verification against it can never succeed. This identity cannot become a live account by
+  accident when the login endpoint arrives.
+- The identifier is a `Final` constant and not a setting (D-03). It is not configuration: nothing
+  deploys differently because of it, and `.env.example` therefore gains no key an evaluator would
+  have to be told to ignore.
+- Phase 5's diff is small and readable: one function body, one deleted file, one deleted
+  entrypoint block.
+
+---
+
+## ADR-045: the demo user is seeded by the container entrypoint, not by a migration
+
+**Context**
+ADR-044's fixed actor needs a `users` row to exist, because `task_lists.owner_id` references it.
+On a fresh volume it does not, so an evaluator's very first `POST /api/v1/task-lists` after
+`docker compose up` would be a foreign-key violation — which would defeat the entire point of the
+seam.
+
+**Options**
+
+- **An Alembic data migration.** Rejected: a data row is not a schema change. It would make this
+  identity part of the schema's recorded history, and Phase 5 could then only remove it by writing
+  a second revision whose only job is to delete it.
+- **Get-or-create inside `get_current_actor`.** Rejected with ADR-044, for the same reason.
+- **A seed module under `src/taskmanager/`.** Rejected on the argument **ADR-037** already settled
+  for the readiness probe: that package's coverage carries no `omit` entry and allows no
+  `# pragma: no cover`, so a seed module would owe a unit test of a five-line `INSERT`, and it
+  would add a node to import-linter's graph that has to import `presentation`.
+- **An inline `python` heredoc in `docker/entrypoint.sh`**, after `alembic upgrade head`.
+
+**Decision**
+Step `2b` of `docker/entrypoint.sh`, between migrate and serve. It imports `DEMO_USER_ID` from
+`actor.py` rather than pasting the literal, so the identifier still exists in exactly one place
+(D-03), and it writes the row with `INSERT ... ON CONFLICT DO NOTHING` — **untargeted**.
+
+The step is numbered `2b` rather than `3` because it is temporary: Phase 5 deletes it with the
+seam, and `exec uvicorn` has been step 3 since Phase 3. Renumbering a permanent step for the sake
+of a temporary one is a rename a future diff would have to undo.
+
+**Consequences**
+
+- **The untargeted conflict clause is load-bearing, not laziness.** The seed runs on every
+  container start, so it must absorb every way the row can already be there. Run three times
+  against the live database it produced rowcounts `1, 0, 0`. A clause naming the primary-key
+  column as its target absorbs the second run and **not** the third: with a different id and the
+  same address it raises `duplicate key value violates unique constraint "uq_users_email_lower"`,
+  and under `set -eu` that aborts the container on a restart. Both forms were executed and both
+  transcripts are in
+  `.planning/phases/04-task-lists-tasks/evidence/04-11-seed-idempotence.txt`; executions 1 and 2
+  are byte-identical between them, which is exactly why a proof that only restarted with the same
+  id would have passed against the form that breaks.
+- No coverage exemption is bought. The heredoc is not a module under `src/`, so it adds no node to
+  import-linter's graph and cannot break a contract — confirmed by running `make arch`, not
+  assumed.
+- The behaviour is proven end to end rather than by unit test, in
+  `.planning/phases/04-task-lists-tasks/evidence/04-11-cold-start.txt`: an empty volume reaching
+  `api healthy`, and `POST /api/v1/task-lists` answering `201` on the fresh stack with no setup.
+- The seed proof deliberately ran against `taskmanager_test`, never `taskmanager`: its third
+  execution attempts a second row and its cleanup deletes by email, and pointing a destructive
+  statement at the database `docker compose up` serves would have bought nothing.
+- Phase 5 deletes this block and `actor.py` together.
+
+---
+
+## ADR-046: "field not provided" is a single-member enum in the application layer, refining ADR-020
+
+**Context**
+D-05 gives PATCH JSON Merge Patch semantics: an omitted key leaves a field unchanged, an explicit
+`null` clears a nullable one. A command DTO therefore has to carry three states per field —
+absent, null, value — and it has to do so under `mypy --strict` in a layer that ADR-020 keeps free
+of Pydantic.
+
+**Options**
+
+- **`None` as the marker.** Rejected outright: `None` is a legal *value* for every nullable PATCH
+  field, so the command could not tell "leave this alone" from "empty this", and the two produce
+  different rows.
+- **A bare `_UNSET = object()`.** Distinguishes them at runtime and gives mypy nothing: `str |
+  object` collapses to `object`, so a use case that forgot its guard and passed the sentinel into
+  `Task.rename` would type-check and fail in production.
+- **`fields_set: frozenset[str]` beside the values.** Rejected: it moves the question from the
+  type system to a runtime string comparison, and a typo in the set is invisible to every gate.
+- **A per-field `Patch[T]` wrapper** (`provided: bool`, `value: T`). Narrows correctly, and was
+  rejected for cost rather than correctness: every read becomes `command.field.value` behind
+  `command.field.provided`, and it adds a second DTO vocabulary beside ADR-020's frozen dataclasses
+  for no behaviour the enum does not already give.
+- **A single-member enum**, `class Unset(Enum): TOKEN = "unset"`, with `UNSET: Final = Unset.TOKEN`.
+
+**Decision**
+The enum, in `src/taskmanager/application/dto/unset.py`. mypy treats `value is not UNSET` as a
+literal narrowing, so inside the guard `str | Unset` is `str`, and omitting the guard is an
+`arg-type` error at the call site rather than a runtime surprise. The narrowing was verified by
+deleting a guard and observing mypy report it.
+
+**The sentinel stops at the application boundary, and that is the measured half of this decision.**
+Declaring it in the Pydantic request schemas was executed (04-RESEARCH Pattern 2) and produced two
+observable defects: a `_Unset` component published into `/openapi.json` as part of the field's
+`anyOf`, and the explicit-null refusal split across two error entries, at `body.title.str` and
+`body.title.enum[_Unset]`, neither of which a client can act on. The schemas therefore declare
+plain `X | None = None` and the mapper converts on the way in.
+
+**Consequences**
+
+- The application layer stays Pydantic-free without special pleading, which keeps ADR-020 intact
+  rather than carving an exception into it.
+- **The asymmetry with filters is deliberate.** `ListTasksCommand.status` and `.priority` are plain
+  `X | None = None`, not sentinels: for a filter, "absent" and "null" are the same request, so
+  there is only one meaning to express and a second marker would be ceremony every use case has to
+  unwrap. The command's docstring argues this rather than leaving a reader to notice it.
+- A live `None` leg follows from it: `if command.description is not UNSET:
+  task_list.describe(command.description, now=now)` correctly passes `None` through to clear the
+  field, and adding `and command.description is not None` would silently drop D-05's clear case.
+- The mapper that produces the sentinel has its own cost, recorded in ADR-052.
+
+---
+
+## ADR-047: `updated_at` moves whenever a field is provided — and therefore not at all when none is
+
+**Context**
+Discretion item 2 of the phase context, and Assumption **A1** of `04-RESEARCH.md`: does a PATCH
+whose values equal the current ones move `updated_at`? The update use cases are written as one
+guard per patchable field, each calling one entity mutator, and every entity mutator stamps
+`updated_at` unconditionally (Phase 2 D-04: the entity owns the rule, and it takes `now` as an
+argument rather than reading a clock).
+
+**Options**
+
+- **Compare values first, and stamp only on a real change.** Rejected: it puts a second "did this
+  actually change?" rule beside mutators that already stamp unconditionally, in a layer that is
+  not supposed to be re-deciding entity behaviour. Phase 2 D-04 exists to stop exactly that
+  duplication, and the comparison would have to be written once per field, per use case.
+- **Stamp unconditionally at the top of `execute`.** This is what two Phase 4 plans' task text
+  asked for in the all-omitted case. Rejected: it contradicts `04-PATTERNS` Pitfall 10 and the
+  verified `UpdateTaskList` body in `04-RESEARCH`, and it would make a request that changed
+  nothing indistinguishable, in the database, from one that did.
+- **Keep the guarded shape**, and accept the corollary.
+
+**Decision**
+The guarded shape, unchanged. `updated_at` moves whenever a field is *provided* — even to the
+value it already holds — and a command carrying no field at all reaches no mutator and therefore
+stamps nothing.
+
+**Consequences**
+
+- **No genuine no-op request exists over HTTP.** D-06 answers an empty body `{}` with a 422 at the
+  schema, and `extra="forbid"` answers a body of only unknown keys the same way, so a command with
+  every field `UNSET` can never be built from a real request. The corollary is nonetheless pinned
+  by a test in both update suites (`updated_at == NOW`, `commits == 1`), because nothing upstream
+  would reveal a change in it.
+- Two plans (04-05 and 04-06) asked in their task text for the opposite assertion, and both
+  executors recorded the contradiction rather than quietly implementing the plan or quietly
+  implementing the research. The reasoning is in each use case's test docstring.
+- A client that PATCHes the same name twice sees `updated_at` advance twice. That is the honest
+  reading of "this resource was written to", and it is cheaper than a correctness rule duplicated
+  in ten places.
+
+---
+
+## ADR-048: one door into the state machine — a dedicated status endpoint
+
+**Context**
+The brief lists "change a task's status" as a use case of its own, separately from "update a
+task". The status field is the one field in this API governed by a transition matrix
+(`pending → in_progress → completed`, Phase 2 D-01), with an observable side effect on
+`completed_at`.
+
+**Options**
+
+- **A writable `status` in the generic `PATCH /tasks/{id}`.** Rejected: it gives the state machine
+  a second entrance, and the generic PATCH's other fields have no transition rules at all, so one
+  request body would carry two different validation regimes.
+- **Action verbs**, `POST /tasks/{id}/complete` and a reopen counterpart — the shape **Todoist**
+  actually ships (`/close`, `/reopen`), so the alternative is genuinely defensible rather than a
+  strawman. Rejected here because the transition has no side effect beyond the field and a
+  timestamp, and one endpoint covers all transitions instead of three verb routes.
+- **`PATCH /api/v1/task-lists/{list_id}/tasks/{task_id}/status`** with body `{"status": "..."}`.
+
+**Decision**
+The sub-resource PATCH (D-11), returning `200` with the full `TaskResponse`. `status` is **not a
+field of `TaskPatchRequest` at all** (D-08) — not a declared-and-refused field, simply absent —
+so `extra="forbid"` turns a `status` key in the generic PATCH into exactly one `extra_forbidden`
+error at `(status,)`. The test asserts `len(errors) == 1`, so a model that declared the field and
+then refused it would still fail.
+
+**Consequences**
+
+- TASK-03's "`status` is not writable here" is proven **by absence** rather than by a guard
+  somebody could delete: `test_status_is_not_writable_through_the_generic_patch` over HTTP, and a
+  unit assertion that `UpdateTaskCommand` has no `status` field — together with `owner_id`,
+  `assignee_id` and `completed_at`, so the mass-assignment surface is refused as a set rather than
+  one field at a time.
+- An invalid transition is a 409 whose problem body names `from` and `to`, produced by the domain
+  and translated by the single handler — no router builds it.
+- A same-state request is a 200 no-op with an unchanged body (Phase 2 D-02), which is an
+  `Task.change_status` invariant rather than a use-case branch.
+- The Todoist alternative is named here on purpose, so that a reviewer who prefers action verbs
+  reads a decision rather than an oversight.
+
+---
+
+## ADR-049: the two response envelopes, refining ADR-009
+
+**Context**
+ADR-009 fixes *what* the completion percentage means — the whole list, one SQL aggregate, `0.0`
+when empty. It does not fix what the HTTP responses carrying it look like.
+`.planning/research/FEATURES.md` proposes a richer envelope than the phase context does.
+
+**Options for the task collection**
+
+- **The research envelope**: `list_id`, `completion_percentage`, `total_tasks`, `completed_tasks`,
+  `returned_count`, an echoed `filters` block, and `items`.
+- **The four-member envelope** of D-09: `items`, `total_tasks`, `completed_tasks`,
+  `completion_percentage`.
+
+**Decision**
+Four members. `list_id` is the path segment the client just sent. `returned_count` is
+`len(items)`. An echoed `filters` block restates the query string. Each is a second copy of
+something already in the request, and a second copy is something that can disagree — which is
+precisely the ambiguity the counters exist to remove.
+
+For task lists, **one `TaskListResponse` shape everywhere** (D-10): the collection, the single
+`GET`, the `POST` answer and the `PATCH` answer all carry `total_tasks`, `completed_tasks` and
+`completion_percentage`. A list created one millisecond ago reports `0, 0, 0.0` rather than
+omitting the block.
+
+The sentence the research asked to be written down is worth writing down: **the percentage is a
+property of the list, the filter is a property of the view.** That is the whole argument for the
+statistics not moving when a filter is applied.
+
+**Consequences**
+
+- `TaskCollectionResult` carries the three statistics **flat**, not as a nested `CompletionStats`
+  value object as the research example did. Flat keeps the response schema mapping one-to-one with
+  the DTO and stops presentation reaching through a domain value object for a number;
+  `from_parts(tasks, stats)` is where the unpacking happens, exactly once.
+- `test_the_filter_never_moves_the_statistics` asserts that the **item counts differ** as well as
+  that the three counters match, so it cannot pass vacuously against a filter that was silently
+  dropped.
+- One shape everywhere means the collection needs the statistics for every list in one query.
+  That is the new port capability `list_for_owner_with_stats` and the grouped statement behind it
+  (LIST-03), not an N+1 — see ADR-054.
+- `returned_count` is recoverable by any client in one expression, so nothing was actually
+  withheld.
+
+---
+
+## ADR-050: `ChangeTaskStatusCommand` gained `task_list_id`, so every task route honours its parent segment
+
+**Context**
+`ChangeTaskStatus` shipped in Phase 2 as the reference use case, with `actor_id` and `task_id` and
+no parent. Phase 4's URL for it is nested — `/task-lists/{list_id}/tasks/{task_id}/status` — and
+D-14 requires that a task addressed under a list it does not belong to answer `404`, identically
+to an absent task. The Phase 2 command could not express that question. This was
+`04-RESEARCH.md` Open Question 1.
+
+**Options**
+
+- **Ignore the parent segment on that one route.** Rejected: a nested path whose parent is not
+  checked is a real defect, an evaluator finds it in one `curl`, and the inconsistency would be
+  between two routes of the same resource.
+- **Check the parent in the router**, before calling the use case. Rejected: it puts a visibility
+  decision in the layer that cannot make one (ADR-008), and the unit suite would no longer prove
+  the rule.
+- **Add `task_list_id` to the command** and check it in the use case, like every other task verb.
+
+**Decision**
+The field was added (plan 04-03) and the shared guard `visible_task` compares the task's parent
+**before** loading the addressed list — so a wrong-list request cannot reveal whether that list
+exists either. Cost: one DTO field, one comparison, seven test call sites.
+
+**Consequences**
+
+- `PATCH .../status` answers the wrong-list 404 exactly as `GET`, `PATCH` and `DELETE` do; four
+  HTTP tests, one per verb, assert it.
+- All four refusal legs raise the **task-shaped** error carrying only the identifier the caller
+  already supplied, and indistinguishability is asserted comparatively — both refusals produced
+  and compared on type, code and details — because a single-error assertion passes just as happily
+  against an implementation that leaks existence through a different code.
+- A router that filled `task_list_id` from the task it had just loaded, rather than from the path,
+  would restore the defect while keeping every unit test green. The use case's docstring says so.
+
+---
+
+## ADR-051: D-15 is two gates, and the import check is the load-bearing half
+
+**Context**
+Phase 2 deferred a gate: `fastapi.HTTPException` must never be raised below — or, as it turns out,
+inside — the layer that answers business failures. A router that raises it has built an error body
+by hand, bypassing the single RFC 9457 handler ARC-07 puts in charge, *and* has taken an
+access-control decision in the one layer that does not know who owns what.
+
+**Options**
+
+- **An import-linter `forbidden` contract alone.** It works on *modules*, so it can say
+  "`infrastructure` must not import `fastapi`" — but it cannot be pointed at `presentation`, which
+  is supposed to import FastAPI. It cannot express "this symbol in particular".
+- **An AST test alone**, walking `raise` statements under the routers package. It catches the
+  direct, dotted and aliased spellings — and misses a construction bound to a local name and
+  raised on the next line, which the research prototype demonstrated by being run against exactly
+  that shape.
+- **Both**, each answering the question the other cannot.
+
+**Decision**
+Both. `.importlinter` gains `no-http-below-presentation` (`domain`, `application`,
+`infrastructure`; `fastapi`, `starlette`), and
+`tests/architecture/test_routers_raise_no_http_exception.py` makes two passes over every module
+under `presentation/api/routers`: one over `raise` statements, and one over imports and attribute
+access. The second is the load-bearing one — a module that never binds the name cannot raise it by
+any spelling — and the first is kept because it fails with the offending `file:line` rather than
+with an import at the top of the file.
+
+The import pass refuses the name **wherever it is bound**, not only from `fastapi` and
+`starlette.exceptions` as the research recommends. Naming the two would tie the gate to a fact
+about a dependency's layout rather than to the property, and a local re-export would walk straight
+through it.
+
+A third test asserts the scan is non-vacuous: a glob that matches nothing passes, so the suite
+fails if the routers package is renamed or emptied.
+
+**Consequences**
+
+- **Neither gate adds a pre-commit hook or a CI step**, and that is the ADR-015 argument applied a
+  third time (after plans 02-06 and 03-06): the contract rides inside `lint-imports`, which the
+  hook and the CI step already run, and the AST test rides inside pytest, which the hook set, the
+  Docker `test` stage and CI already run. ADR-015's "a new gate goes in two places" rule is about
+  gates that introduce a *new command*, and neither of these does.
+- Both were driven red before being trusted. The import-linter contract was planted twice, because
+  the first planting — inside `application` — also broke the pre-existing
+  `application-framework-free` contract and therefore proved only that the build goes red, not
+  that the new contract earns its place. The second planting, in `infrastructure/db/engine.py`,
+  reports **exactly one** contract BROKEN and it is the new one
+  (`evidence/04-02-importlinter-red.txt`).
+- The AST gate's first plant adds the import **as well as** the raise, because a raise of a name
+  the module never bound is not a state this codebase could reach; the second plant is the import
+  alone, and it is the run that proves the two assertions are not redundant — raise check green,
+  import check red (`evidence/04-08-ast-gate-red.txt`).
+- `EXPECTED_CONTRACT_NAMES` in `tests/architecture/test_layer_boundaries.py` now holds four names,
+  so a contract added later must edit both files in one change or fail.
+
+---
+
+## ADR-052: the OpenAPI polish level in Phase 4, and the two corrections it forced
+
+**Context**
+`04-RESEARCH.md` Open Question 3, and discretion item 6: how much OpenAPI work belongs in a phase
+whose requirement set does not include DOC-04?
+
+**Options**
+
+- **Nothing now; DOC-04 does it all in Phase 7.** Rejected: documenting a route months after
+  writing it is how a summary ends up describing what the author remembers rather than what the
+  route does.
+- **Everything now, including a `ProblemDetail` Pydantic model** so the error bodies are typed in
+  the schema. Rejected here: that model would exist *only* for documentation — nothing constructs
+  it, nothing validates against it — and Phase 7 owns that budget.
+- **Tags, `summary`, `response_description` and a status-keyed `responses` map per route now;
+  the documented error model in Phase 7.**
+
+**Decision**
+The middle option, on all eleven routes. `test_every_api_route_is_documented` asserts all four
+members on every `/api/v1` operation, so the twelfth route cannot arrive bare — a documented
+contract with no gate is the one that drifts first.
+
+**Two corrections followed from writing it:**
+
+- **Every route also declares a `500` leg.** `GET /api/v1/task-lists` can produce no 404, no 409
+  and no 422 — no path parameter, no body, no query parameter, and a caller who owns nothing gets
+  `200` with `[]` — so taken literally it would have carried an *empty* `responses` map. The 500
+  is Phase 2's fixed problem+json body: a real, documented outcome of every route in this API
+  rather than padding.
+- **Declaring `422` explicitly replaces FastAPI's generated `HTTPValidationError` entry, and that
+  is the point.** This API answers 422 as RFC 9457 `application/problem+json`; the generated entry
+  documented a shape no endpoint has ever returned. Superseding it with a description and no
+  misleading `content` is more accurate than leaving it, and publishing the real component is
+  DOC-04's work.
+
+**Consequences**
+
+- `/docs` is already close to DOC-04's bar, so Phase 7 adds one model rather than eleven routes'
+  worth of prose.
+- The `status` query parameter is spelled `status_filter` in Python with `Query(alias="status")`,
+  because `tasks.py` imports `status` from FastAPI for the status-code constants. The public
+  contract is unchanged and was *measured*: `?status=bogus` answers 422 with
+  `errors[0].field == "query.status"`.
+- The mapper that fills the ADR-046 sentinel uses `value is not None` for the **non-nullable**
+  fields (`name`; `title`, `priority`) and the `model_fields_set` membership test for the nullable
+  ones (`description`, `due_date`). The research and the plan wrote membership everywhere, and it
+  does not type-check: the expression stays `str | None | Unset` where the command field is `str |
+  Unset`. The equivalence for the non-nullable fields is exact rather than convenient — a field
+  validator has already refused an explicit null for precisely those fields, so a `None` at
+  mapping time can only mean the key was absent, and three tests assert that refusal. A `cast`
+  would have stopped the type checker from checking, and an `assert` would have added a branch the
+  no-`pragma` coverage rule needs an unreachable test for.
+
+---
+
+## ADR-053: where the research and the phase context disagreed, the context won
+
+**Context**
+`.planning/research/FEATURES.md` was written before the phase context was gathered, and it is the
+document a reader most likely to "fix" the code back toward. It contradicts `04-CONTEXT.md` in
+three places, and the code follows the context in all three.
+
+**Options**
+Leave the disagreement for a reader to discover and resolve on their own, or record it once so
+that the older document is read as history.
+
+**Decision**
+Recorded, all three:
+
+1. **An empty PATCH body `{}`.** FEATURES §3 says `200` with the resource unchanged, "an
+   idempotent no-op". D-06 says `422 validation_error`. The context wins because a client that
+   sends `{}` has almost certainly sent the wrong thing — a typo like `titel` is refused rather
+   than silently ignored under `extra="forbid"`, and an empty body is the same mistake with
+   nothing left in it. A 200 would report success for a request that did nothing. This also makes
+   ADR-047's corollary unreachable over HTTP, which is why the two decisions are consistent rather
+   than merely compatible.
+2. **Multi-value filters** (`?status=pending&status=in_progress`). FEATURES lists them as a cheap
+   "next level" feature. The context restricts each filter to a single value, combined with AND;
+   multi-value is requirement **API-02**, explicitly v2. The brief names exactly two filters and
+   says nothing about repeating them, and OR-within-field / AND-across-fields is a semantic that
+   has to be documented, tested and explained.
+3. **The richer task-collection envelope.** Covered by ADR-049.
+
+**Consequences**
+
+- A future reader of `FEATURES.md` sees three claims that the code does not implement, and this
+  entry is where they find out that was a decision.
+- `API-02` stays in the v2 list in `REQUIREMENTS.md` and is documented as pending in the README
+  (DOC-02), so the omission is visible to an evaluator too.
+
+---
+
+## ADR-054: the whole-list statistics come from one grouped statement, and "no N+1" is measured
+
+**Context**
+ADR-049 puts `total_tasks`, `completed_tasks` and `completion_percentage` on **every**
+`TaskListResponse`, including each element of `GET /api/v1/task-lists`. Computing that per list in
+Python is the textbook N+1, and it is the pitfall the phase research flags by name.
+
+**Options**
+
+- **`completion_stats(list_id)` per list**, reusing the existing single-list aggregate. Rejected:
+  correct and linear in the number of lists.
+- **A new port capability returning lists and stats together**, satisfied by one grouped
+  `LEFT JOIN ... GROUP BY` with `count(*) FILTER (WHERE status = 'completed')`.
+
+**Decision**
+`TaskListRepository.list_for_owner_with_stats(owner_id) -> Sequence[tuple[TaskList,
+CompletionStats]]`. The port speaks domain types; the pair is a bare `tuple` rather than a new
+`TaskListWithStats` value object, because that would introduce a domain concept only one query
+needs and the naming belongs on the application result DTO (`04-RESEARCH` Open Question 2).
+
+**Consequences**
+
+- The compiled-SQL test asserts `count(tasks.id)` **present** and `count(*)` **absent**: the two
+  render almost identically and differ exactly on the null-extended row an empty list produces,
+  which is the difference between `0` and `1` total tasks for a list with none.
+- The fake sorts its own pairs rather than delegating to `list_for_owner`, mirroring the adapter's
+  two separate `ORDER BY` clauses — a delegation would keep the test green if the grouped
+  statement lost its ordering.
+- **D-17 is discharged by measurement, and the measurement corrected a plan.** A
+  `before_cursor_execute` recorder asserts that the responses for one list and for many issue
+  *byte-identical* statement recordings. For the task collection the count is **three**, not the
+  two the plan predicted: the plan forgot `visible_task_list`, the ADR-008 guard that loads the
+  parent list and discards it so an invisible list is refused before a single task is read. The
+  measured number shipped, with all three named in `TASK_COLLECTION_STATEMENTS`. Removing the
+  guard would have traded a security property of this same phase for a number in a planning
+  document, and folding it into the page query would have dissolved the indistinguishability
+  ADR-050 depends on. D-17 is about invariance, not about a magic number: none of the three is
+  issued once per row, and the recording does not change with a filter either.
+
+---
+
+## ADR-055: the ADR-008 visibility rule lives in one module, `application/use_cases/access.py`
+
+**Context**
+Eleven use cases begin the same way: load the addressed resource, decide whether this actor may
+see it, and refuse identically to an absent one if not (D-04, ADR-008). Before this phase the
+block existed once, privately, inside `change_task_status.py`.
+
+**Options**
+
+- **A private function per use-case module**, which is what the reference use case did and is
+  arguably more consistent with it. Rejected at ten copies: the rule is a security property, and
+  ten copies age separately.
+- **A `GuardedUseCase` base class or mixin.** Rejected, and for a specific reason: an inherited
+  guard is invisible at the call site, so a subclass that overrode it, or a use case that simply
+  did not inherit, looks exactly like one that did. A missing `await visible_task_list(...)` is an
+  absent line in a diff.
+- **A module of two functions**, called explicitly as the first statement inside the use case's
+  `async with self._uow:` block.
+
+**Decision**
+`visible_task_list(uow, task_list_id, actor_id)` and `visible_task(uow, task_id, task_list_id,
+actor_id)`, taking an **already-entered** unit of work. They neither open the block nor commit, so
+the transaction boundary stays with the use case (D-17 of Phase 2, ARC-08) — asserted by a test
+that both guards leave `commits` and `rollbacks` at zero. `grep -rn "visible_task" src/` is an
+audit an evaluator can run in one command.
+
+**Consequences**
+
+- **The assignee clause was dropped, and the ASGN-02 test inverted.** `_may_change_status`
+  previously allowed `task.assignee_id == actor_id`. No Phase 4 endpoint sets `assignee_id`, so
+  keeping the clause would ship a branch no request can reach — which the no-`pragma` coverage
+  rule cannot excuse. `test_change_task_status_allows_the_assignee_who_does_not_own_the_list`
+  became `test_change_task_status_hides_the_task_from_its_assignee_for_now`, with a docstring
+  saying what it used to assert and that Phase 5 turns it back. Two places name Phase 5 by number:
+  that test, and `access.py`'s own docstring.
+- `access.py` discusses the 403 question at length **without naming `AuthorizationError`**, and
+  says in its docstring that it is doing so deliberately: nothing in Phase 4 can produce a
+  visible-but-forbidden case, so the class does not appear.
+- `CreateTask` is the deliberate exception to the task-shaped refusal: it refuses with the
+  **list-shaped** error, because the caller addressed a list and no task exists yet — there is no
+  task identifier to answer with. Its module docstring argues the exception at length so that a
+  reader does not file it as an inconsistency.
+- Phase 5 restores the assignee capability inside `access.py` and adds the project's first 403
+  branch there, rather than inside any single use case.
+
+---
+
+## ADR-056: the HTTP harness overrides the unit-of-work dependency and never enters the lifespan
+
+**Context**
+D-16 requires every Phase 4 route to be tested over HTTP against the real `taskmanager_test`
+database, under Phase 3's per-test rollback isolation. The application builds its engine in
+`create_app` and disposes it in the lifespan (ADR-035), and the integration fixtures already own a
+connection whose transaction is rolled back after each test.
+
+**Options**
+
+- **Enter the app's lifespan and let it build its own engine**, then somehow make the test's
+  transaction and the app's sessions agree. Rejected: two engines, two pools, and an isolation
+  story that depends on them cooperating.
+- **Build the app against a fictional DSN, override `get_uow`**, and never enter the lifespan.
+
+**Decision**
+The second. `api_client` deliberately does **not** enter the lifespan: `get_uow` is overridden, so
+the engine built against the fictional DSN is never dialled, and
+`tests/integration/test_health.py` remains the one place the engine's own lifecycle is proven.
+
+**Consequences**
+
+- **`seed()` commits, and it has to.** Under `join_transaction_mode="create_savepoint"` a session
+  closed without committing rolls its savepoint back, so seeded rows would vanish and the first
+  request would 404. The commit releases the savepoint into the outer transaction the connection
+  fixture still rolls back — isolation is unchanged, only visibility is bought.
+- `acting_as(app, actor_id)` is a **restoring** context manager rather than a one-way setter,
+  because a test that proved a 404 as a stranger and then asserted the owner's view would
+  otherwise still be the stranger and pass for the wrong reason.
+- The not-owned refusal is compared to the absent refusal **whole**, with each response's own
+  identifier tokenised out by `anonymised(response, *ids)`. The plan asked for "identical apart
+  from `instance`", but `instance` *is* the request path and therefore necessarily differs — so
+  excusing it would have left the path entirely uncompared.
+- 48 HTTP tests for the task routes and 31 for the task lists found **no** defect under `src/`.
+  That is the payoff of the same behaviours having been proven against the in-memory fakes first,
+  and it is recorded because a phase whose integration suite finds nothing is either well-built or
+  badly written, and the distinction matters.
+
+---
+
+## ADR-057: route assertions read `app.openapi()["paths"]`, never `app.routes`
+
+**Context**
+Three Phase 4 acceptance checks and one new test needed to enumerate the application's routes. The
+obvious form walks `app.routes`, filters on `hasattr(r, "methods")` and reads `r.path`.
+
+**Options**
+
+- **Walk `app.routes`.** On the pinned stack — FastAPI 0.141.1 with Starlette 1.6.0 —
+  `include_router` leaves a single opaque `fastapi.routing._IncludedRouter` object there, with no
+  `path` and no `methods` at all. Run verbatim against a correctly wired application, the first
+  check asserted `0 == 5` and failed. This is the second time this repository has hit the same
+  opacity: 03-09's probe-route guard reached the same conclusion in its own words.
+- **Read the generated OpenAPI document.**
+
+**Decision**
+Every route assertion derives its operations from `app.openapi()["paths"]`, through
+`_api_operations()` in `tests/unit/test_app_factory.py`, which carries the reason in its docstring.
+
+**Consequences**
+
+- The assertions are made against **the document a client actually reads**, which is the published
+  contract rather than an internal representation that has already changed once under us.
+- `test_create_app_publishes_exactly_the_phase_four_routes` is an inventory test: a twelfth route
+  cannot appear unnoticed, and neither can one disappear.
+- A future FastAPI upgrade that restores a walkable `app.routes` does not invalidate anything here;
+  the weaker form simply stays unused.
+
+---
