@@ -53,7 +53,15 @@ class SqlAlchemyUnitOfWork:
     def __init__(self, session_factory: Callable[[], AsyncSession]) -> None:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
-        self._committed = False
+        # `_finished`, not `_committed`, and the name is the whole point
+        # (review fix WR-07). Both `commit()` and `rollback()` set it, because
+        # what `__aexit__` needs to know is whether the transaction has already
+        # ended - not how. A flag called `_committed` that a rollback also sets
+        # answers "was this block committed?" with a lie, and the first feature
+        # that genuinely asks that question (an outbox flush, an audit line, a
+        # metric) would believe it. `FakeUnitOfWork` already carries the
+        # accurate name; this is the adapter catching up with it.
+        self._finished = False
 
     @property
     def _open_session(self) -> AsyncSession:
@@ -102,7 +110,7 @@ class SqlAlchemyUnitOfWork:
                 "the first session without closing it."
             )
         self._session = self._session_factory()
-        self._committed = False
+        self._finished = False
         self.tasks = SqlAlchemyTaskRepository(self._session)
         self.task_lists = SqlAlchemyTaskListRepository(self._session)
         self.users = SqlAlchemyUserRepository(self._session)
@@ -148,7 +156,7 @@ class SqlAlchemyUnitOfWork:
         """
         session = self._open_session
         try:
-            if not self._committed:
+            if not self._finished:
                 await session.rollback()
         finally:
             await session.close()
@@ -159,13 +167,15 @@ class SqlAlchemyUnitOfWork:
     async def commit(self) -> None:
         """Make this block's work durable. Only the use case calls this."""
         await self._open_session.commit()
-        self._committed = True
+        self._finished = True
 
     async def rollback(self) -> None:
         """Undo this block's work now, rather than at `__aexit__`."""
         await self._open_session.rollback()
-        # Mirrors `FakeUnitOfWork._finished`: the transaction is finished, so
-        # `__aexit__` must not roll back a second time. A second rollback on a
-        # session whose transaction has already ended is not harmless - it
-        # begins and ends a fresh one, which is work no caller asked for.
-        self._committed = True
+        # The same flag `commit()` sets, and it reads correctly here because it
+        # is named for the transaction being finished rather than for how it
+        # ended (WR-07). `__aexit__` must not roll back a second time: a second
+        # rollback on a session whose transaction has already ended is not
+        # harmless - it begins and ends a fresh one, which is work no caller
+        # asked for.
+        self._finished = True

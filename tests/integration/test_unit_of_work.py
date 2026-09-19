@@ -191,7 +191,7 @@ async def test_a_committed_write_is_invisible_outside_the_test_transaction(
 async def test_rollback_is_not_performed_twice(uow: SqlAlchemyUnitOfWork) -> None:
     """An explicit rollback finishes the transaction, so `__aexit__` adds none.
 
-    Pins the `_committed = True` line in `rollback()`. Without it `__aexit__`
+    Pins the `_finished = True` line in `rollback()`. Without it `__aexit__`
     rolls back a session whose transaction has already ended, which silently
     begins and ends a fresh one - work nobody asked for, and on a pooled
     session a round trip per request.
