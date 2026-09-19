@@ -30,15 +30,23 @@ from taskmanager.domain.value_objects.task_status import ALLOWED_TRANSITIONS, Ta
 class Task:
     """A unit of work inside a task list, and the rules it enforces on itself.
 
-    Only the mutators this phase needs exist. Phase 4 adds the ones its PATCH
-    endpoints require, following the same `now` keyword convention; the absence
-    of a priority or description setter here is a boundary, not an oversight.
+    There is one mutator per field a caller may change - `rename`, `describe`,
+    `reprioritise`, `reschedule` and `change_status` - each following the same
+    `now` keyword convention. `status` deliberately has no setter beyond
+    `change_status`: the state machine is the reason this entity exists, and a
+    plain assignment would route around it (TASK-03).
     """
 
     # TASK-08 / FEATURES section 8 rule 3: a title is 1-200 characters trimmed.
     TITLE_MAX_LENGTH: ClassVar[int] = 200
     # FEATURES section 8 rule 4: the description is optional and capped.
     DESCRIPTION_MAX_LENGTH: ClassVar[int] = 2000
+    # TASK-01: a task created without a priority is medium. The default lives
+    # here rather than in the request schema because it is a business rule, and
+    # Phase 2 D-04 puts every business rule in the entity exactly once - the
+    # schema and `create` both read this ClassVar, so `medium` cannot be spelled
+    # in two places that drift apart.
+    DEFAULT_PRIORITY: ClassVar[TaskPriority] = TaskPriority.MEDIUM
 
     id: UUID
     task_list_id: UUID
@@ -94,7 +102,7 @@ class Task:
         task_list_id: UUID,
         title: str,
         description: str | None = None,
-        priority: TaskPriority = TaskPriority.MEDIUM,
+        priority: TaskPriority = DEFAULT_PRIORITY,
         due_date: datetime | None = None,
         assignee_id: UUID | None = None,
         now: datetime,
@@ -141,6 +149,31 @@ class Task:
         self.title = require_text(
             title, field="title", max_length=self.TITLE_MAX_LENGTH
         )
+        self.updated_at = moment
+
+    def describe(self, description: str | None, *, now: datetime) -> None:
+        """Replace or clear the description, under the constructor's own guard."""
+        # `optional_text` folds "" to None, so an explicit empty string clears
+        # the field exactly as an explicit JSON null does and the absence keeps
+        # the single representation `__post_init__` guarantees (Phase 4 D-05).
+        moment = require_utc(now, field="now")
+        self.description = optional_text(
+            description,
+            field="description",
+            max_length=self.DESCRIPTION_MAX_LENGTH,
+        )
+        self.updated_at = moment
+
+    def reprioritise(self, priority: TaskPriority, *, now: datetime) -> None:
+        """Replace the priority and stamp the change."""
+        # There is no value guard here, unlike every sibling mutator, and the
+        # absence is deliberate: `TaskPriority` is a StrEnum, so the parameter's
+        # own type is the constraint and the enum-typed field at the HTTP
+        # boundary refuses anything that is not a member before a command is
+        # built. A defensive check would be a branch no test could reach, which
+        # this project's coverage norm would then have to excuse with a pragma.
+        moment = require_utc(now, field="now")
+        self.priority = priority
         self.updated_at = moment
 
     def reschedule(self, due_date: datetime | None, *, now: datetime) -> None:

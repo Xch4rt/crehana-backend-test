@@ -170,3 +170,67 @@ def test_task_list_rejects_an_undeclared_attribute() -> None:
 
     assert not hasattr(task_list, UNDECLARED_FIELD)
     assert not hasattr(task_list, "__dict__")
+
+
+def test_task_list_describe_sets_the_description_and_stamps_the_change() -> None:
+    """The mutator trims like the constructor and moves updated_at."""
+    task_list = _task_list()
+
+    task_list.describe("  Everything for the quarter  ", now=LATER)
+
+    assert task_list.description == "Everything for the quarter"
+    assert task_list.updated_at == LATER
+
+
+def test_task_list_describe_with_none_clears_the_description() -> None:
+    """An explicit null empties the field (Phase 4 D-05)."""
+    task_list = _task_list()
+    task_list.describe("Everything for the quarter", now=NOW)
+
+    task_list.describe(None, now=LATER)
+
+    assert task_list.description is None
+    assert task_list.updated_at == LATER
+
+
+def test_task_list_describe_with_an_empty_string_clears_the_description() -> None:
+    """A blank string and a null are the same request: one absence, one form."""
+    task_list = _task_list()
+    task_list.describe("Everything for the quarter", now=NOW)
+
+    task_list.describe("   ", now=LATER)
+
+    assert task_list.description is None
+
+
+def test_task_list_describe_rejects_an_over_length_description() -> None:
+    """A refused description leaves the aggregate exactly as it found it."""
+    task_list = _task_list()
+    task_list.describe("Everything for the quarter", now=NOW)
+    before = (task_list.description, task_list.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task_list.describe(
+            "a" * (TaskList.DESCRIPTION_MAX_LENGTH + 1),
+            now=LATER,
+        )
+
+    assert excinfo.value.details == {"field": "description"}
+    assert (task_list.description, task_list.updated_at) == before
+
+
+def test_task_list_describe_with_a_naive_now_changes_nothing() -> None:
+    """The description argument is valid, so only the `now` guard can fail.
+
+    That is what lets this test observe an implementation which assigned the
+    description before finishing its validation.
+    """
+    task_list = _task_list()
+    task_list.describe("Everything for the quarter", now=NOW)
+    before = (task_list.description, task_list.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task_list.describe("Something else", now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task_list.description, task_list.updated_at) == before

@@ -31,8 +31,10 @@ from taskmanager.domain.validation import optional_text, require_text, require_u
 class TaskList:
     """A named collection of tasks belonging to exactly one owner.
 
-    Only `rename` exists as a mutator. Phase 4 adds the ones its PATCH endpoint
-    needs, following the same `now` keyword convention.
+    `rename` and `describe` are the mutators, one per field the PATCH endpoint
+    may change, both following the same `now` keyword convention. `owner_id`,
+    `id` and `created_at` have none on purpose: a list does not change hands and
+    does not get re-created.
     """
 
     # FEATURES section 8 rule 1: a list name is 1-120 characters trimmed.
@@ -93,4 +95,20 @@ class TaskList:
         # as it found it.
         moment = require_utc(now, field="now")
         self.name = require_text(name, field="name", max_length=self.NAME_MAX_LENGTH)
+        self.updated_at = moment
+
+    def describe(self, description: str | None, *, now: datetime) -> None:
+        """Replace or clear the description, under the constructor's own guard."""
+        # Same three rules as `rename`: validate before assigning, `now` is
+        # keyword-only, and `updated_at` takes the validated moment. The call
+        # delegates to `optional_text`, which folds "" to None - so an explicit
+        # empty string clears the field exactly as an explicit JSON null does,
+        # and the absence keeps the single representation `__post_init__`
+        # already guarantees (Phase 4 D-05).
+        moment = require_utc(now, field="now")
+        self.description = optional_text(
+            description,
+            field="description",
+            max_length=self.DESCRIPTION_MAX_LENGTH,
+        )
         self.updated_at = moment

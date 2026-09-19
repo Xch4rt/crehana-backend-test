@@ -471,3 +471,105 @@ def test_task_rejects_an_undeclared_attribute() -> None:
     assert not hasattr(task, "__dict__")
     assert UNDECLARED_FIELD not in Task.__slots__
     assert "status" in Task.__slots__
+
+
+def test_task_describe_sets_the_description_and_stamps_the_change() -> None:
+    """The mutator trims like the constructor and moves updated_at."""
+    task = _task()
+
+    task.describe("  Draft the whole thing  ", now=LATER)
+
+    assert task.description == "Draft the whole thing"
+    assert task.updated_at == LATER
+
+
+def test_task_describe_with_none_clears_the_description() -> None:
+    """An explicit null empties the field (Phase 4 D-05)."""
+    task = _task()
+    task.describe("Draft the whole thing", now=NOW)
+
+    task.describe(None, now=LATER)
+
+    assert task.description is None
+    assert task.updated_at == LATER
+
+
+def test_task_describe_with_an_empty_string_clears_the_description() -> None:
+    """A blank string and a null are the same request: one absence, one form."""
+    task = _task()
+    task.describe("Draft the whole thing", now=NOW)
+
+    task.describe("   ", now=LATER)
+
+    assert task.description is None
+
+
+def test_task_describe_rejects_an_over_length_description() -> None:
+    """A refused description leaves the aggregate exactly as it found it."""
+    task = _task()
+    task.describe("Draft the whole thing", now=NOW)
+    before = (task.description, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.describe("a" * (Task.DESCRIPTION_MAX_LENGTH + 1), now=LATER)
+
+    assert excinfo.value.details == {"field": "description"}
+    assert (task.description, task.updated_at) == before
+
+
+def test_task_describe_with_a_naive_now_changes_nothing() -> None:
+    """The description argument is valid, so only the `now` guard can fail.
+
+    That is what lets this test observe an implementation which assigned the
+    description before finishing its validation.
+    """
+    task = _task()
+    task.describe("Draft the whole thing", now=NOW)
+    before = (task.description, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.describe("Something else", now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task.description, task.updated_at) == before
+
+
+def test_task_reprioritise_moves_the_priority_and_stamps_the_change() -> None:
+    """The one field the PATCH endpoint changes, and the timestamp with it."""
+    task = _task()
+
+    task.reprioritise(TaskPriority.HIGH, now=LATER)
+
+    assert task.priority is TaskPriority.HIGH
+    assert task.updated_at == LATER
+
+
+def test_task_reprioritise_with_a_naive_now_changes_nothing() -> None:
+    """The priority is a valid member, so only the `now` guard can fail."""
+    task = _task()
+    before = (task.priority, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.reprioritise(TaskPriority.HIGH, now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task.priority, task.updated_at) == before
+
+
+def test_task_default_priority_is_the_one_the_constructor_applies() -> None:
+    """TASK-01's default exists once, and `create` is proven to read it.
+
+    Asserting only `Task.DEFAULT_PRIORITY is TaskPriority.MEDIUM` would leave a
+    `create` that spelled `medium` a second time perfectly green, which is the
+    drift the ClassVar was introduced to make impossible.
+    """
+    assert Task.DEFAULT_PRIORITY is TaskPriority.MEDIUM
+
+    task = Task.create(
+        task_id=TASK_ID,
+        task_list_id=TASK_LIST_ID,
+        title="Write the specification",
+        now=NOW,
+    )
+
+    assert task.priority is Task.DEFAULT_PRIORITY
