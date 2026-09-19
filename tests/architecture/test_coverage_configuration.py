@@ -34,6 +34,14 @@ check does not care how the exclusion was spelled, which is the only property
 worth having here — a future entry nobody predicted is caught by what it does
 rather than by how it looks (ADR-092).
 
+One more thing a value pin cannot say: *that this is the file being read*.
+coverage.py searches `.coveragerc`, `setup.cfg`, `tox.ini` and `pyproject.toml`
+in that order and uses the first that carries coverage settings, so a three-line
+`.coveragerc` replaces every table pinned here and leaves this whole module green
+about a file nothing opens. `test_pyproject_is_the_only_coverage_configuration`
+refuses the three alternatives, and refuses `--no-cov` and `--cov-config` in the
+addopts for the same reason from the other side (ADR-095).
+
 Deliberately NOT used: asserting the coverage *number*. The suite has measured
 100 % since plan 03-05, but D-12 keeps the requirement at 75; 100 % is a norm
 this project holds itself to, not a contract. A test that pinned 100 would go
@@ -79,7 +87,13 @@ PACKAGE: Final[Path] = ROOT / "src" / "taskmanager"
 MINIMUM_THRESHOLD: Final[int] = 75
 
 COVERAGE_TARGET: Final[str] = "--cov=taskmanager"
+COVERAGE_TARGET_FLAG: Final[str] = "--cov="
 THRESHOLD_FLAG: Final[str] = "--cov-fail-under="
+
+# Two addopts that would make the threshold three lines below a decoration:
+# `--no-cov` disables the measurement entirely, and `--cov-config` points
+# coverage.py at a file nothing in this module reads.
+FORBIDDEN_ADDOPTS: Final[tuple[str, ...]] = ("--no-cov", "--cov-config")
 
 EXPECTED_SOURCE: Final[list[str]] = ["taskmanager"]
 
@@ -277,7 +291,65 @@ def test_coverage_is_measured_over_the_package() -> None:
     away from the denominator, and roadmap SC-5 requires the tests to stay out
     of it.
     """
-    assert COVERAGE_TARGET in _addopts()
+    addopts = _addopts()
+    targets = [token for token in addopts if token.startswith(COVERAGE_TARGET_FLAG)]
+
+    assert COVERAGE_TARGET in addopts
+    # A second `--cov=` does not replace the first, it adds to it: `--cov=src`
+    # beside this one would measure the tests as well and move the percentage
+    # without a single test being written.
+    assert targets == [COVERAGE_TARGET], f"Exactly one --cov= belongs here: {targets}"
+
+
+def test_pyproject_is_the_only_coverage_configuration() -> None:
+    """The gate pins the file coverage.py would actually read, and no other.
+
+    coverage.py searches `.coveragerc`, then `setup.cfg`, then `tox.ini`, then
+    `pyproject.toml`, and uses **the first one that carries coverage settings**.
+    Everything else in this module reads `pyproject.toml`, so a three-line
+    `.coveragerc` holding `omit = */use_cases/*` would replace the entire pinned
+    configuration - source, branch, concurrency, exclusions and all - and leave
+    every assertion here green about a file coverage.py no longer opens. The
+    addopts are the same argument from the other side: `--cov-config=other.rc`
+    redirects the search, and `--no-cov` turns the measurement off outright while
+    `--cov-fail-under=75` sits three lines below, still looking like a gate.
+
+    An empty `setup.cfg` or `tox.ini` is allowed, since coverage.py ignores a
+    file with no coverage section; what is refused is the section.
+    """
+    offenders: list[str] = []
+    if (ROOT / ".coveragerc").exists():
+        # It has no other purpose, so its existence is the offence.
+        offenders.append(".coveragerc")
+    for name in ("setup.cfg", "tox.ini"):
+        path = ROOT / name
+        if not path.is_file():
+            continue
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(path, encoding="utf-8")
+        offenders += [
+            f"{name} [{section}]"
+            for section in parser.sections()
+            if section == "coverage" or section.startswith("coverage:")
+        ]
+
+    forbidden = [
+        token
+        for token in _addopts()
+        for flag in FORBIDDEN_ADDOPTS
+        if token == flag or token.startswith(f"{flag}=")
+    ]
+
+    assert offenders == [], (
+        "coverage.py reads the FIRST of .coveragerc, setup.cfg, tox.ini, "
+        "pyproject.toml that carries coverage settings, so this file would "
+        "outrank the pinned [tool.coverage.*] tables and every assertion in "
+        f"this module would pass about a file nothing reads: {offenders}"
+    )
+    assert forbidden == [], (
+        "These addopts would redirect or disable the measurement the threshold "
+        f"beside them claims to gate: {forbidden}"
+    )
 
 
 def test_the_threshold_is_at_least_the_required_minimum() -> None:

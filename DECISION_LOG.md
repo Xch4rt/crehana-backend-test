@@ -4103,3 +4103,48 @@ which it does on this macOS host and in the container. Eight runs, about two sec
   deliberately not folded in here, because the exit code is not what makes the tree clean.
 
 ---
+
+## ADR-095: the coverage gate also pins *which file* coverage.py reads (2026-09-19, extending ADR-089)
+
+**Context**
+ADR-089's gate parses `pytest.ini` and `pyproject.toml` and asserts every fact the percentage
+rests on. It does not assert that `pyproject.toml` is the file coverage.py *reads*. coverage.py
+searches `.coveragerc`, `setup.cfg`, `tox.ini`, `pyproject.toml` in that order and uses the first
+one carrying coverage settings, so a three-line `.coveragerc` holding
+`[run] omit = */use_cases/*` replaces the whole pinned configuration — source, branch, concurrency,
+exclusions — and every assertion in that module stays green about a file nothing opens. The addopts
+are the same hole from the other side: `--cov-config=` redirects the search, `--no-cov` disables the
+measurement while `--cov-fail-under=75` sits three lines below still looking like a gate, and a
+second `--cov=src` adds to the first rather than replacing it, putting `tests/` in the denominator.
+
+**Options**
+
+- **Trust review.** The whole reason this module exists is that a one-line configuration change is
+  invisible in a diff and moves the number in the direction nobody audits. A *new file* is if
+  anything easier to miss than a changed line.
+- **Assert `.coveragerc`, `setup.cfg` and `tox.ini` simply do not exist.** Strongest and slightly
+  wrong: coverage.py ignores a `setup.cfg` or `tox.ini` with no coverage section, and either may
+  arrive later for an unrelated tool.
+- **Refuse the coverage *section*, and the three addopts.**
+
+**Decision**
+The third. `test_pyproject_is_the_only_coverage_configuration` fails if `.coveragerc` exists at all
+(it has no other purpose), if `setup.cfg` or `tox.ini` carries a `[coverage]` or `[coverage:*]`
+section, or if the addopts contain `--no-cov` or `--cov-config`; and
+`test_coverage_is_measured_over_the_package` now also requires **exactly one** `--cov=` token.
+
+**Consequences**
+
+- **Driven red three ways**, each reverted by deleting exactly what was planted: a `.coveragerc`
+  with an `omit`, a `tox.ini` with `[coverage:run]`, and an addopts block carrying `--cov=src`
+  plus `--cov-config=other.rc` (which reddens the `--cov=` count test as well, by design).
+- **Out of scope here, and still open:** WR-04's other half. `FORBIDDEN_PRAGMA` is matched as the
+  literal `# pragma: no cover`, while coverage honours
+  `#\s*(pragma|PRAGMA)[:\s]?\s*(no|NO)\s*(cover|COVER)` — so `#pragma: no cover`,
+  `# pragma:no cover`, `# PRAGMA: NO COVER` and `# pragma no cover` are all invisible to it, and
+  `# pragma: no branch` is not scanned for at all despite `branch = true` being pinned. That is
+  one `re.compile` away and is deliberately left to its own change; note that
+  `test_no_exclusion_removes_a_real_statement` (ADR-092) already catches every one of those
+  spellings by effect, which is why this is a message-quality gap rather than a hole.
+
+---

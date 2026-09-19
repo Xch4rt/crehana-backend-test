@@ -408,6 +408,13 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   of `coverage.Coverage.analysis2` for every module under `src/taskmanager` and fails on any
   excluded line carrying a statement outside a stub body or an `if TYPE_CHECKING:` block, so the
   gate is indifferent to how an exclusion was spelled (ADR-092, amending ADR-089).
+- **`pyproject.toml` is the only home coverage may be configured from.** coverage.py reads the first
+  of `.coveragerc`, `setup.cfg`, `tox.ini`, `pyproject.toml` that carries coverage settings, so any
+  of the first three would silently outrank every pinned `[tool.coverage.*]` table and leave the
+  gate green about a file nothing opens. `test_pyproject_is_the_only_coverage_configuration` fails
+  on a `.coveragerc` existing at all, on a `[coverage:*]` section in `setup.cfg` or `tox.ini`, and
+  on `--no-cov` or `--cov-config` in the `pytest.ini` addopts; `--cov=` must appear exactly once,
+  since a second one adds to the first rather than replacing it (ADR-095).
 - Every collected test carries **exactly one** of the two markers `pytest.ini` registers, `unit`
   or `integration`, as a module-level `pytestmark`. `--strict-markers` refuses an *unregistered*
   marker; nothing in pytest refuses a *missing* one, so `pytest_collection_modifyitems` in
