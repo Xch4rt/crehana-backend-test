@@ -1,0 +1,240 @@
+Plan 04-11 Task 2 - the cold-start rehearsal on an empty volume
+===============================================================
+
+Captured 2026-09-19 on macOS 15 / Docker Desktop, linux/arm64, against the
+committed docker-compose.yml, Dockerfile and Makefile with no override file of
+any kind and no edit to any of the three (the last command in this transcript
+checks that).
+
+This extends evidence/03-10-cold-start.txt rather than replacing it. Phase 3's
+rehearsal could show that a fresh stack reaches `api healthy`, that the Alembic
+revision runs before uvicorn, and that /health is wired to the database - but it
+could not show the API doing anything, because Phase 3 shipped no route. This one
+can: it walks the brief's mandatory use case (create a list, create a task, move
+it to `completed`, read the statistics back) on a stack that was an empty volume
+ninety seconds earlier.
+
+What this transcript proves, in order:
+
+  1. `docker compose down -v` discards the volume first. Without `-v` the database
+     is already migrated AND already seeded, so the run would prove nothing about
+     the evaluator's first command - which is the only run that matters here.
+  2. `docker compose up -d --build` starts db and api, and NOT test, which carries
+     a profile (03-10's finding, re-observed).
+  3. `api` reaches `healthy` 6 seconds after `up` returns - three polls, 2s apart.
+  4. The log shows the entrypoint's order (D-06): the Alembic revision line, then
+     the uvicorn lines. The seed step sits between them and prints nothing, which
+     is the intended behaviour - like the readiness probe, a successful step is
+     silent (T-4-67: a container log is readable by anyone who can run
+     `docker compose logs`, so the seed never echoes what it wrote).
+  5. `POST /api/v1/task-lists` answers **201** with a `Location` header. This is
+     the line the whole plan exists for: `task_lists.owner_id` is a foreign key to
+     `users.id`, so without the seed step this request is a foreign-key violation
+     and the D-01/D-02 arrangement is broken on the evaluator's very first call.
+     The `owner_id` in the body reads `00000000-0000-4000-8000-00000000de00` -
+     `DEMO_USER_ID` from actor.py, the row the entrypoint wrote.
+  6. The mandatory use case end to end: the task is created `pending`/`medium`,
+     moved `pending -> in_progress -> completed`, and the envelope statistics go
+     from (1, 0, 0.0) to (1, 1, **100.0**). The collection endpoint's per-list
+     statistics move with them.
+  7. `docker compose restart api` returns to `healthy` in 7 seconds, and this is
+     Task 1's idempotence claim observed in the real container under `set -eu`
+     rather than in a script: the seed ran a second time against a database that
+     already holds the row. `docker compose logs api | grep -c -E
+     'IntegrityError|Traceback'` prints **0**, the data survives the restart, and
+     `SELECT ... FROM users` at the end returns exactly **one** row.
+  8. `/health` still answers 200 with `"database":"ok"` - the Phase 3 contract is
+     intact.
+
+One thing worth reading carefully in step 7's log: the second boot prints the two
+Alembic context lines but NO `Running upgrade` line. The migration was already at
+head, so it did nothing - which is what `upgrade head` on a restart is supposed to
+look like, and the same shape the seed step takes one line further down (it too
+ran, and it too changed nothing).
+
+Nothing diverged from the plan. No retry line appeared in either boot: the
+compose healthcheck on `db` plus `depends_on: condition: service_healthy` meant
+the database was already accepting connections when the entrypoint's probe first
+asked, so the probe was silent both times. The bounded retry loop is still load-
+bearing under a plain `docker run`, where nothing waits - that is 03-10's
+falsification, not re-run here.
+
+The stack was left RUNNING at the end of this capture (db + api, both healthy).
+`make down` stops it; `docker compose down -v` also discards the volume.
+
+The only elision below is the body of the image build - ~230 lines of pip
+download progress from a cold BuildKit cache, which say nothing about this plan.
+It is marked where it was cut; everything else is verbatim, including the
+timings.
+
+------------------------------------------------------------------------------
+
+$ date -u '+%Y-%m-%dT%H:%M:%SZ'
+2026-09-19T06:36:03Z
+
+$ test -f .env || cp .env.example .env
+
+$ docker compose down -v
+ Container test-api-1 Stopping
+ Container test-api-1 Stopped
+ Container test-api-1 Removing
+ Container test-api-1 Removed
+ Container test-db-1 Stopping
+ Container test-db-1 Stopped
+ Container test-db-1 Removing
+ Container test-db-1 Removed
+ Network test_default Removing
+ Volume test_pgdata Removing
+ Volume test_pgdata Removed
+ Network test_default Removed
+
+$ docker compose up -d --build
+ Image test-api Building
+#1  [internal] load local bake definitions
+   … ~230 lines elided: `docker/dockerfile:1` resolved, python:3.13-slim-trixie
+   pulled, `pip install -r requirements.txt` resolving 36 exact-pinned wheels,
+   `pip install --no-deps .` building taskmanager-0.1.0, and the four runtime
+   COPY layers (alembic.ini, migrations/, docker/entrypoint.sh, chmod +x) …
+#23 DONE 5.3s
+ Image test-api Built
+ Network test_default Creating
+ Network test_default Created
+ Volume test_pgdata Creating
+ Volume test_pgdata Created
+ Container test-db-1 Creating
+ Container test-db-1 Created
+ Container test-api-1 Creating
+ Container test-api-1 Created
+ Container test-db-1 Starting
+ Container test-db-1 Started
+ Container test-db-1 Waiting
+ Container test-db-1 Healthy
+ Container test-api-1 Starting
+ Container test-api-1 Started
+
+$ start=$(date +%s); until docker compose ps --format '{{.Service}} {{.Health}}' | grep -q 'api healthy'; do sleep 2; done
+(api reached healthy after 3 poll(s) 2s apart, 6s elapsed from the moment `up` returned)
+
+$ docker compose ps --format '{{.Service}} {{.Health}}'
+api healthy
+db healthy
+
+$ docker compose ps -a --format '{{.Service}} {{.State}}'
+api running
+db running
+
+$ docker compose logs api
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:53584 - "GET /health HTTP/1.1" 200 OK
+
+$ curl -s -i -X POST localhost:8000/api/v1/task-lists -H 'content-type: application/json' -d '{"name":"demo"}'
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 06:37:29 GMT
+server: uvicorn
+content-length: 278
+content-type: application/json
+location: http://localhost:8000/api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce
+
+{"id":"f73371f5-b687-465c-805e-2f310b88e2ce","owner_id":"00000000-0000-4000-8000-00000000de00","name":"demo","description":null,"created_at":"2026-09-19T06:37:29.992587Z","updated_at":"2026-09-19T06:37:29.992587Z","total_tasks":0,"completed_tasks":0,"completion_percentage":0.0}
+
+$ LIST_ID=$(…the Location header's last segment…); echo $LIST_ID
+f73371f5-b687-465c-805e-2f310b88e2ce
+
+$ curl -s localhost:8000/api/v1/task-lists
+[{"id":"f73371f5-b687-465c-805e-2f310b88e2ce","owner_id":"00000000-0000-4000-8000-00000000de00","name":"demo","description":null,"created_at":"2026-09-19T06:37:29.992587Z","updated_at":"2026-09-19T06:37:29.992587Z","total_tasks":0,"completed_tasks":0,"completion_percentage":0.0}]
+
+$ curl -s -i -X POST localhost:8000/api/v1/task-lists/$LIST_ID/tasks -H 'content-type: application/json' -d '{"title":"walk the mandatory use case end to end"}'
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 06:37:29 GMT
+server: uvicorn
+content-length: 347
+content-type: application/json
+location: http://localhost:8000/api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks/8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7
+
+{"id":"8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7","task_list_id":"f73371f5-b687-465c-805e-2f310b88e2ce","title":"walk the mandatory use case end to end","description":null,"status":"pending","priority":"medium","created_at":"2026-09-19T06:37:30.035335Z","updated_at":"2026-09-19T06:37:30.035335Z","due_date":null,"completed_at":null,"assignee_id":null}
+
+$ TASK_ID=$(…the Location header's last segment…); echo $TASK_ID
+8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7
+
+$ curl -s localhost:8000/api/v1/task-lists/$LIST_ID/tasks
+{"items":[{"id":"8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7","task_list_id":"f73371f5-b687-465c-805e-2f310b88e2ce","title":"walk the mandatory use case end to end","description":null,"status":"pending","priority":"medium","created_at":"2026-09-19T06:37:30.035335Z","updated_at":"2026-09-19T06:37:30.035335Z","due_date":null,"completed_at":null,"assignee_id":null}],"total_tasks":1,"completed_tasks":0,"completion_percentage":0.0}
+
+$ curl -s -X PATCH localhost:8000/api/v1/task-lists/$LIST_ID/tasks/$TASK_ID/status -H 'content-type: application/json' -d '{"status":"in_progress"}'
+{"id":"8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7","task_list_id":"f73371f5-b687-465c-805e-2f310b88e2ce","title":"walk the mandatory use case end to end","description":null,"status":"in_progress","priority":"medium","created_at":"2026-09-19T06:37:30.035335Z","updated_at":"2026-09-19T06:37:30.061788Z","due_date":null,"completed_at":null,"assignee_id":null}
+
+$ curl -s -X PATCH localhost:8000/api/v1/task-lists/$LIST_ID/tasks/$TASK_ID/status -H 'content-type: application/json' -d '{"status":"completed"}'
+{"id":"8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7","task_list_id":"f73371f5-b687-465c-805e-2f310b88e2ce","title":"walk the mandatory use case end to end","description":null,"status":"completed","priority":"medium","created_at":"2026-09-19T06:37:30.035335Z","updated_at":"2026-09-19T06:37:30.073342Z","due_date":null,"completed_at":"2026-09-19T06:37:30.073342Z","assignee_id":null}
+
+$ curl -s localhost:8000/api/v1/task-lists/$LIST_ID/tasks
+{"items":[{"id":"8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7","task_list_id":"f73371f5-b687-465c-805e-2f310b88e2ce","title":"walk the mandatory use case end to end","description":null,"status":"completed","priority":"medium","created_at":"2026-09-19T06:37:30.035335Z","updated_at":"2026-09-19T06:37:30.073342Z","due_date":null,"completed_at":"2026-09-19T06:37:30.073342Z","assignee_id":null}],"total_tasks":1,"completed_tasks":1,"completion_percentage":100.0}
+
+$ curl -s localhost:8000/api/v1/task-lists
+[{"id":"f73371f5-b687-465c-805e-2f310b88e2ce","owner_id":"00000000-0000-4000-8000-00000000de00","name":"demo","description":null,"created_at":"2026-09-19T06:37:29.992587Z","updated_at":"2026-09-19T06:37:29.992587Z","total_tasks":1,"completed_tasks":1,"completion_percentage":100.0}]
+
+$ docker compose restart api
+ Container test-api-1 Restarting
+ Container test-api-1 Started
+
+$ until docker compose ps … 'api healthy'  # the seed runs a SECOND time here
+(api returned to healthy after 3 poll(s) 2s apart, 7s)
+
+$ docker compose ps --format '{{.Service}} {{.Health}}'
+api healthy
+db healthy
+
+$ docker compose logs api --since 2m
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:53584 - "GET /health HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:30325 - "POST /api/v1/task-lists HTTP/1.1" 201 Created
+api-1  | INFO:     192.168.65.1:30482 - "GET /api/v1/task-lists HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:34013 - "POST /api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks HTTP/1.1" 201 Created
+api-1  | INFO:     192.168.65.1:26553 - "GET /api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:48993 - "PATCH /api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks/8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7/status HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:56587 - "PATCH /api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks/8a395f3c-4cb0-44d3-acb1-422ec5f6bdd7/status HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:16517 - "GET /api/v1/task-lists/f73371f5-b687-465c-805e-2f310b88e2ce/tasks HTTP/1.1" 200 OK
+api-1  | INFO:     192.168.65.1:51294 - "GET /api/v1/task-lists HTTP/1.1" 200 OK
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [1]
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:43778 - "GET /health HTTP/1.1" 200 OK
+
+$ docker compose logs api | grep -c -E 'IntegrityError|Traceback'
+0
+
+$ curl -s -o /dev/null -w '%{http_code}' localhost:8000/health
+200
+
+$ curl -s localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}
+
+$ curl -s localhost:8000/api/v1/task-lists   # the list survived the restart
+[{"id":"f73371f5-b687-465c-805e-2f310b88e2ce","owner_id":"00000000-0000-4000-8000-00000000de00","name":"demo","description":null,"created_at":"2026-09-19T06:37:29.992587Z","updated_at":"2026-09-19T06:37:29.992587Z","total_tasks":1,"completed_tasks":1,"completion_percentage":100.0}]
+
+$ docker compose exec -T db psql -U taskmanager -d taskmanager -c 'SELECT id, email, password_hash FROM users'
+                  id                  |         email          | password_hash
+--------------------------------------+------------------------+---------------
+ 00000000-0000-4000-8000-00000000de00 | demo@taskmanager.local | !
+(1 row)
+
+
+$ git status --porcelain -- docker-compose.yml Dockerfile Makefile   # must be empty
+(end)
