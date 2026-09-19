@@ -76,8 +76,11 @@ forbidden_modules =
 # "this name in particular" - it answers the broader question instead, and answers it
 # for the whole subtree. The symbol-level question is a different gate's:
 # `tests/architecture/test_routers_raise_no_http_exception.py` (plan 04-08) walks the
-# AST of the presentation layer, where the import IS allowed and only the `raise` is
-# not. The two are complementary rather than redundant.
+# AST of every module under `presentation/api` except `errors/handlers.py`, the one
+# exception-handling point, and refuses both the `raise` and any import of the class.
+# (Until the Phase 4 review's WR-05 this comment claimed "the presentation layer" while
+# the test scanned `routers/` only; the test was widened to match, not the claim
+# narrowed.) The two are complementary rather than redundant.
 #
 # `domain` and `application` are already covered by their own contracts above; they are
 # repeated here so that this contract states D-15 completely and a future narrowing of

@@ -1,0 +1,118 @@
+WR-05 HTTPException AST gate, widened and re-proved red - Phase 4 review fix
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1, FastAPI 0.141.1
+
+What this proves, in three parts.
+
+1. The review was right about the scope. With an aliased import AND a raise
+   planted in `presentation/api/actor.py` - the file Phase 5 rewrites with JWT
+   decoding - the OLD gate (the file at HEAD before this fix, which scans
+   `routers/` only) stays GREEN.
+2. The NEW gate turns BOTH passes red on that plant, and the raise pass reports
+   the aliased spelling (`raise HE(...)`) at its own line - the thing the old
+   docstring claimed and the old code did not do.
+3. A star-import alone (`from fastapi import *`, no raise anywhere) leaves the
+   raise pass GREEN and turns only the import pass red: the second assertion
+   still earns its place, and it now sees a binding that never spells the name.
+
+Command, identical in all four runs:
+  .venv/bin/pytest tests/architecture/test_routers_raise_no_http_exception.py --no-cov -q -p no:cacheprovider --tb=line ; echo exit=$?
+
+"OLD gate" means `git show HEAD:<test file>` written over the working file for
+that run only; "NEW gate" is the file this commit ships. The plants in `actor.py`
+were removed with `git checkout -- <file>` immediately after each run and exist
+neither on disk nor in history; the green run at the bottom is the shipped tree.
+Captures are verbatim apart from trailing whitespace. The runs happened in an
+isolated git worktree of this repository under /private/tmp, which is why paths
+begin there.
+
+================================================================================
+PLANT 1 - an aliased import and a raise, in actor.py
+================================================================================
+
+diff --git a/src/taskmanager/presentation/api/actor.py b/src/taskmanager/presentation/api/actor.py
+index 8b9c4ec..56c4207 100644
+--- a/src/taskmanager/presentation/api/actor.py
++++ b/src/taskmanager/presentation/api/actor.py
+@@ -35,6 +35,7 @@ from typing import Annotated, Final
+ from uuid import UUID
+
+ from fastapi import Depends
++from fastapi import HTTPException as HE
+
+ # A version-4 UUID with a readable tail, so a row in `psql` or an id in a log
+ # line is recognisable as the demo identity at a glance rather than looked up.
+@@ -50,6 +51,8 @@ def get_current_actor() -> UUID:
+     application state, because there is nothing yet to read. Phase 5 gives it
+     the token dependency and the decode, and every call site stays as written.
+     """
++    if DEMO_USER_ID is None:
++        raise HE(status_code=401)
+     return DEMO_USER_ID
+
+
+
+--- OLD gate under this plant (expected: GREEN - actor.py was never scanned) ---
+...                                                                      [100%]
+3 passed in 0.01s
+exit=0
+
+--- NEW gate under this plant (expected: both passes RED) ---
+..FF...                                                                  [100%]
+=================================== FAILURES ===================================
+E   AssertionError: The presentation layer must never answer a failure itself: it raises a DomainError, and the single exception handler turns that into the one problem+json body the API speaks. Whether the caller may know the resource exists is the use case's decision, not the router's (ADR-008, D-15). Offending raise statements: ['actor.py:55']
+    assert ['actor.py:55'] == []
+
+      Left contains one more item: 'actor.py:55'
+      Use -v to get more diff
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/architecture/test_routers_raise_no_http_exception.py:266: AssertionError: The presentation layer must never answer a failure itself: it raises a DomainError, and the single exception handler turns that into the one problem+json body the API speaks. Whether the caller may know the resource exists is the use case's decision, not the router's (ADR-008, D-15). Offending raise statements: ['actor.py:55']
+E   AssertionError: No module under presentation/api but the exception handlers may so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['actor.py:38']
+    assert ['actor.py:38'] == []
+
+      Left contains one more item: 'actor.py:38'
+      Use -v to get more diff
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/architecture/test_routers_raise_no_http_exception.py:290: AssertionError: No module under presentation/api but the exception handlers may so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['actor.py:38']
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_presentation_module_raises_an_http_exception
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_presentation_module_imports_an_http_exception
+2 failed, 5 passed in 0.02s
+exit=1
+
+================================================================================
+PLANT 2 - a star-import only, no raise, in actor.py
+================================================================================
+
+diff --git a/src/taskmanager/presentation/api/actor.py b/src/taskmanager/presentation/api/actor.py
+index 8b9c4ec..839a435 100644
+--- a/src/taskmanager/presentation/api/actor.py
++++ b/src/taskmanager/presentation/api/actor.py
+@@ -34,6 +34,7 @@ deletable on its own.
+ from typing import Annotated, Final
+ from uuid import UUID
+
++from fastapi import *  # noqa: F401,F403
+ from fastapi import Depends
+
+ # A version-4 UUID with a readable tail, so a row in `psql` or an id in a log
+
+--- NEW gate under this plant (expected: import pass RED, raise pass GREEN) ---
+...F...                                                                  [100%]
+=================================== FAILURES ===================================
+E   AssertionError: No module under presentation/api but the exception handlers may so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['actor.py:37']
+    assert ['actor.py:37'] == []
+
+      Left contains one more item: 'actor.py:37'
+      Use -v to get more diff
+/private/tmp/sv-04-reviewfix-kkoDQl/tests/architecture/test_routers_raise_no_http_exception.py:290: AssertionError: No module under presentation/api but the exception handlers may so much as name the framework's exception class - importing it is the one step that makes the indirect raise the check above cannot see possible at all (D-15). Offending references: ['actor.py:37']
+=========================== short test summary info ============================
+FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_no_presentation_module_imports_an_http_exception
+1 failed, 6 passed in 0.02s
+exit=1
+
+================================================================================
+PLANTS REMOVED - the shipped tree, NEW gate
+================================================================================
+
+.......                                                                  [100%]
+7 passed in 0.02s
+exit=0
