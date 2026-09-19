@@ -1379,7 +1379,7 @@ run would otherwise fail the gate. [VERIFIED: executed]
 | A6 | `request.url_for` producing an absolute URL satisfies D-12's "`Location` header naming the new resource's URL" | Pattern 4 | Low — RFC 9110 permits both absolute and relative; a relative path is a one-line change |
 | A7 | Two routers (`task_lists.py`, `tasks.py`) rather than one per resource-plus-subresource | Project Structure | Low — a discretion item |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does the status endpoint need `task_list_id` in the command?**
    - What we know: D-11 nests it under `{list_id}` and D-14 requires a wrong-list 404 for task
@@ -1390,6 +1390,9 @@ run would otherwise fail the gate. [VERIFIED: executed]
      segment is ignored is a real defect, an evaluator can find it in one curl, and the
      consistency argument is stronger than the cost (one DTO field, one comparison, seven test
      call sites).
+   - **RESOLVED:** recommendation adopted. Plan 04-03 adds `task_list_id` to
+     `ChangeTaskStatusCommand`, and the status route enforces the wrong-list 404 like every other
+     task route.
 
 2. **Should `ListTaskLists` return `CompletionStats` through a tuple or a new value object?**
    - What we know: the port must speak domain types; `Sequence[tuple[TaskList, CompletionStats]]`
@@ -1398,6 +1401,8 @@ run would otherwise fail the gate. [VERIFIED: executed]
      dataclass in `domain/value_objects/`.
    - Recommendation: the tuple. It introduces no domain concept that only one query needs, and
      the application result DTO (`TaskListResult`) is where the naming belongs.
+   - **RESOLVED:** the tuple. The port returns `Sequence[tuple[TaskList, CompletionStats]]`
+     (plans 04-02 and 04-05); no `TaskListWithStats` value object is introduced.
 
 3. **How much OpenAPI polish belongs in this phase?** (discretion item #6)
    - Recommendation: tags + `summary` + `response_description` on every route, plus a
@@ -1405,11 +1410,17 @@ run would otherwise fail the gate. [VERIFIED: executed]
      a `ProblemDetail` Pydantic model used *only* for documentation — worthwhile and cheap, but it
      is DOC-04's budget. Do the tags and summaries now; leave the documented error models to
      Phase 7 unless a plan has slack.
+   - **RESOLVED:** plan 04-08 carries tags, `summary`, `response_description` and the
+     `responses={404, 409, 422}` map on every route. The `ProblemDetail` documentation model is
+     deferred to Phase 7 (DOC-04).
 
 4. **Is the pre-existing `test_get_settings_is_cached` failure in scope?**
    - Recommendation: check one CI run first. If CI is green, record it in `AI_WORKFLOW.md` as a
      host-environment artifact and use `make docker-test` for the phase gate. If CI is red, it
      blocks the gate and needs a one-line fix in a Wave 0 task.
+   - **RESOLVED:** in scope, and fixed unconditionally in plan 04-01 Task 1 rather than made
+     conditional on a CI run. The orchestrator confirmed the failure on the host on 2026-09-18 and
+     CI has not run since Phase 1, so there is no green run to defer to.
 
 ## Sources
 
