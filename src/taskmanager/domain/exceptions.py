@@ -187,10 +187,30 @@ class EmailAlreadyRegisteredError(ConflictError):
 
 
 class AuthenticationError(DomainError):
-    """Raised when a caller cannot be identified from the credentials given."""
+    """Raised when a caller cannot be identified from the credentials given.
+
+    The message is **defaulted**, and that is the mechanism D-11 rests on
+    rather than a convenience. Two components refuse a bearer token - the token
+    adapter, which cannot verify it, and `AuthenticateActor`, which finds no
+    row for a subject that verified perfectly well - and a caller able to tell
+    those two answers apart can ask "does this account still exist?" about any
+    token they ever held. Two hand-written strings in two layers are one edit
+    away from that leak, so there are no strings: both write
+    `raise AuthenticationError()` and the wording lives here, once.
+
+    A message may still be passed, and `Login` passes one: its two legs are a
+    different question ("are these credentials right?") asked at a different
+    endpoint, and their indistinguishability is enforced the same way, by a
+    single constant with a single home in `use_cases/auth/login.py`.
+    """
 
     code: ClassVar[str] = "authentication_failed"
     title: ClassVar[str] = "Authentication failed"
+    # Deliberately says nothing about which part of the credential was wrong.
+    REFUSAL: ClassVar[str] = "Could not validate credentials."
+
+    def __init__(self, message: str = REFUSAL, details: Details | None = None) -> None:
+        super().__init__(message, details)
 
 
 class AuthorizationError(DomainError):

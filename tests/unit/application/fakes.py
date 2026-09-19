@@ -29,6 +29,7 @@ from taskmanager.application.ports.repositories import (
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
+from taskmanager.domain.exceptions import EmailAlreadyRegisteredError
 from taskmanager.domain.value_objects.completion import CompletionStats
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
@@ -228,6 +229,25 @@ class FakeUserRepository:
         )
 
     async def add(self, user: User) -> None:
+        # Refuses a duplicate address exactly as the adapter does, and for the
+        # same reason `list_all`'s ordering was brought into line in 05-02:
+        # a fake that accepts what the database refuses makes a whole class of
+        # use-case behaviour untestable. Until this line existed, `add` stored
+        # unconditionally, so `RegisterUser`'s race backstop - the leg CLAUDE.md
+        # requires, where the pre-check saw nothing and `uq_users_email_lower`
+        # catches it anyway - could not be exercised against the fakes at all.
+        # The error takes no argument here either: there is nothing to pass, so
+        # no call site can leak the address by being helpful.
+        #
+        # The comparison is made against `stored` directly rather than through
+        # `get_by_email`, and that is the difference between modelling the
+        # index and modelling the query: PostgreSQL does not consult a
+        # repository method before enforcing a constraint, so a subclass that
+        # overrides the lookup - which is exactly how a test reproduces the
+        # race - must still be refused here.
+        wanted = user.email.strip().lower()
+        if any(stored.email == wanted for stored in self.stored.values()):
+            raise EmailAlreadyRegisteredError()
         self.stored[user.id] = user
         self.added.append(user)
 
@@ -360,17 +380,28 @@ class FakePasswordHasher:
     would be measuring a machine rather than a decision - so the fake records
     that the work was *requested*, and plan 05-07's `Login` tests assert on the
     list instead.
+
+    `hashed` and `verifications` are the same idea for the other two methods.
+    T-5-07 says an over-long password must never reach Argon2 at all, and the
+    only honest way to assert that in a unit suite is to ask the hasher whether
+    it was called - `RegisterUser`'s policy test reads `hashed`, and `Login`'s
+    two refusal legs read `verifications` against `dummy_verifications` to show
+    that each leg paid the work the other one paid.
     """
 
     PREFIX = "fake-hash:"
 
     def __init__(self) -> None:
+        self.hashed: list[str] = []
+        self.verifications: list[tuple[str, str]] = []
         self.dummy_verifications: list[str] = []
 
     async def hash(self, password: str) -> str:
+        self.hashed.append(password)
         return f"{self.PREFIX}{password}"
 
     async def verify(self, password: str, hashed: str) -> bool:
+        self.verifications.append((password, hashed))
         return hashed == f"{self.PREFIX}{password}"
 
     async def dummy_verify(self, password: str) -> None:

@@ -47,8 +47,12 @@ from taskmanager.domain.exceptions import AuthenticationError
 # Demanded of every token, before any of them is read.
 _REQUIRED_CLAIMS = ["sub", "exp", "iat"]
 
-# One message for every refusal. See `decode`.
-_REFUSAL = "Could not validate credentials."
+# The refusal message used to be a private constant here. It moved onto
+# `AuthenticationError` itself when plan 05-07 added the second component that
+# refuses a token - `AuthenticateActor`, for a subject whose row is gone - and
+# had to answer with a body indistinguishable from this one (D-11). Two
+# constants in two layers agree only until somebody edits one; now neither
+# spells the message at all.
 
 
 class JwtTokenService:
@@ -115,4 +119,4 @@ class JwtTokenService:
             )
             return UUID(payload["sub"])
         except (InvalidTokenError, ValueError, TypeError) as error:
-            raise AuthenticationError(_REFUSAL) from error
+            raise AuthenticationError() from error
