@@ -28,7 +28,11 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from taskmanager.domain.entities.task import Task
+from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
+from taskmanager.domain.value_objects.task_status import TaskStatus
+from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
 from taskmanager.presentation.api.actor import DEMO_USER_ID
 from tests.integration.conftest import seed
 
@@ -44,6 +48,12 @@ pytestmark = pytest.mark.integration
 # about "the list that was renamed" true of whichever row happened to be there,
 # and the ordering tests below are exactly where that stops being noticed.
 OTHER_USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
+LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000011")
+OTHER_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000012")
+FOREIGN_LIST_ID = uuid.UUID("00000000-0000-4000-8000-000000000013")
+TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000021")
+SECOND_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000022")
+THIRD_TASK_ID = uuid.UUID("00000000-0000-4000-8000-000000000023")
 
 NOW = datetime(2026, 3, 14, 15, 9, 26, 535897, tzinfo=UTC)
 
@@ -52,6 +62,23 @@ DEMO_EMAIL = "demo@example.test"
 OTHER_EMAIL = "other@example.test"
 
 TASK_LISTS = "/api/v1/task-lists"
+
+# D-10's nine members, in the order `TaskListResponse` declares them. Pydantic
+# serialises in declaration order, so the *order* is contract too: a client that
+# reads the body as an ordered document should not have it rearranged under
+# them, and a member silently added or dropped is what `list(body)` catches and
+# a per-key lookup does not.
+TASK_LIST_MEMBERS = [
+    "id",
+    "owner_id",
+    "name",
+    "description",
+    "created_at",
+    "updated_at",
+    "total_tasks",
+    "completed_tasks",
+    "completion_percentage",
+]
 
 
 def a_user(
@@ -72,6 +99,64 @@ def a_user(
         email=email,
         password_hash=PASSWORD_HASH,
         now=NOW,
+    )
+
+
+def moment(value: str) -> datetime:
+    """A timestamp off the wire, as an instant rather than as text.
+
+    Comparing the two ISO-8601 strings directly would work for the pairs below
+    and would stop working the first time one of them landed on a whole second:
+    Pydantic omits the microseconds it has none of, and `"...:00Z"` sorts after
+    `"...:00.5Z"`. Parsing removes a trap that would surface as a flake months
+    from now rather than as a failure today.
+    """
+    return datetime.fromisoformat(value)
+
+
+def a_task_list(
+    *,
+    task_list_id: uuid.UUID = LIST_ID,
+    owner_id: uuid.UUID = DEMO_USER_ID,
+    name: str = "Groceries",
+    description: str | None = "Everything for the week",
+    created_at: datetime = NOW,
+) -> TaskList:
+    """A valid list entity, differing from the default only where asked."""
+    return TaskList(
+        id=task_list_id,
+        owner_id=owner_id,
+        name=name,
+        description=description,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+
+def a_task(
+    *,
+    task_id: uuid.UUID,
+    task_list_id: uuid.UUID = LIST_ID,
+    title: str = "Buy milk",
+    status: TaskStatus = TaskStatus.PENDING,
+    created_at: datetime = NOW,
+) -> Task:
+    """A valid task entity, completed ones carrying the stamp the entity demands.
+
+    `Task.__post_init__` refuses a completed task with no `completed_at` and an
+    unfinished one that carries it, so the pair is derived here rather than
+    passed separately - a fixture cannot construct the incoherent combination
+    even by accident.
+    """
+    return Task(
+        id=task_id,
+        task_list_id=task_list_id,
+        title=title,
+        status=status,
+        priority=Task.DEFAULT_PRIORITY,
+        created_at=created_at,
+        updated_at=created_at,
+        completed_at=created_at if status is TaskStatus.COMPLETED else None,
     )
 
 
@@ -112,3 +197,331 @@ async def test_a_created_list_is_visible_to_the_next_request(
     assert len(body) == 1
     assert body[0]["name"] == "Groceries"
     assert body[0]["id"] == created.json()["id"]
+
+
+async def test_create_returns_201_with_a_location_header_and_the_full_representation(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-12's create contract: 201, a Location header, and the whole resource.
+
+    The `Location` is checked as a suffix of the URL the header actually
+    carries, so a change to either the `/api/v1` prefix or the router's own
+    `/task-lists` still produces a header a client can follow - which is what
+    `request.url_for` buys over an f-string, and what this assertion is here to
+    keep honest.
+
+    Following the header and comparing the two bodies is the part that makes
+    this a contract test rather than a header test: a Location naming a URL that
+    answers something else would satisfy the suffix assertion on its own.
+    """
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    response = await client.post(
+        TASK_LISTS,
+        json={"name": "Groceries", "description": "Everything for the week"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+
+    assert list(body) == TASK_LIST_MEMBERS
+    assert body["owner_id"] == str(DEMO_USER_ID)
+    assert body["name"] == "Groceries"
+    assert body["description"] == "Everything for the week"
+    assert body["created_at"] == body["updated_at"]
+    assert body["total_tasks"] == 0
+    assert body["completed_tasks"] == 0
+    assert body["completion_percentage"] == 0.0
+
+    location = response.headers["Location"]
+    assert location.endswith(f"{TASK_LISTS}/{body['id']}")
+
+    followed = await client.get(location)
+
+    assert followed.status_code == 200
+    assert followed.json() == body
+
+
+async def test_create_accepts_a_list_with_no_description(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """`description` is optional, and its absence is a null rather than an omission."""
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    response = await client.post(TASK_LISTS, json={"name": "Groceries"})
+
+    assert response.status_code == 201
+    body = response.json()
+
+    assert list(body) == TASK_LIST_MEMBERS
+    assert body["description"] is None
+
+
+async def test_get_returns_the_list_with_its_statistics(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-10: two of three tasks done is 66.67, rounded to two decimals."""
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[a_task_list()],
+        tasks=[
+            a_task(task_id=TASK_ID, status=TaskStatus.COMPLETED),
+            a_task(task_id=SECOND_TASK_ID, status=TaskStatus.COMPLETED),
+            a_task(task_id=THIRD_TASK_ID),
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.get(f"{TASK_LISTS}/{LIST_ID}")
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert list(body) == TASK_LIST_MEMBERS
+    assert body["id"] == str(LIST_ID)
+    assert body["total_tasks"] == 3
+    assert body["completed_tasks"] == 2
+    assert body["completion_percentage"] == 66.67
+
+
+async def test_the_collection_returns_every_list_of_the_actor_with_statistics(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """LIST-03: every list the caller owns, each carrying its own counters.
+
+    The two lists carry *different* mixes on purpose. Equal counters would pass
+    against a grouped query that computed one list's statistics and repeated
+    them, which is the failure mode a single-list fixture cannot see.
+    """
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[
+            a_task_list(),
+            a_task_list(
+                task_list_id=OTHER_LIST_ID,
+                name="Chores",
+                created_at=NOW.replace(year=2026, month=4),
+            ),
+        ],
+        tasks=[
+            a_task(task_id=TASK_ID, status=TaskStatus.COMPLETED),
+            a_task(task_id=SECOND_TASK_ID),
+            a_task(task_id=THIRD_TASK_ID, task_list_id=OTHER_LIST_ID),
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.get(TASK_LISTS)
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert [entry["name"] for entry in body] == ["Groceries", "Chores"]
+    assert all(list(entry) == TASK_LIST_MEMBERS for entry in body)
+    assert (body[0]["total_tasks"], body[0]["completed_tasks"]) == (2, 1)
+    assert body[0]["completion_percentage"] == 50.0
+    assert (body[1]["total_tasks"], body[1]["completed_tasks"]) == (1, 0)
+    assert body[1]["completion_percentage"] == 0.0
+
+
+async def test_the_collection_is_ordered_by_created_at_then_id(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-13: a timestamp alone is not a total order, so the id decides ties.
+
+    Both lists are stamped with the same instant and seeded in the *reverse* of
+    the expected answer, so a query that ordered by `created_at` alone would
+    return them in insertion order and fail here rather than flake later.
+    """
+    await seed(
+        session_factory,
+        users=[a_user()],
+        task_lists=[
+            a_task_list(task_list_id=OTHER_LIST_ID, name="Chores"),
+            a_task_list(task_list_id=LIST_ID, name="Groceries"),
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.get(TASK_LISTS)
+
+    assert response.status_code == 200
+    body = response.json()
+
+    # Asserted rather than assumed: if the two instants ever drifted apart the
+    # ordering below would be decided by the timestamp, and the id tie-break
+    # this test exists for would go unexercised while the test still passed.
+    assert len({entry["created_at"] for entry in body}) == 1
+    assert [entry["id"] for entry in body] == [str(LIST_ID), str(OTHER_LIST_ID)]
+
+
+async def test_the_collection_never_contains_another_actors_list(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-04 on the collection: ownership filters, it does not merely authorise."""
+    await seed(
+        session_factory,
+        users=[a_user(), a_user(user_id=OTHER_USER_ID, email=OTHER_EMAIL)],
+        task_lists=[
+            a_task_list(),
+            a_task_list(
+                task_list_id=FOREIGN_LIST_ID,
+                owner_id=OTHER_USER_ID,
+                name="Someone else's list",
+            ),
+        ],
+    )
+    client, _ = api_client
+
+    response = await client.get(TASK_LISTS)
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert [entry["id"] for entry in body] == [str(LIST_ID)]
+    assert str(FOREIGN_LIST_ID) not in response.text
+
+
+async def test_patch_with_a_name_only_leaves_the_description_alone(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-05's omitted leg: an absent field is not a cleared field."""
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"name": "Weekly"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Weekly"
+
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after["name"] == "Weekly"
+    assert after["description"] == before["description"]
+    assert after["created_at"] == before["created_at"]
+    assert moment(after["updated_at"]) > moment(before["updated_at"])
+
+
+async def test_patch_with_a_description_only_leaves_the_name_alone(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """The mirror leg, which a single-field test would leave unproved."""
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    response = await client.patch(
+        f"{TASK_LISTS}/{LIST_ID}", json={"description": "Only the essentials"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "Only the essentials"
+
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after["description"] == "Only the essentials"
+    assert after["name"] == before["name"]
+    assert after["created_at"] == before["created_at"]
+    assert moment(after["updated_at"]) > moment(before["updated_at"])
+
+
+async def test_patch_with_an_explicit_null_description_clears_the_field(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """D-05's null leg: the one field that has a null to be cleared to.
+
+    This is the test that distinguishes merge-patch semantics from "ignore the
+    nulls": an implementation reading the value instead of `model_fields_set`
+    would leave the description standing and still answer 200.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+    before = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    response = await client.patch(f"{TASK_LISTS}/{LIST_ID}", json={"description": None})
+
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+
+    after = (await client.get(f"{TASK_LISTS}/{LIST_ID}")).json()
+
+    assert after["description"] is None
+    assert after["name"] == before["name"]
+    assert moment(after["updated_at"]) > moment(before["updated_at"])
+
+
+async def test_delete_returns_204_with_an_empty_body(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+) -> None:
+    """LIST-05: no content, and no header describing content that is not there.
+
+    The absent `content-type` is the measured difference `response_class=Response`
+    makes on this stack. Without it a 204 returning `None` still advertises
+    `application/json` over an empty body, which is a small lie a client's
+    parser is entitled to trip over.
+    """
+    await seed(session_factory, users=[a_user()], task_lists=[a_task_list()])
+    client, _ = api_client
+
+    response = await client.delete(f"{TASK_LISTS}/{LIST_ID}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert "content-type" not in response.headers
+
+    gone = await client.get(f"{TASK_LISTS}/{LIST_ID}")
+
+    assert gone.status_code == 404
+    assert gone.json()["code"] == "task_list_not_found"
+
+
+async def test_deleting_a_list_removes_its_tasks(
+    api_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
+    session: AsyncSession,
+) -> None:
+    """D-12's cascade, asserted twice: through the API, and against the rows.
+
+    The API half proves what a client sees; it cannot prove the tasks are gone,
+    because a 404 on the collection is equally the answer for a list that was
+    deleted while its tasks were orphaned. The repository read on the shared
+    session is the half that looks at the table, and the two ids it asks for
+    were created through the API rather than seeded, so the cascade is being
+    tested against rows the application itself wrote.
+    """
+    await seed(session_factory, users=[a_user()])
+    client, _ = api_client
+
+    created = await client.post(TASK_LISTS, json={"name": "Groceries"})
+    list_id = created.json()["id"]
+    first = await client.post(f"{TASK_LISTS}/{list_id}/tasks", json={"title": "Milk"})
+    second = await client.post(f"{TASK_LISTS}/{list_id}/tasks", json={"title": "Eggs"})
+    assert [first.status_code, second.status_code] == [201, 201]
+
+    deleted = await client.delete(f"{TASK_LISTS}/{list_id}")
+
+    assert deleted.status_code == 204
+
+    orphans = await client.get(f"{TASK_LISTS}/{list_id}/tasks")
+
+    assert orphans.status_code == 404
+    assert orphans.json()["code"] == "task_list_not_found"
+
+    tasks = SqlAlchemyTaskRepository(session)
+    assert await tasks.get(uuid.UUID(first.json()["id"])) is None
+    assert await tasks.get(uuid.UUID(second.json()["id"])) is None
