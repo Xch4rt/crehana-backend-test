@@ -309,7 +309,7 @@ Plans:
   4. A deliberate-break spot check — inverting the completion-percentage formula — turns the suite red, and the episode is recorded in `AI_WORKFLOW.md`.
   5. `--cov-fail-under=75` passes locally and in CI with coverage measured over `src/taskmanager` only, with tests excluded from the denominator.
 
-**Plans**: 4 plans (4 waves)
+**Plans**: 5 plans (5 waves)
 
 Plans:
 
@@ -328,6 +328,10 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 06-04-PLAN.md — The coverage configuration pin, the marker partition, `make test-unit`, the ADRs and the five requirement ticks
+
+**Wave 5** *(gap closure, blocked on Wave 4 completion)*
+
+- [ ] 06-05-PLAN.md — The `client.request` blind spot in half (b), the matrix's success-cell body assertions and per-row re-reads, ADR-096 (closes the 06-VERIFICATION gap on SC-3)
 
 ### Phase 7: Documentation & Delivery
 
