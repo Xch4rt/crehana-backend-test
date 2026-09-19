@@ -17,7 +17,6 @@ more one is worth. Phase 4 will add providers here, and none of them will have
 to repeat it.
 """
 
-from collections.abc import AsyncIterator
 from typing import cast
 
 from fastapi import Request
@@ -47,23 +46,31 @@ def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
     return _resources(request).session_factory
 
 
-async def get_uow(request: Request) -> AsyncIterator[UnitOfWork]:
-    """Open one transaction for this request and hand it to the use case.
+def get_uow(request: Request) -> UnitOfWork:
+    """Build this request's unit of work and hand it over *closed*.
 
-    This provider constructs the unit of work, enters its block, and does
-    nothing else. Making the block's work durable is the use case's decision
-    and only the use case's (ARC-08), and doing it here instead would be
-    research Anti-Pattern 1: FastAPI runs the exit half of a `yield` dependency
-    *after* the response has already been sent, so the write would land at a
+    The provider constructs, and does nothing else. The `async with` belongs to
+    the use case (D-17, ARC-08), which is what the port's docstring says and
+    what `ChangeTaskStatus.execute` does, so entering the block here would give
+    the same object two owners: the use case's `__aenter__` would open a second
+    session over the first, the first would never be closed, and the teardown
+    running after the response would find a unit of work the use case had
+    already finished (review fix CR-01). `SqlAlchemyUnitOfWork.__aenter__` now
+    refuses that second entry outright, so the shape cannot come back quietly.
+
+    This is a plain `def` rather than a `yield` dependency for the same reason
+    it must not commit. FastAPI runs the exit half of a `yield` dependency
+    *after* the response has already been sent (research Anti-Pattern 1), so
+    anything a teardown did - a commit, a rollback, a close - would land at a
     moment no handler can observe, no test can assert on, and no failure can
-    still influence the status code the client received. A use case that
-    refused the request would have its work made permanent anyway, and the
-    boundary the whole phase is about would exist only on paper.
+    still influence the status code the client received. There is nothing left
+    to do there anyway: the use case's block rolls back whatever it did not
+    commit and closes the session on every exit path, before the handler
+    returns.
 
-    The yield type is the port, never `SqlAlchemyUnitOfWork`. Phase 4's routers
+    The return type is the port, never `SqlAlchemyUnitOfWork`. Phase 4's routers
     are meant to depend on the contract Phase 2 wrote, so that substituting the
     in-memory double in a test is a matter of overriding this provider rather
     than of changing a signature.
     """
-    async with SqlAlchemyUnitOfWork(get_session_factory(request)) as unit:
-        yield unit
+    return SqlAlchemyUnitOfWork(get_session_factory(request))

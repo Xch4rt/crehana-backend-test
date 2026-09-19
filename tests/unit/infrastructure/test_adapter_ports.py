@@ -103,3 +103,44 @@ async def test_using_a_unit_of_work_outside_a_block_says_so() -> None:
         await unit_of_work.commit()
 
     assert "not open" in str(excinfo.value)
+
+
+async def test_entering_a_unit_of_work_twice_is_refused() -> None:
+    """The Phase 3 review's CR-01, pinned: this object is not re-entrant.
+
+    A second `__aenter__` used to be silent. It replaced the open session with
+    a fresh one and rebound the three repositories to it, so the first session
+    was abandoned - never committed, never rolled back, never returned to the
+    pool - and the outer `__aexit__` then raised about a unit of work that was
+    no longer open, after the response had already been sent. That is the exact
+    combination a `Depends` provider entering the block produced for every use
+    case that entered it too, which is why the refusal belongs in the adapter
+    and not only in the provider's docstring.
+
+    No connection is opened here. `__aenter__` calls the session factory, which
+    performs no I/O, and the block is left without a statement ever having been
+    emitted - so this stays a unit test against an unreachable DSN.
+    """
+    unit_of_work = SqlAlchemyUnitOfWork(a_session_factory())
+
+    async with unit_of_work:
+        with pytest.raises(RuntimeError) as excinfo:
+            await unit_of_work.__aenter__()
+
+    assert "already open" in str(excinfo.value)
+
+
+async def test_a_unit_of_work_can_be_reopened_after_its_block_ended() -> None:
+    """Sequential blocks are not re-entry, and the guard must not confuse them.
+
+    The distinction matters to real callers: `tests/integration/conftest.py`
+    hands one `uow` fixture to a test that opens several blocks in a row, and a
+    guard that latched on the first entry would fail all of them. What is
+    forbidden is a *second owner while the first is still inside*, not reuse.
+    """
+    unit_of_work = SqlAlchemyUnitOfWork(a_session_factory())
+
+    async with unit_of_work:
+        pass
+    async with unit_of_work:
+        pass

@@ -41,6 +41,15 @@ from taskmanager.infrastructure.db.repositories.users import SqlAlchemyUserRepos
 class SqlAlchemyUnitOfWork:
     """`UnitOfWork` (D-17, ARC-08) over one `AsyncSession` per block."""
 
+    # Declared here, assigned in `__aenter__`, and annotated with the PORT
+    # types rather than the concrete adapters. mypy checks a mutable Protocol
+    # member invariantly, so `tasks: SqlAlchemyTaskRepository` would stop this
+    # class from satisfying `UnitOfWork` at all - the same finding
+    # `FakeUnitOfWork`'s docstring records, arriving here for the same reason.
+    tasks: TaskRepository
+    task_lists: TaskListRepository
+    users: UserRepository
+
     def __init__(self, session_factory: Callable[[], AsyncSession]) -> None:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
@@ -64,18 +73,39 @@ class SqlAlchemyUnitOfWork:
         return self._session
 
     async def __aenter__(self) -> Self:
+        """Open one session and bind the three repositories to it, exactly once.
+
+        The guard is the Phase 3 review's CR-01. This object is not re-entrant
+        and must say so: a second `__aenter__` would overwrite `_session` with
+        a fresh session and rebind the repositories to it, leaving the first
+        one open, never rolled back and never returned to the pool - and the
+        outer `__aexit__` would then find `_session` already `None` and raise
+        where no caller can do anything about it.
+
+        Refusing is what keeps the boundary where D-17 and ARC-08 put it. The
+        use case owns the `async with`, so anything upstream of it - a
+        `Depends` provider, a decorator, a middleware - must hand this object
+        over *closed*. Re-entry is the one shape that would let a second owner
+        appear without either of them noticing, so it fails on the first call
+        rather than leaking a session per request.
+
+        Entering again after the block has been left is not re-entry and stays
+        allowed: `__aexit__` sets `_session` back to `None`, so one unit of
+        work can serve several sequential transactions, which is what the
+        integration fixture relies on.
+        """
+        if self._session is not None:
+            raise RuntimeError(
+                "This unit of work is already open. One `async with "
+                "unit_of_work:` owns the transaction and the use case owns "
+                "that block (ARC-08); entering a second time would abandon "
+                "the first session without closing it."
+            )
         self._session = self._session_factory()
         self._committed = False
-        # Annotated with the PORT types, never the concrete adapters. mypy
-        # checks a mutable Protocol member invariantly, so `self.tasks:
-        # SqlAlchemyTaskRepository` would stop this class from satisfying
-        # `UnitOfWork` at all - the same finding `FakeUnitOfWork`'s docstring
-        # records, arriving here for the same reason.
-        self.tasks: TaskRepository = SqlAlchemyTaskRepository(self._session)
-        self.task_lists: TaskListRepository = SqlAlchemyTaskListRepository(
-            self._session
-        )
-        self.users: UserRepository = SqlAlchemyUserRepository(self._session)
+        self.tasks = SqlAlchemyTaskRepository(self._session)
+        self.task_lists = SqlAlchemyTaskListRepository(self._session)
+        self.users = SqlAlchemyUserRepository(self._session)
         return self
 
     async def __aexit__(
