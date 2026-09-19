@@ -35,23 +35,40 @@ suite fails once, fast, with an instruction, and never skips itself into a green
 run that proved nothing.
 """
 
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
+from uuid import UUID
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from taskmanager.domain.entities.task import Task
+from taskmanager.domain.entities.task_list import TaskList
+from taskmanager.domain.entities.user import User
 from taskmanager.infrastructure.config.database_url import (
     TEST_DATABASE_NAME,
     resolve_test_database_url,
 )
-from taskmanager.infrastructure.config.settings import get_settings
+from taskmanager.infrastructure.config.settings import Settings, get_settings
+from taskmanager.infrastructure.db.mappers import (
+    task_list_to_row,
+    task_to_row,
+    user_to_row,
+)
 from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from taskmanager.main import create_app
+from taskmanager.presentation.api.actor import get_current_actor
+from taskmanager.presentation.api.dependencies import get_uow
+from tests.conftest import DATABASE_URL, JWT_SECRET
 
 # tests/integration/conftest.py -> tests/integration -> tests -> repository root.
 ROOT = Path(__file__).resolve().parents[2]
@@ -275,3 +292,174 @@ def uow(session_factory: Callable[[], AsyncSession]) -> SqlAlchemyUnitOfWork:
     `cast`.
     """
     return SqlAlchemyUnitOfWork(session_factory)
+
+
+@pytest.fixture
+async def api_client(
+    session_factory: Callable[[], AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncIterator[tuple[AsyncClient, FastAPI]]:
+    """The real application, over HTTP, over the rolled-back test connection.
+
+    This is where the two halves of the harness finally meet: `tests/conftest.py`
+    has always built the application, and this module has always owned the
+    transaction nothing escapes, and until now neither knew about the other. The
+    join is one line - `get_uow` is overridden to hand out a unit of work over
+    the connection-bound factory above - and everything D-16 asks for follows
+    from it: a request writes through the production code path, a later request
+    reads it back, and the `connection` fixture discards the lot at teardown.
+
+    Three shapes a reader may expect here are deliberately absent.
+
+    The lifespan is never entered. `get_uow` is overridden, so the engine
+    `create_app` built against the fictional DSN below is never dialled and has
+    no pool to dispose; entering the lifespan would only exercise a teardown for
+    a resource no request in this module touches.
+    `tests/integration/test_health.py` remains the one place the engine's own
+    lifecycle is proven, against an application deliberately pointed at the live
+    database.
+
+    There is no truncation, no delete sweep and no reseeding between tests, for
+    the reason the module docstring gives in full: the outer transaction
+    *discards* whatever a test wrote instead of tidying up after it, which is
+    what makes a stray commit inside a repository visible rather than invisible.
+
+    There is no second database and no second connection. Everything a request
+    does happens on the connection this fixture inherited, which is what lets a
+    test read a row through the API and then inspect it through the shared
+    `session` in the same breath.
+
+    The fictional `DATABASE_URL` is still set, and that is not an oversight.
+    `Settings` gives `database_url` and `jwt_secret` no default at all, so the
+    model refuses to construct without both - and `create_app` builds an engine
+    from whatever it is handed. The value below is syntactically valid and
+    points nowhere, which is exactly right: it satisfies construction, and the
+    override means nothing ever opens a socket with it.
+
+    It yields the application beside the client rather than the client alone.
+    Overriding `get_current_actor` is the only way to reach D-04's not-owned
+    legs over HTTP, and a test cannot override a provider on an application it
+    cannot name.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+    app.dependency_overrides[get_uow] = lambda: SqlAlchemyUnitOfWork(session_factory)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, app
+
+
+@contextmanager
+def acting_as(app: FastAPI, user_id: UUID) -> Iterator[None]:
+    """Run the block as a different caller, and put the seam back afterwards.
+
+    A context manager rather than a fixture returning a bare `as_actor(app, id)`
+    setter, because the restoring half is the part that matters. A test that
+    switched actor to prove a 404 and then went on to assert the owner's own
+    view would, with a one-way setter, silently still be the stranger - and the
+    second assertion would pass for the wrong reason, or fail pointing at the
+    route instead of at the fixture. Exiting the block restores whatever
+    override was in place before, including none.
+
+    This is the *only* way to reach D-04's not-owned legs over HTTP: the seam in
+    `presentation/api/actor.py` answers with one fixed identifier until Phase 5
+    replaces its body, so a second actor exists in a test and nowhere else.
+    """
+    previous = app.dependency_overrides.get(get_current_actor)
+    app.dependency_overrides[get_current_actor] = lambda: user_id
+    try:
+        yield
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_current_actor, None)
+        else:
+            app.dependency_overrides[get_current_actor] = previous
+
+
+@pytest.fixture
+def statements(connection: AsyncConnection) -> Iterator[list[str]]:
+    """Every *data* statement issued on the test connection, in order (D-17).
+
+    The filter is the fixture. Measured through the full HTTP stack, the raw
+    callback stream for one `GET` is `SAVEPOINT`, `SELECT`, `ROLLBACK`: the
+    session joins the outer transaction by savepoint, so its bracketing is
+    reported to the listener exactly like the query between it. Counting those
+    would make the recorded number mean "callbacks the engine emitted" rather
+    than "statements the database was asked to run", and D-17's claim - that the
+    count does not grow with the row count - would be about the wrong quantity.
+
+    Keeping only the four data verbs is therefore not a simplification to be
+    tidied away later; it is what gives the list its meaning. The listener is
+    attached to the *sync* connection underneath, because `before_cursor_execute`
+    is a Core event and the async connection is a facade over the one that
+    actually emits it, and it is removed at teardown so a later test on a fresh
+    connection never inherits a recorder nobody is reading.
+    """
+    seen: list[str] = []
+
+    def record(
+        conn: Any,
+        cursor: Any,
+        statement: str,
+        parameters: Any,
+        context: Any,
+        executemany: bool,
+    ) -> None:
+        verb = statement.split(maxsplit=1)[0].upper()
+        if verb in {"SELECT", "INSERT", "UPDATE", "DELETE"}:
+            seen.append(verb)
+
+    sync_connection = connection.sync_connection
+    event.listen(sync_connection, "before_cursor_execute", record)
+    try:
+        yield seen
+    finally:
+        event.remove(sync_connection, "before_cursor_execute", record)
+
+
+async def seed(
+    session_factory: Callable[[], AsyncSession],
+    *,
+    users: Sequence[User] = (),
+    task_lists: Sequence[TaskList] = (),
+    tasks: Sequence[Task] = (),
+) -> None:
+    """Write starting rows for an HTTP test, and **commit** them.
+
+    The commit is the single most surprising rule in this harness, and it is not
+    optional. The sessions this factory produces join the outer transaction with
+    `join_transaction_mode="create_savepoint"`, so closing one without
+    committing *rolls its savepoint back*: the seeded rows vanish, and the first
+    request answers 404 - or, worse, a foreign-key translation reports a
+    `user_not_found` naming an actor the test plainly created. Committing
+    releases the savepoint into the transaction the `connection` fixture owns,
+    which still rolls the whole thing back at teardown, so isolation is exactly
+    as strong as it was before. Committing here buys visibility, not durability.
+
+    Each group is flushed before the next begins, in reference order.
+    `TaskListRow` declares a `ForeignKey` to `users` but no `relationship`, so
+    SQLAlchemy's unit of work has no dependency edge to sort a mixed batch by
+    and will happily send the lists first, which PostgreSQL then refuses
+    (04-RESEARCH Pitfall 4). One flush per level is the whole fix.
+
+    Rows are written through the mappers rather than through the repositories: a
+    test of the HTTP surface should not go red because an adapter it is not
+    exercising broke - the same argument `test_repositories_task_lists.py` makes
+    for its own `given_an_owner`.
+    """
+    session = session_factory()
+    try:
+        for user in users:
+            session.add(user_to_row(user))
+        await session.flush()
+        for task_list in task_lists:
+            session.add(task_list_to_row(task_list))
+        await session.flush()
+        for task in tasks:
+            session.add(task_to_row(task))
+        await session.commit()
+    finally:
+        await session.close()
