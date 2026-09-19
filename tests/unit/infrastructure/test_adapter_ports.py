@@ -18,7 +18,9 @@ problems.
 The two credential adapters are here, and their own suites -
 `test_passwords.py` and `test_tokens.py` - are about behaviour only. The split
 follows the same rule the `Clock` exclusion above does: a port binding has one
-home, and this is the home for every adapter that has a port.
+home, and this is the home for every adapter that has a port. The runtime
+notifier joins them on the same terms: `test_notifier.py` asserts what it logs,
+and the binding below is the only place it is matched against `EmailNotifier`.
 
 Nothing here opens a connection. The session the three repositories borrow comes
 from a factory over an engine whose DSN points at a port with no listener, which
@@ -32,6 +34,7 @@ from collections.abc import Callable
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from taskmanager.application.ports.notifications import EmailNotifier
 from taskmanager.application.ports.repositories import (
     TaskListRepository,
     TaskRepository,
@@ -48,6 +51,7 @@ from taskmanager.infrastructure.db.repositories.task_lists import (
 from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
 from taskmanager.infrastructure.db.repositories.users import SqlAlchemyUserRepository
 from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from taskmanager.infrastructure.notifications.logging import LoggingEmailNotifier
 from taskmanager.infrastructure.security.passwords import PwdlibPasswordHasher
 from taskmanager.infrastructure.security.tokens import JwtTokenService
 
@@ -108,6 +112,18 @@ def test_the_jwt_token_service_satisfies_the_token_service_port() -> None:
         clock=SystemClock(),
     )
     assert tokens is not None
+
+
+def test_the_logging_email_notifier_satisfies_the_email_notifier_port() -> None:
+    """Keyword-only, and that is the half a structural check has to catch.
+
+    `recipient_email` and `task_title` are both `str`, so a positional
+    signature would type-check against every transposed call site in the
+    project. The port declares them keyword-only for exactly that reason, and
+    this binding is what says the adapter still agrees.
+    """
+    notifier: EmailNotifier = LoggingEmailNotifier()
+    assert notifier is not None
 
 
 def test_the_sqlalchemy_unit_of_work_satisfies_the_unit_of_work_port() -> None:

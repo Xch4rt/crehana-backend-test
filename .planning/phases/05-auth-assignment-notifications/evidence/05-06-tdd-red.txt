@@ -19,3 +19,39 @@ ERROR tests/unit/infrastructure/test_logging.py
 !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
 1 error in 0.08s
 exit status: 2
+
+================================================================
+TDD RED - plan 05-06, Task 2: tests/unit/infrastructure/test_notifier.py
+plus the EmailNotifier port binding added to test_adapter_ports.py.
+Run at 2026-09-19T15:45:12Z, with
+src/taskmanager/infrastructure/notifications/ absent.
+
+$ .venv/bin/pytest tests/unit/infrastructure/test_notifier.py tests/unit/infrastructure/test_adapter_ports.py -q --no-cov
+
+==================================== ERRORS ====================================
+_________ ERROR collecting tests/unit/infrastructure/test_notifier.py __________
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/infrastructure/test_notifier.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/infrastructure/test_notifier.py:29: in <module>
+    from taskmanager.infrastructure.notifications import logging as notifier_module
+E   ModuleNotFoundError: No module named 'taskmanager.infrastructure.notifications'
+_______ ERROR collecting tests/unit/infrastructure/test_adapter_ports.py _______
+ImportError while importing test module '/Users/xch4rt/work/myself/crehana/test/tests/unit/infrastructure/test_adapter_ports.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/infrastructure/test_adapter_ports.py:54: in <module>
+    from taskmanager.infrastructure.notifications.logging import LoggingEmailNotifier
+E   ModuleNotFoundError: No module named 'taskmanager.infrastructure.notifications'
+=========================== short test summary info ============================
+ERROR tests/unit/infrastructure/test_notifier.py
+ERROR tests/unit/infrastructure/test_adapter_ports.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.08s
+exit status: 2
