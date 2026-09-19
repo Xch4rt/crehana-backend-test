@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — waves 1-3 (06-01, 06-02, 06-03) complete
-last_updated: 2026-09-19T22:10:00.000Z
-last_activity: 2026-09-19 -- 06-03 complete: make break-check breaks src/ five ways and proves all five turn the suite red in ~13s, its three safety properties each falsified once, and the episode with both original survivals recorded in AI_WORKFLOW.md; 1069 passed, 100% coverage
+stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — all four plans complete, awaiting phase verification
+last_updated: 2026-09-19T23:05:00.000Z
+last_activity: 2026-09-19 -- 06-04 complete: the coverage configuration is pinned by a test (each of seven weakenings falsified), tests/api/ folded into the two marker buckets, the partition made total and guarded at collection, ADR-085..091 written, TEST-01..05 ticked; make docker-test fixed after two phases broken and its 18-line coverage false negative closed with concurrency=[thread,greenlet]; 1078 passed, 100% on both interpreters
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 59
-  completed_plans: 58
-  percent: 98
+  completed_plans: 59
+  percent: 100
 ---
 
 # Project State
@@ -27,25 +27,28 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: 4 of 4 (06-01, 06-02, 06-03 complete)
+Plan: 4 of 4 complete (06-01, 06-02, 06-03, 06-04)
 Status: Executing Phase 06
-Last activity: 2026-09-19 -- 06-03 complete: roadmap SC-4 is now one command - five deliberate
-defects, all five red, src/ restored, and AI_WORKFLOW.md records the two breaks that originally
-were not caught, including the one that had token expiry reported as enforced by nothing
+Last activity: 2026-09-19 -- 06-04 complete: the coverage number is defended by a test rather
+than by prose, every collected test sits in exactly one of the two marker buckets with a
+collection-time guard keeping it that way, ADR-085..091 and the CLAUDE.md Test quality section
+record every gate this phase added, and TEST-01..05 are ticked against named passing tests. The
+plan's own docker-test run found two defects nothing on the host could see: the test image had
+never received scripts/ (broken since 05-17), and coverage was under-reporting 18 executed
+router lines on Python 3.13 until greenlet was declared to it
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
-The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
+The ROADMAP phase checkbox for Phase 6, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phase 7 is not yet planned, so 58/59 means
-"58 plans executed, the last Phase 6 plan written and waiting", not a share of the
-milestone.
+`total_plans` counts planned plans only - phase 7 is not yet planned, so 59/59 means
+"every plan written so far has been executed", not a finished milestone.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 58
+- Total plans completed: 59
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -59,7 +62,7 @@ milestone.
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
-| 06 | 3 | - | - |
+| 06 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -125,6 +128,7 @@ milestone.
 | Phase 06 P01 | 15min | 5 tasks | 7 files |
 | Phase 06 P02 | 30min | 4 tasks | 7 files |
 | Phase 06 P03 | 22min | 4 tasks | 4 files |
+| Phase 06 P04 | 48min | 4 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -833,6 +837,15 @@ Recent decisions affecting current work:
 - [Phase 06-03]: the mutated path the unit test plants is read out of the script with a regex, not restated, so a reordered or repointed break table cannot leave the tests exercising a path the script no longer touches
 - [Phase 06-03]: the per-break counts are lower than the by-hand baseline for breaks 1-3 (7/5/30 against 17/6/33, a named selection rather than the whole suite) and HIGHER for 4 and 5 (5 and 2 against 3 and 1), which is 06-01's two D-14 fixes showing up; every break now reddens at least one test that is not a fakes-based road pin
 - [Phase 06-03]: STATE.md and ROADMAP.md edited by hand again, the fourth consecutive plan to record the same gsd-sdk handler regressions
+- [Phase 06-04]: `concurrency = ["thread", "greenlet"]` added to [tool.coverage.run] - make docker-test, run here for the first time since routers existed, reported 99.08% on Python 3.13 with 18 lines missing that the passing tests demonstrably execute (every `return XResponse.from_result(...)` and every Location header, i.e. the lines after a handler's first await into SQLAlchemy's greenlet bridge); identical co_lines() on both interpreters and no change under COVERAGE_CORE=ctrace ruled out everything else. A coverage error that makes the number too LOW is the one direction nobody audits
+- [Phase 06-04]: the Dockerfile test stage never received scripts/ and has no git, so tests/unit/test_env_bootstrap.py (broken since 05-17) and tests/unit/test_break_check.py (since 06-03) were collection errors there; both added to the test stage only, and a conditional skip was refused on D-03's own argument
+- [Phase 06-04]: the coverage threshold is pinned as a PARSED FLOOR (>= 75), never as the literal --cov-fail-under=75 - the string form is red on 80, which is the one change nobody needs to prevent; and the coverage NUMBER is deliberately not asserted at all, because 100% is a D-12 norm and a test pinning it would go red on an honest refactor
+- [Phase 06-04]: the `tryfirst=True` claim in the collection guard's docstring was FALSIFIED by removing the decorator - the guard still fires under -m unit, because on pytest 9 a conftest implementation is called before the builtin mark plugin's. The docstring now records the measurement; the decorator stays because registration order is not a documented promise
+- [Phase 06-04]: host and Docker agree on the percentage (100.00%) and the pass count (1078) and DISAGREE on the denominator (1643 on CPython 3.14.3 against 1796 on 3.13.15), because 3.14 evaluates annotations lazily (PEP 649/749) - recorded as a version fact rather than reinterpreted as a defect
+- [Phase 06-04]: every prose reference to the moved tests/api/test_error_contract.py path was repointed - eight files beyond the plan's six import sites, including two src/ docstrings and migrations/env.py - while DECISION_LOG.md line 3025 is left stale on purpose, the append-only call 01-08 made about ADR-019
+- [Phase 06-04]: DECISION_LOG.md gains ADR-085..091 and CLAUDE.md a new Test quality section; the append-only property is mechanical, `git diff DECISION_LOG.md | grep -c '^-'` prints 1, the diff header alone
+- [Phase 06-04]: TEST-01..05 ticked here and only here, each against a named passing test written into REQUIREMENTS.md's traceability notes rather than against a plan header
+- [Phase 06-04]: STATE.md and ROADMAP.md edited by hand again, the fifth consecutive plan to record the same gsd-sdk handler regressions
 
 ### Pending Todos
 
@@ -870,6 +883,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T22:10:00.000Z
-Stopped at: Completed 06-03-PLAN.md
-Resume file: .planning/phases/06-test-hardening-coverage/06-04-PLAN.md
+Last session: 2026-09-19T23:05:00.000Z
+Stopped at: Completed 06-04-PLAN.md
+Resume file: None - Phase 6 awaits verification
