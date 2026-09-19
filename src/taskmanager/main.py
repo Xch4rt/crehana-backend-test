@@ -9,6 +9,7 @@ runs `uvicorn --factory taskmanager.main:create_app`.
 
 from fastapi import FastAPI
 
+from taskmanager import __version__
 from taskmanager.infrastructure.config.settings import Settings, get_settings
 from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 
@@ -18,7 +19,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or get_settings()
     app = FastAPI(
         title=resolved.app_name,
-        version="0.1.0",
+        version=__version__,
         openapi_url="/openapi.json",
     )
     register_exception_handlers(app)

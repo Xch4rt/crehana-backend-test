@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from taskmanager import __version__
 from taskmanager.domain.exceptions import DomainError
 from taskmanager.infrastructure.config.settings import Settings
 from taskmanager.main import create_app
@@ -28,7 +29,7 @@ def test_create_app_uses_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert isinstance(app, FastAPI)
     assert app.title == "Task Manager API"
-    assert app.openapi()["info"]["version"] == "0.1.0"
+    assert app.openapi()["info"]["version"] == __version__
 
 
 def test_create_app_registers_exception_handlers(
