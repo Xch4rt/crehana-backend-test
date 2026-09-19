@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-09-19T15:39:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 plan 05 complete
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-09-19T15:48:23.613Z"
+last_activity: 2026-09-19 -- Phase 05 plan 06 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 43
-  percent: 80
+  completed_plans: 44
+  percent: 81
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 6 of 16
-Status: Executing Phase 05 (plans 01-05 complete; plan 06 next)
-Last activity: 2026-09-19 -- Phase 05 plan 05 complete
+Plan: 7 of 16
+Status: Executing Phase 05 (plans 01-06 complete; plan 07 next)
+Last activity: 2026-09-19 -- Phase 05 plan 06 complete
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 81%
 
 ## Performance Metrics
 
@@ -99,6 +99,7 @@ Progress: [████████░░] 80%
 | Phase 05 P04 | 12min | 3 tasks | 9 files |
 | Phase 05 P03 | 12min | 3 tasks | 21 files |
 | Phase 05 P05 | 14min | 3 tasks | 10 files |
+| Phase 05 P06 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -430,6 +431,25 @@ Recent decisions affecting current work:
   claimant, the seventh consecutive plan in this phase to make the same call, and this plan ships
   two adapters and a container with no use case and no route above them
 
+- [Phase 05-06]: JsonFormatter renders exc_info into an `exception` field, which neither the plan
+  nor 05-RESEARCH Pattern 8 does - handlers.py logs the fixed 500 with exc_info=exc and its
+  docstring promises the traceback reaches the log, exc_info is a RESERVED LogRecord attribute so
+  the extras merge skips it, and the two existing caplog assertions read record.exc_info rather
+  than formatted output: the suite would have stayed green while every traceback vanished
+- [Phase 05-06]: the notifier names its logger with the literal taskmanager.notifications, not the
+  plan's getLogger(__name__) - __name__ here is taskmanager.infrastructure.notifications.logging,
+  a sibling branch that never propagates to taskmanager.notifications, so D-15, the plan's own
+  <behavior> line and its own acceptance snippet would all have been false
+- [Phase 05-06]: stack_info is deliberately NOT rendered and json.dumps gets no default= fallback -
+  the first would be a branch no test could reach under the no-pragma coverage rule, the second
+  would hide the call-site bug that stringifying task_id at the call site exists to make impossible
+- [Phase 05-06]: the handler is attached to the PACKAGE logger, so the fixed 500's ERROR record is
+  JSON from now on; the blast radius is named in the module docstring rather than left to a
+  changelog, and 05-16 owes an ADR for it and a second one for the exception rendering above
+- [Phase 05-06]: requirement tick NOTF-02 deliberately NOT taken - 05-16 is the last claimant, the
+  eighth consecutive plan in this phase to make the same call: nothing calls configure_logging()
+  and nothing constructs LoggingEmailNotifier in production until 05-10 and 05-11
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -464,6 +484,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T15:39:00.000Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-09-19T15:48:23.603Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None
