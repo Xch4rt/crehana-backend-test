@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 gap closure planned (05-17)
-last_updated: "2026-09-19T19:35:00.000Z"
-last_activity: 2026-09-19 -- Phase 05 gap closure planned (05-17) after verification found gaps
+stopped_at: Completed 05-17-PLAN.md (Phase 5 gap closure)
+last_updated: "2026-09-19T19:50:00.000Z"
+last_activity: 2026-09-19 -- Phase 05 gap closure executed (05-17); placeholder JWT secret refused at boot, four review warnings closed
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 55
-  completed_plans: 54
-  percent: 98
+  completed_plans: 55
+  percent: 100
 ---
 
 # Project State
@@ -26,23 +26,23 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 ## Current Position
 
-Phase: 05 (auth-assignment-notifications) — AWAITING VERIFICATION
+Phase: 05 (auth-assignment-notifications) — AWAITING RE-VERIFICATION
 Plan: 17 of 17
-Status: Phase 05 plans 01-16 complete; verification found gaps (placeholder JWT secret accepted); gap-closure plan 05-17 ready to execute
-Last activity: 2026-09-19 -- Phase 05 gap closure planned (05-17) after verification found gaps
+Status: Phase 05 plans 01-17 complete; the gap closure shipped (`make env`, the boot-time refusal, WR-01/02/03/04); awaiting re-verification
+Last activity: 2026-09-19 -- Phase 05 gap closure executed (05-17); placeholder JWT secret refused at boot, four review warnings closed
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 54/55
-means "every plan but the 05-17 gap closure has been executed", not "the milestone is nearly finished".
+`total_plans` counts planned plans only - phases 6 and 7 are not yet planned, so 55/55
+means "every plan written so far has been executed", not "the milestone is finished".
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 54
+- Total plans completed: 55
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -54,7 +54,7 @@ means "every plan but the 05-17 gap closure has been executed", not "the milesto
 | 02 | 7 | - | - |
 | 03 | 11 | - | - |
 | 04 | 12 | - | - |
-| 05 | 16 | - | - |
+| 05 | 17 | - | - |
 
 **Recent Trend:**
 
@@ -116,6 +116,7 @@ means "every plan but the 05-17 gap closure has been executed", not "the milesto
 | Phase 05 P14 | 34min | 3 tasks | 4 files |
 | Phase 05 P15 | 20min | 2 tasks | 2 files |
 | Phase 05 P16 | 30min | 3 tasks | 6 files |
+| Phase 05 P17 | 25min | 5 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -759,6 +760,31 @@ Recent decisions affecting current work:
   regressed both files in all sixteen plans (a phase-based percent, a reset Status line, injected
   blank lines, a blanked progress row, a bogus `[Phase ?]:` decision prefix)
 
+- [Phase 05-17]: the local `.env` was repaired with `make env` and the container rebuilt onto a
+  generated secret BEFORE the refusal landed - `tests/integration/conftest.py`'s `database_url`
+  fixture is the one place in the suite that builds `Settings()` from the real on-disk file, so
+  the reverse order would have left the whole suite, and the pre-commit hook that runs it, red
+  between two commits with `--no-verify` forbidden
+- [Phase 05-17]: the refusal is a PREFIX rule (`replace-me`) and ADR-084 says what it does not
+  do: an operator's own weak 32-character secret is not protected, and no code default was
+  introduced - the generated value exists only in an untracked `.env`
+- [Phase 05-17]: `make env` generates on the HOST rather than in the entrypoint; an entrypoint
+  generator would mint a new secret on every container start and invalidate every live token,
+  which is a different defect rather than a fix
+- [Phase 05-17]: `is_storable_text` is a public domain predicate and the single home of the rule;
+  `_refuse_unstorable` (renamed from `_refuse_nul`) returns early when it answers yes and only
+  then picks between two messages, so the guard and the predicate cannot drift, and `Login` asks
+  the same question about a submitted address without importing an exception
+- [Phase 05-17]: the login guard runs BEFORE the unit of work, and the test asserts
+  `rollbacks == 0` to prove it - the unknown-address leg leaves it at 1, so the assertion
+  distinguishes a guard in front of the block from one inside it
+- [Phase 05-17]: the engine test reads `hide_parameters` off the real engine and passes that flag
+  into the `DBAPIError` it renders, rather than hardcoding `True`, so removing the option from
+  `create_engine` fails the test instead of leaving it asserting about a literal
+- [Phase 05-17]: STATE.md and ROADMAP.md were again updated by hand for the reason 05-16 records;
+  the ROADMAP Phase 5 checkbox, its status cell and its completion date are still untouched -
+  only the seventeenth plan box and the 17/17 count were taken here
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -795,6 +821,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T18:45:00.000Z
-Stopped at: Completed 05-16-PLAN.md
+Last session: 2026-09-19T19:50:00.000Z
+Stopped at: Completed 05-17-PLAN.md
 Resume file: None
