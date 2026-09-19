@@ -22,3 +22,19 @@ E   ImportError: cannot import name 'EmailNotifierDependency' from 'taskmanager.
 ERROR tests/unit/test_app_factory.py
 !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
 1 error in 0.07s
+
+================================================================
+Task 3 RED - the seam still answers with a constant and never decodes
+$ .venv/bin/pytest tests/unit/presentation/test_actor.py -q --no-cov
+================================================================
+tests/unit/presentation/test_actor.py:299: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/presentation/test_actor.py::test_a_request_with_no_authorization_header_is_refused
+FAILED tests/unit/presentation/test_actor.py::test_a_non_bearer_scheme_is_refused
+FAILED tests/unit/presentation/test_actor.py::test_a_bearer_scheme_with_an_empty_parameter_is_refused
+FAILED tests/unit/presentation/test_actor.py::test_a_lowercase_bearer_scheme_is_accepted
+FAILED tests/unit/presentation/test_actor.py::test_a_token_whose_subject_has_no_row_is_the_same_refusal
+FAILED tests/unit/presentation/test_actor.py::test_the_route_is_published_with_the_bearer_scheme
+FAILED tests/unit/presentation/test_actor.py::test_the_seam_takes_its_collaborators_as_parameters
+FAILED tests/unit/presentation/test_actor.py::test_the_module_names_no_algorithm_and_no_library
+8 failed, 3 passed in 0.05s

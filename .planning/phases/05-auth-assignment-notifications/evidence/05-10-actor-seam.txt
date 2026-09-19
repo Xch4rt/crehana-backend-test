@@ -1,0 +1,118 @@
+05-10: the actor seam becomes real - blast radius and the live refusal
+
+================================================================
+1. DEMO_USER_ID BEFORE (reproduced against 28f829e, the commit this
+   plan started from - the working tree no longer holds the constant)
+$ git grep -n DEMO_USER_ID 28f829e -- src tests docker
+================================================================
+28f829e:docker/entrypoint.sh:134:# Why `DEMO_USER_ID` is imported rather than pasted. The identifier must exist in
+28f829e:docker/entrypoint.sh:164:from taskmanager.presentation.api.actor import DEMO_USER_ID
+28f829e:docker/entrypoint.sh:181:            "id": DEMO_USER_ID,
+28f829e:src/taskmanager/presentation/api/actor.py:12:`DEMO_USER_ID` to write the row, and importing it from `dependencies.py` would
+28f829e:src/taskmanager/presentation/api/actor.py:43:DEMO_USER_ID: Final[UUID] = UUID("00000000-0000-4000-8000-00000000de00")
+28f829e:src/taskmanager/presentation/api/actor.py:53:    return DEMO_USER_ID
+28f829e:tests/integration/api/test_task_lists.py:36:from taskmanager.presentation.api.actor import DEMO_USER_ID
+28f829e:tests/integration/api/test_task_lists.py:95:    user_id: uuid.UUID = DEMO_USER_ID,
+28f829e:tests/integration/api/test_task_lists.py:131:    owner_id: uuid.UUID = DEMO_USER_ID,
+28f829e:tests/integration/api/test_task_lists.py:241:    assert body["owner_id"] == str(DEMO_USER_ID)
+28f829e:tests/integration/api/test_task_lists.py:760:    assert response.json()["owner_id"] == str(DEMO_USER_ID)
+28f829e:tests/unit/presentation/test_actor.py:27:    DEMO_USER_ID,
+28f829e:tests/unit/presentation/test_actor.py:39:    assert get_current_actor() == DEMO_USER_ID
+28f829e:tests/unit/presentation/test_actor.py:59:    assert isinstance(DEMO_USER_ID, UUID)
+28f829e:tests/unit/presentation/test_actor.py:60:    assert DEMO_USER_ID.version == 4
+
+   Four files, exactly as 05-RESEARCH Pattern 10 enumerated.
+
+================================================================
+2. DEMO_USER_ID AFTER
+$ grep -rn DEMO_USER_ID src/ tests/ docker/ ; echo "exit=$?"
+================================================================
+exit=1 (1 = no match anywhere)
+
+================================================================
+3. The live 401, through create_app's real application and the
+   project's own handler stack - no test double anywhere. The four
+   header shapes 05-RESEARCH measured, answered identically: same
+   status, same media type, same challenge, same body (T-5-04).
+   Produced by the throwaway script reproduced at the end of this file,
+   run as `.venv/bin/python <script>` from the repository root.
+================================================================
+--- no Authorization header
+HTTP/1.1 401 Unauthorized
+content-type: application/problem+json
+WWW-Authenticate: Bearer
+{"type":"urn:taskmanager:problem:authentication_failed","title":"Authentication failed","status":401,"detail":"Could not validate credentials.","instance":"/api/v1/task-lists","code":"authentication_failed"}
+
+--- Authorization: Basic zzz
+HTTP/1.1 401 Unauthorized
+content-type: application/problem+json
+WWW-Authenticate: Bearer
+{"type":"urn:taskmanager:problem:authentication_failed","title":"Authentication failed","status":401,"detail":"Could not validate credentials.","instance":"/api/v1/task-lists","code":"authentication_failed"}
+
+--- Authorization: Bearer <empty>
+HTTP/1.1 401 Unauthorized
+content-type: application/problem+json
+WWW-Authenticate: Bearer
+{"type":"urn:taskmanager:problem:authentication_failed","title":"Authentication failed","status":401,"detail":"Could not validate credentials.","instance":"/api/v1/task-lists","code":"authentication_failed"}
+
+--- a junk bearer token
+HTTP/1.1 401 Unauthorized
+content-type: application/problem+json
+WWW-Authenticate: Bearer
+{"type":"urn:taskmanager:problem:authentication_failed","title":"Authentication failed","status":401,"detail":"Could not validate credentials.","instance":"/api/v1/task-lists","code":"authentication_failed"}
+
+================================================================
+4. The published security scheme - what makes Swagger's Authorize
+   button exist (AUTH-02), emitted through the nested dependency.
+================================================================
+components.securitySchemes.OAuth2PasswordBearer =
+{
+  "type": "oauth2",
+  "flows": {
+    "password": {
+      "scopes": {},
+      "tokenUrl": "/api/v1/auth/login"
+    }
+  }
+}
+
+paths./api/v1/task-lists.get.security = [{"OAuth2PasswordBearer": []}]
+
+================================================================
+5. The script that produced section 3, verbatim
+================================================================
+import asyncio
+
+from httpx import ASGITransport, AsyncClient
+
+from taskmanager.infrastructure.config.settings import Settings
+from taskmanager.main import create_app
+
+app = create_app(
+    Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://user:pass@localhost:5432/nowhere",
+        jwt_secret="a" * 32,
+    )
+)
+
+
+async def main() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for headers, label in (
+            (None, "no Authorization header"),
+            ({"Authorization": "Basic zzz"}, "Authorization: Basic zzz"),
+            ({"Authorization": "Bearer "}, "Authorization: Bearer <empty>"),
+            ({"Authorization": "Bearer not.a.real.token"}, "a junk bearer token"),
+        ):
+            response = await client.get("/api/v1/task-lists", headers=headers)
+            print(f"--- {label}")
+            print(f"HTTP/1.1 {response.status_code} {response.reason_phrase}")
+            print(f"content-type: {response.headers['content-type']}")
+            print(f"WWW-Authenticate: {response.headers['WWW-Authenticate']}")
+            print(response.text)
+            print()
+
+
+asyncio.run(main())
