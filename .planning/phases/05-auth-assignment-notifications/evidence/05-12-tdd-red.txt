@@ -45,3 +45,17 @@ FAILED tests/architecture/test_routers_raise_no_http_exception.py::test_the_pres
 -> module created; gates re-run green:
 .......                                                                  [100%]
 7 passed in 0.02s
+
+=== Task 3 RED: the 19-operation inventory and the 401/403 partitions, before registration ===
+$ .venv/bin/pytest tests/unit/test_app_factory.py -q --no-cov
+tests/unit/test_app_factory.py:496: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_app_factory.py::test_create_app_publishes_exactly_the_expected_routes
+FAILED tests/unit/test_app_factory.py::test_the_document_publishes_exactly_nineteen_operations
+FAILED tests/unit/test_app_factory.py::test_every_authenticated_operation_declares_a_401
+FAILED tests/unit/test_app_factory.py::test_exactly_four_operations_declare_a_403
+FAILED tests/unit/test_app_factory.py::test_every_api_route_declares_a_response_model_or_returns_no_content
+5 failed, 14 passed in 0.26s
+-> registered; gates re-run green:
+...................                                                      [100%]
+19 passed in 0.26s

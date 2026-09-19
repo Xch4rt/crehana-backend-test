@@ -42,6 +42,7 @@ from taskmanager.presentation.api.errors.handlers import (
 from taskmanager.presentation.api.schemas import auth as auth_schemas
 from taskmanager.presentation.api.schemas import task_lists as task_list_schemas
 from taskmanager.presentation.api.schemas import tasks as task_schemas
+from taskmanager.presentation.api.schemas import users as user_schemas
 from tests.integration.test_dependencies import uow_probe_router
 from tests.probe import probe_router
 
@@ -56,16 +57,19 @@ API_PREFIX = "/api/v1"
 # re-pathed has to fail here, and a typo in a path is exactly the defect a
 # generated list would reproduce faithfully on both sides.
 #
-# Phase 4's eleven, plus the three auth routes plan 05-11 registers. The login
-# path in particular is not decoration in this list: `actor.py` constructs the
-# bearer scheme with that exact path, and a mismatch would leave Swagger's
-# Authorize button visible and posting into a 404. This inventory pins the
-# route's existence; `test_security_scheme.py` pins the agreement.
+# Phase 4's eleven, the three auth routes plan 05-11 registers, and the four
+# plan 05-12 adds. The login path in particular is not decoration in this list:
+# `actor.py` constructs the bearer scheme with that exact path, and a mismatch
+# would leave Swagger's Authorize button visible and posting into a 404. This
+# inventory pins the route's existence; `test_security_scheme.py` pins the
+# agreement.
 EXPECTED_API_ENDPOINTS: Final[frozenset[tuple[str, str]]] = frozenset(
     {
         ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/auth/login"),
         ("GET", "/api/v1/auth/me"),
+        ("GET", "/api/v1/users"),
+        ("GET", "/api/v1/tasks/assigned-to-me"),
         ("POST", "/api/v1/task-lists"),
         ("GET", "/api/v1/task-lists"),
         ("GET", "/api/v1/task-lists/{list_id}"),
@@ -77,8 +81,69 @@ EXPECTED_API_ENDPOINTS: Final[frozenset[tuple[str, str]]] = frozenset(
         ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
         ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
         ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}/status"),
+        ("PUT", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"),
+        ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"),
     }
 )
+
+# The one published operation outside the versioned prefix. Named rather than
+# added to the set above, because `_api_operations` filters on that prefix and
+# an entry it can never return would make the inventory unfalsifiable.
+HEALTH_ENDPOINT: Final[tuple[str, str]] = ("GET", "/health")
+
+# Every operation the application publishes, versioned or not. Nineteen after
+# plan 05-12, which is the number `05-RESEARCH.md`'s permission matrix has rows
+# for and the number plan 05-15's parametrized HTTP walk drives.
+EXPECTED_OPERATIONS: Final[frozenset[tuple[str, str]]] = EXPECTED_API_ENDPOINTS | {
+    HEALTH_ENDPOINT
+}
+
+# The three operations that answer without a token, and therefore the three
+# with no 401 leg to declare. Duplicated from `test_security_scheme.py` on
+# purpose rather than imported: that module partitions the `security` arrays a
+# client's generated code reads, this one partitions the `responses` maps a
+# human reads, and fusing the two would make one property's exemption silently
+# grant the other's. `POST /auth/login` is in this set and still declares a 401,
+# which is the asymmetry the partition below is careful to allow: the exemption
+# says an open route need not document a missing-credential refusal, never that
+# it may not document a rejected one.
+OPEN_OPERATIONS: Final[frozenset[tuple[str, str]]] = frozenset(
+    {
+        HEALTH_ENDPOINT,
+        ("POST", "/api/v1/auth/register"),
+        ("POST", "/api/v1/auth/login"),
+    }
+)
+
+# Exactly the operations that can answer 403, and there are four (D-03). An
+# assignee may read their task and change its status; they may not edit it,
+# delete it, or decide who holds it. Every other refusal in this API is a 404,
+# because the caller cannot see the resource at all - so a 403 declared
+# anywhere else would be a documented leg the route cannot produce, which
+# misleads a client exactly as much as a missing one does.
+FORBIDDEN_OPERATIONS: Final[frozenset[tuple[str, str]]] = frozenset(
+    {
+        ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
+        ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}"),
+        ("PUT", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"),
+        ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"),
+    }
+)
+
+
+def _all_operations(app: FastAPI) -> dict[tuple[str, str], dict[str, Any]]:
+    """Every operation in the published document, versioned prefix or not.
+
+    `_api_operations` below is the same read narrowed to `/api/v1`, and the
+    narrow one cannot be used for the inventory: `/health` is published outside
+    the prefix, so an inventory taken through the filter would be unable to
+    notice the health route disappearing.
+    """
+    return {
+        (method.upper(), path): operation
+        for path, item in app.openapi()["paths"].items()
+        for method, operation in item.items()
+    }
 
 
 def _api_operations(app: FastAPI) -> dict[tuple[str, str], dict[str, Any]]:
@@ -220,6 +285,105 @@ def test_create_app_publishes_exactly_the_expected_routes(
     assert set(_api_operations(app)) == EXPECTED_API_ENDPOINTS
 
 
+def test_the_document_publishes_exactly_nineteen_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole surface, `/health` included, counted and named (ADR-057).
+
+    The sibling above asserts the versioned inventory, and it cannot see the
+    health route at all: `_api_operations` filters on the `/api/v1` prefix, so
+    `/health` disappearing - or a second unversioned route appearing beside it -
+    would leave it perfectly green. This one reads the document whole.
+
+    Both the set and the number are asserted. The set is what names the route
+    that moved; the number is the one plan 05-15's permission matrix has rows
+    for, so a route added without a row in that table fails here first, while
+    the matrix is still being written rather than after it has been shipped
+    incomplete.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    published = set(_all_operations(app))
+    assert published == EXPECTED_OPERATIONS
+    assert len(published) == 19
+
+
+def test_every_authenticated_operation_declares_a_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTH-03 in the document, not only in the tests.
+
+    A partition rather than a list, which is the shape plan 05-11 used for the
+    `security` arrays and the reason this survives a route added later: an
+    operation is either one of the three named open ones or it must document
+    the refusal it now produces without a token. A hand-written list of secured
+    routes would say nothing about the route nobody remembered to add to it.
+
+    Why this is worth a gate at all: `security` and `responses` are read by
+    different halves of a client. A generated client uses the first to decide
+    whether to attach a token, and a human - or a typed error union - uses the
+    second to decide which failures to handle. A route that demands a token and
+    never documents the 401 is a client that treats it as an unexpected server
+    fault.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    operations = _all_operations(app)
+    assert operations
+    # The exemption list is a hole in the partition, so it has to keep earning
+    # itself: a renamed open route would otherwise simply become a secured one
+    # and the partition would still pass.
+    assert OPEN_OPERATIONS <= set(operations), OPEN_OPERATIONS - set(operations)
+
+    undeclared = [
+        endpoint
+        for endpoint, operation in operations.items()
+        if endpoint not in OPEN_OPERATIONS and "401" not in operation["responses"]
+    ]
+
+    assert undeclared == [], (
+        "Every operation that requires a token must declare the 401 it answers "
+        f"without one (AUTH-03). Missing the leg: {undeclared}"
+    )
+
+
+def test_exactly_four_operations_declare_a_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-03's four, and an equality so a fifth is a failure either way.
+
+    Asserted as set equality rather than as containment, because the two
+    directions fail differently and both matter. A missing 403 is a refusal an
+    assignee will meet and no client was told about. A *surplus* one is worse
+    in its own way: the task-list routes and `POST .../tasks` cannot produce a
+    403 at all - an assignee cannot see the list, so every refusal there is the
+    404 D-01 specifies - and documenting a leg a route can never answer with
+    invites a client to write a branch that is dead on arrival, and invites a
+    reader to believe this API discloses more than it does.
+    """
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+
+    app = create_app(Settings(_env_file=None))
+
+    declared = {
+        endpoint
+        for endpoint, operation in _all_operations(app).items()
+        if "403" in operation["responses"]
+    }
+
+    assert declared == FORBIDDEN_OPERATIONS, {
+        "missing": sorted(FORBIDDEN_OPERATIONS - declared),
+        "unexpected": sorted(declared - FORBIDDEN_OPERATIONS),
+    }
+
+
 # Which named component each route's success body must be, or `None` for a 204
 # with no body. Written out by hand for the reason `EXPECTED_API_ENDPOINTS` is:
 # a table derived from the application would agree with whatever the application
@@ -228,6 +392,8 @@ EXPECTED_RESPONSE_MODELS: Final[dict[tuple[str, str], str | None]] = {
     ("POST", "/api/v1/auth/register"): "UserResponse",
     ("POST", "/api/v1/auth/login"): "TokenResponse",
     ("GET", "/api/v1/auth/me"): "UserResponse",
+    ("GET", "/api/v1/users"): "UserSummaryResponse",
+    ("GET", "/api/v1/tasks/assigned-to-me"): "TaskResponse",
     ("POST", "/api/v1/task-lists"): "TaskListResponse",
     ("GET", "/api/v1/task-lists"): "TaskListResponse",
     ("GET", "/api/v1/task-lists/{list_id}"): "TaskListResponse",
@@ -239,6 +405,8 @@ EXPECTED_RESPONSE_MODELS: Final[dict[tuple[str, str], str | None]] = {
     ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}"): "TaskResponse",
     ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}"): None,
     ("PATCH", "/api/v1/task-lists/{list_id}/tasks/{task_id}/status"): "TaskResponse",
+    ("PUT", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"): "TaskResponse",
+    ("DELETE", "/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee"): "TaskResponse",
 }
 
 
@@ -246,7 +414,12 @@ def _presentation_models() -> dict[str, type[BaseModel]]:
     """Every Pydantic model the presentation schema modules define, by name."""
     return {
         name: member
-        for module in (auth_schemas, task_list_schemas, task_schemas)
+        for module in (
+            auth_schemas,
+            task_list_schemas,
+            task_schemas,
+            user_schemas,
+        )
         for name, member in vars(module).items()
         if isinstance(member, type)
         and issubclass(member, BaseModel)

@@ -5,7 +5,7 @@ package follows - no error answered here, no transaction ended or entered here,
 no business limit re-checked here, an explicit `response_model` on every route -
 and they are not restated.
 
-Two things are specific to this module.
+Three things are specific to this module.
 
 The router declares the same `/task-lists` prefix as its sibling, so the URLs
 stay nested and a task is always addressed through the list it belongs to. The
@@ -19,6 +19,15 @@ same not-found answer an absent task produces, so a task id addressed under a
 list that does not own it discloses nothing. A nested path whose parent segment
 never reached the use case would be an ownership check that passes while
 checking nothing.
+
+**This is the module where the permission model splits, so it is the module
+where the `responses` maps stop being uniform.** All six routes gained a `401`
+in plan 05-12, because all six are authenticated. Only two of them declare a
+`403`, and which two is the whole of D-03: a task can now have an assignee who
+does not own the list, and that person reads the task and drives its state
+machine but does not edit it, delete it or decide who holds it. The comment on
+`FORBIDDEN_DESCRIPTION` below names the four routes that deliberately do not
+take the leg and why each one cannot produce it.
 """
 
 from typing import Annotated, Final
@@ -63,6 +72,30 @@ LIST_NOT_FOUND_DESCRIPTION: Final[str] = (
     "No such task list for this caller. A list owned by someone else answers "
     "identically to an absent one (ADR-008, D-04)."
 )
+UNAUTHENTICATED_DESCRIPTION: Final[str] = (
+    "No usable credential. A missing, malformed, badly signed or expired "
+    "token, and a token naming an account that no longer exists, all produce "
+    "this same body with the same message, so it discloses nothing about "
+    "which half of the credential was wrong (D-11)."
+)
+# Declared once and used on exactly two of this module's six routes - the
+# generic patch and the delete. **The four routes that do not take it are the
+# point of the constant sitting here rather than inline**, so the omission
+# reads as a decision at the place it looks most like an oversight.
+#
+# `GET` and `PATCH .../status` are next to them on the same URL and answer the
+# assignee 200: D-03 gives an assignee the task's contents and its state
+# machine, which is the whole of what being assigned a task means.
+# `POST .../tasks` and `GET .../tasks` are addressed at the *list*, which an
+# assignee cannot see at all, so their refusal is the list-shaped 404 (D-01,
+# 04-06) and a 403 there would be a leg no request can reach.
+FORBIDDEN_DESCRIPTION: Final[str] = (
+    "The caller is the task's assignee, not the list's owner. An assignee may "
+    "read the task and change its status; editing it, deleting it and "
+    "deciding who holds it belong to the owner of the list it lives in "
+    "(D-03, ASGN-01). They can already see the task, so answering 404 here "
+    "would contradict an answer this API has already given them (ADR-008)."
+)
 TRANSITION_DESCRIPTION: Final[str] = (
     "The requested move is not one the state machine allows. The problem+json "
     "body carries the refused move as `from` and `to` inside `errors`."
@@ -101,6 +134,7 @@ PriorityFilter = Annotated[TaskPriority | None, Query()]
         "`pending`, which the entity decides rather than the request (TASK-01)."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": LIST_NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -124,7 +158,11 @@ async def create_task(
 
     Neither `status` nor `assignee_id` is a field of the request body, so
     neither is a mass-assignment surface (T-4-35): the initial state belongs to
-    the entity, and Phase 4 declares no assignment endpoint at all.
+    the entity, and a task cannot be created already assigned (D-06). Sending
+    either key is one `extra_forbidden` 422. Assignment arrived in Phase 5 with
+    a door of its own - `PUT .../tasks/{task_id}/assignee` in
+    `routers/assignments.py` - and deliberately did not widen this body, so
+    there is still exactly one use case that notifies rather than two (T-5-10).
     """
     result = await CreateTask(uow, clock).execute(
         payload.to_command(actor_id=actor_id, task_list_id=list_id)
@@ -150,6 +188,7 @@ async def create_task(
         "counters are what the list is."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": LIST_NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -185,6 +224,7 @@ async def list_tasks(
     summary="Read one task",
     response_description="The task, in full.",
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -221,6 +261,8 @@ async def get_task(
         "(D-08, TASK-03), and sending the key in this body is a 422 naming it."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
+        403: {"description": FORBIDDEN_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -257,6 +299,8 @@ async def update_task(
     summary="Delete a task",
     response_description="No content. The task is gone (TASK-04).",
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
+        403: {"description": FORBIDDEN_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -290,6 +334,7 @@ async def delete_task(
         "(D-11, TASK-05)."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         409: {"description": TRANSITION_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},

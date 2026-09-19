@@ -49,9 +49,11 @@ from taskmanager.infrastructure.logging import configure_logging
 from taskmanager.infrastructure.security.resources import create_security_resources
 from taskmanager.presentation.api.errors.handlers import register_exception_handlers
 from taskmanager.presentation.api.health import register_health_routes
+from taskmanager.presentation.api.routers.assignments import register_assignment_routes
 from taskmanager.presentation.api.routers.auth import register_auth_routes
 from taskmanager.presentation.api.routers.task_lists import register_task_list_routes
 from taskmanager.presentation.api.routers.tasks import register_task_routes
+from taskmanager.presentation.api.routers.users import register_user_routes
 
 # The first thing an evaluator reads, because `docker compose up` hands them
 # `/docs` before it hands them the README - which repeats this in Phase 7. It
@@ -133,4 +135,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_auth_routes(app)
     register_task_list_routes(app)
     register_task_routes(app)
+    # Then the two Phase 5 additions, after the Phase 4 registrations: the
+    # directory a client picks an assignee out of, and the door that hands the
+    # task over. One call per router module, which is why each of those modules
+    # exposes exactly one registration function even when - as `assignments.py`
+    # does - it declares more than one router.
+    register_user_routes(app)
+    register_assignment_routes(app)
     return app

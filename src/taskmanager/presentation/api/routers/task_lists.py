@@ -41,6 +41,24 @@ answers an unexpected failure with a fixed problem+json body, so it is a
 documented outcome of this API rather than an accident, and naming it is what
 lets the collection route below - which has no 404, no 409 and no 422 - still
 publish an honest refusal map.
+
+Every route here also declares a `401`, added in plan 05-12 when authentication
+made it reachable. All five are authenticated, so all five gained the leg: a
+route that demands a token and does not document the refusal it gives without
+one is a document that lies by omission, and a generated client would treat
+that refusal as an unexpected server fault.
+
+**No route in this module declares a `403`, and the absence is a decision
+rather than an oversight.** Phase 5 gives a task an assignee who is not the
+list's owner, and D-03 lets that assignee read the task and change its status
+while refusing them the generic patch, the delete and the assignment door with
+a 403. None of that reaches a *list*: an assignee cannot see the list at all,
+so every refusal here - theirs and a stranger's alike - is the same 404 (D-01,
+ADR-008), and `routers/tasks.py` carries the same argument for the one route of
+its own that answers 404 where its neighbours answer 403. A documented leg a
+route can never produce misleads a client exactly as much as a missing one, so
+`tests/unit/test_app_factory.py` asserts the four operations that declare a 403
+as a set equality and this module's five are outside it.
 """
 
 from typing import Final
@@ -86,6 +104,12 @@ DUPLICATE_NAME_DESCRIPTION: Final[str] = (
     "The caller already owns a task list with this name. The comparison is "
     "case-sensitive (D-12)."
 )
+UNAUTHENTICATED_DESCRIPTION: Final[str] = (
+    "No usable credential. A missing, malformed, badly signed or expired "
+    "token, and a token naming an account that no longer exists, all produce "
+    "this same body with the same message, so it discloses nothing about "
+    "which half of the credential was wrong (D-11)."
+)
 VALIDATION_DESCRIPTION: Final[str] = (
     "The request is malformed - an unknown or missing field, an explicit null "
     "on a field that has none, an empty patch body, an identifier that is not "
@@ -107,6 +131,7 @@ UNEXPECTED_DESCRIPTION: Final[str] = (
         "header naming its URL."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         409: {"description": DUPLICATE_NAME_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -149,7 +174,10 @@ async def create_task_list(
         "two lists were created in the same instant (D-13). There are no sort "
         "and no pagination parameters in v1 (ADR-043)."
     ),
-    responses={500: {"description": UNEXPECTED_DESCRIPTION}},
+    responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
+        500: {"description": UNEXPECTED_DESCRIPTION},
+    },
 )
 async def list_task_lists(
     actor_id: CurrentActor,
@@ -175,6 +203,7 @@ async def list_task_lists(
     summary="Read one task list",
     response_description="The task list, with its completion counters.",
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
@@ -203,6 +232,7 @@ async def get_task_list(
     summary="Update a task list",
     response_description="The updated task list, in full.",
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         409: {"description": DUPLICATE_NAME_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
@@ -240,6 +270,7 @@ async def update_task_list(
         "migration declares, every task inside it are gone."
     ),
     responses={
+        401: {"description": UNAUTHENTICATED_DESCRIPTION},
         404: {"description": NOT_FOUND_DESCRIPTION},
         422: {"description": VALIDATION_DESCRIPTION},
         500: {"description": UNEXPECTED_DESCRIPTION},
