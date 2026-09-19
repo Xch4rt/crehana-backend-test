@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-19T09:13:38.559Z"
-last_activity: 2026-09-19 -- Phase 5 planning complete
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-19T14:37:04.802Z"
+last_activity: 2026-09-19 -- Phase 05 plan 01 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 38
-  percent: 57
+  completed_plans: 39
+  percent: 72
 ---
 
 # Project State
@@ -22,16 +22,16 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 5 — auth, assignment & notifications
+**Current focus:** Phase 05 — auth-assignment-notifications
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-19 -- Phase 5 planning complete
+Phase: 05 (auth-assignment-notifications) — EXECUTING
+Plan: 2 of 16
+Status: Executing Phase 05 (plan 02 next)
+Last activity: 2026-09-19 -- Phase 05 plan 01 complete
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 72%
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Progress: [██████████] 100%
 | Phase 04 P11 | 14min | 2 tasks | 3 files |
 | Phase 04 P10 | 12min | 3 tasks | 2 files |
 | Phase 04 P12 | 18min | 3 tasks | 7 files |
+| Phase 05 P01 | 6min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -319,6 +320,12 @@ Recent decisions affecting current work:
 - [Phase 04-12]: the host and container gate runs disagree on coverage - 100.00% over 1155 statements vs 99.20% over 1267, same 599 tests - and the difference was explained rather than reported: the statement count is PEP 649 (visible in Phase 3 too at 730 vs 772), and the eleven missed lines are shown to be a measurement artifact by a labelled one-test probe in which test_create_returns_201_with_a_location_header_and_the_full_representation PASSES while coverage calls missed the only lines that set the header it asserts
 - [Phase 04-12]: nothing was suppressed in response to that discrepancy - a pragma is forbidden by CLAUDE.md and would turn an artifact into a permanent exemption; the finding is handed to Phase 6, which owns TEST-03 and therefore the honesty of the coverage number
 - [Phase 04-12]: the phase itself is deliberately NOT marked complete here - roadmap.update-plan-progress set the Phase 4 checkbox, its Progress-table status and its date, and all three were reverted by hand; plan-level progress (12/12) and the fifteen requirement ticks are this plan's, phase completion belongs to the orchestrator after verification
+- [Phase ?]: [Phase 05-01]: PASSWORD_MIN_LENGTH/PASSWORD_MAX_LENGTH are module Final constants in domain/validation.py, not User ClassVars - the entity never sees plaintext, only the Argon2 hash, so no entity can own D-10's rule; Phase 2 D-04 still holds and this module is the only place in the domain that can hold it
+- [Phase ?]: [Phase 05-01]: require_password's two departures from require_text (no strip, no _refuse_nul) are proven by BEHAVIOUR - eight spaces returned byte-identical and a NUL password returned unchanged - because a length-only test suite passes just as happily against an implementation that quietly trims
+- [Phase ?]: [Phase 05-01]: Task.assign/unassign copy reprioritise exactly and carry no value guard; the entity deliberately has NO same-assignee no-op, and a test asserting unassign still stamps an already-unassigned task is what stops a later reader 'fixing' the asymmetry D-07 owns in AssignTask (05-08)
+- [Phase ?]: [Phase 05-01]: jwt_secret's floor moved 16 to 32 as an isolated commit, justified by RFC 7518 section 3.2 and by the pytest.ini filterwarnings interaction rather than by taste; all three existing secrets were COUNTED first (conftest 32, .env.example 34, ci.yml 36), which is the finding that made D-26 a one-line change
+- [Phase ?]: [Phase 05-01]: requirement ticks AUTH-04 and ASGN-02 deliberately NOT taken despite this plan's frontmatter naming both - 05-16 is the last claimant, and this plan ships a validator and two mutators with no use case and no route above them
+- [Phase ?]: [Phase 05-01]: the TDD RED step is captured in evidence/05-01-tdd-red.txt rather than committed - pre-commit's mypy (strict) hook rejects a test importing a name no module exports and --no-verify is forbidden (the 02-01 and 04-02 precedent)
 
 ### Pending Todos
 
@@ -354,6 +361,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T07:37:11.584Z
+Last session: 2026-09-19T14:36:39.786Z
 Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-auth-assignment-notifications/05-CONTEXT.md
+Resume file: None

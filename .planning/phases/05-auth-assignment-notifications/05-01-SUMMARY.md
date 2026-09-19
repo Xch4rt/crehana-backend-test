@@ -86,8 +86,9 @@ assignment mutators, and an HS256 key floor that makes `InsecureKeyLengthWarning
 - `Settings.jwt_secret` refuses 31 characters and accepts 32. The boundary is pinned at 31/32
   rather than at an obviously tiny value, so the floor cannot be lowered back towards PyJWT's
   threshold without a red test.
-- The suite went from 653 to 659 tests at 100.00% coverage over 1199 statements, with no pragma and
-  no omit anywhere under `src/taskmanager/`.
+- The suite gained 16 tests (9 + 6 + 1) and stands at 659 passing with 100.00% coverage over 1199
+  statements, no pragma and no omit anywhere under `src/taskmanager/`. `tests/unit` plus
+  `tests/architecture` went from 448 to 464, counted at each task boundary.
 
 ## Task Commits
 
