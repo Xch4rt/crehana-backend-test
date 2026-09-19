@@ -2349,3 +2349,1211 @@ and the five write paths - `ChangeTaskStatus`, `UpdateTask`, `DeleteTask`, `Upda
   exists as a requirement today.
 
 ---
+
+## ADR-059: the third outcome — `owned_task` beside `visible_task`, refining ADR-055
+
+**Context**
+ADR-008 fixed two answers: a resource the caller cannot see is a 404, a resource they can see
+but may not act on is a 403. Until this phase the project had never produced the second one —
+Phase 4 had exactly one role, the owner, so plan 04-03 deliberately dropped the assignee clause
+from the status guard and inverted the test that asserted it. Phase 5 adds the assignee, and
+with them the first request in the project's history that is visible-but-forbidden: an assignee
+may read their task and advance its status (ASGN-02), and may not rename it, delete it, or
+change who it is assigned to (CONTEXT D-03). The rule lives in one module,
+`application/use_cases/access.py` (ADR-055), and that module had two functions.
+
+**Options**
+
+- **A `require_owner=True` keyword on `visible_task`.** The smallest diff. Rejected: at the call
+  site a boolean reads as something being *tuned*, when what is being selected is which **set of
+  failures** the request can produce — `visible_task` can raise one error class, the owner-only
+  door can raise two. The existing `for_update` keyword is a genuine tuning flag (it changes how
+  the row is read, not what may be refused), and putting a second keyword of a different kind
+  beside it would blur both.
+- **A `(task, is_owner)` tuple return.** Rejected for a specific, countable cost: eleven use
+  cases would each grow an `if not is_owner: raise ...` branch — eleven copies of the ADR-008
+  decision, eleven chances to choose the wrong status code. That is precisely the duplication
+  ADR-055 exists to prevent.
+- **A second function, `owned_task`, copying `visible_task`'s shape and differing on one
+  branch.**
+
+**Decision**
+`owned_task(uow, task_id, task_list_id, actor_id, *, for_update=False)` sits beside
+`visible_task`. It raises `AuthorizationError` on exactly one leg — the caller is the task's
+assignee — and `TaskNotFoundError(task_id)` on the other four (a stranger, an absent task, a
+wrong parent, an orphan). `grep -c "raise AuthorizationError"` over the file prints `1`, so *how
+many ways this project can produce a 403* is a question one command settles. `UpdateTask`,
+`DeleteTask`, `AssignTask` and `UnassignTask` load through it; `GetTask`, `ListTasks` and
+`ChangeTaskStatus` keep the wider `visible_task`.
+
+`visible_task` gained the matching capability: it answers a task's assignee. The **placement of
+that short-circuit is itself the decision** — it sits *after* the
+`task.task_list_id != task_list_id` comparison and *before* `uow.task_lists.get`. ADR-050
+outranks CONTEXT D-01: an assignee who addresses their task under the wrong parent list gets the
+same 404 a stranger gets, and never learns where the task really lives.
+
+**Consequences**
+
+- **The assignee's read never touches the parent list.** That is first a privacy property — the
+  list is invisible to them (D-01), so nothing about it is read on their behalf — and second a
+  saved statement. Measured on the real authenticated path: the owner's `GET` of one task issues
+  three `SELECT`s, the assignee's two; the owner's `PATCH .../status` issues four and one
+  `UPDATE`, the assignee's three and one `UPDATE`. See ADR-076 for the rule that follows.
+- **The saving is proven by an absence, not by an answer.** `CountingTaskListRepository`, a
+  subclass declared in `tests/unit/application/test_access.py`, wraps `get` and `get_for_update`,
+  and the assignee tests assert `reads == []`. Asserting only the returned task would pass
+  against an implementation that read the list, found a different owner and returned the task on
+  a later branch anyway.
+- **The 403 carries no identifier.** Its message names the rule — "Only the list owner may change
+  this task." — and two tests assert the foreign owner's id appears in neither `str(error)` nor
+  `error.details`.
+- **A new test shape entered the suite: the comparative *difference* test.** Everywhere else in
+  this project two refusals are produced from one fixture and asserted **indistinguishable**.
+  AUTH-06 needs the opposite, so `test_update_task.py`, `test_delete_task.py` and
+  `test_access.py` each produce the assignee's refusal and the stranger's refusal from one
+  fixture and assert the class and the `code` **differ**. A single-error assertion would pass
+  against an implementation that answered the assignee 404 too — which is exactly what this
+  project did for the whole of Phase 4.
+- Between the commit that made the assignee visible and the commit that narrowed the two
+  mutating verbs, an assignee could rename and delete a task on a list they cannot see. That
+  window is inherent in the task order, lasts two commits on one branch, and the second commit's
+  red capture (`evidence/05-04-tdd-red.txt`) is that window reproduced: four tests failing with
+  `DID NOT RAISE`, not with a wrong error class.
+
+---
+
+## ADR-060: a grep-checkable documentation claim is retired in the commit that falsifies it
+
+**Context**
+`access.py`'s module docstring carried a claim of a shape this project uses deliberately: not
+prose, but a property a command can check. It said `AuthorizationError` was "deliberately not
+named anywhere in this file", and explained why — nothing in Phase 4 could produce a
+visible-but-forbidden case, so the class did not appear. `grep -c AuthorizationError
+access.py` printing `0` was the check. CONTEXT D-22 anticipated that Phase 5 would falsify it.
+
+**Options**
+
+- **Delete the paragraph.** Rejected: a reader of the Phase 4 history would find a claim that
+  simply evaporated, with nothing saying whether it had been wrong or merely outlived.
+- **Leave it and add a caveat.** Rejected: the file would then contain a sentence that is false
+  on its face, one paragraph away from the code that falsifies it.
+- **Replace it, in the same commit, with a paragraph that states the old claim, why it had been
+  true, and the counted property that replaces it.**
+
+**Decision**
+The third. The paragraph headed "Why nothing here can answer 403" is gone;
+`grep -c "deliberately not named anywhere in this file"` prints `0`. What replaces it records
+that the claim held for the whole of Phase 4, that Phase 5's assignee falsified it, and that the
+new checkable property is `grep -c "raise AuthorizationError"` printing exactly `1`. The project
+keeps making claims of this shape because a counted property is the only kind of documentation
+that can go red.
+
+**Consequences**
+
+- **Four further sentences in the same docstring were falsified by the same change and were
+  rewritten with it**, not left as collateral: "the rule lives here, once, as **two**
+  functions"; "**Both functions** take an already-entered `UnitOfWork`"; the `for_update`
+  paragraph's argument that a keyword beats "a second pair of them" (there is now a third
+  function, added for a different reason); and "`visible_task(..., for_update=True)` holds the
+  task **and reads its parent list plainly**", which is no longer true on the assignee's leg.
+  Fixing the one paragraph D-22 named and leaving the other four would have been the exact
+  failure D-22 exists to name.
+- The replacement is weaker in one respect and stronger in another: it no longer asserts that a
+  concept is absent, it asserts how many times a specific outcome can be produced. The second is
+  the property a reviewer actually cares about.
+- The same convention bit from a new direction in `update.py`. Its docstring cannot name the
+  status use case, because `test_update_task_cannot_change_a_status` asserts
+  `TaskStatus.__name__` is absent from the module source and the class name is a substring of
+  the use case's name. The docstring names the endpoint in prose instead. That constraint was
+  **observed rather than assumed**: the forbidden spelling was written, the test run, and the
+  failure captured in the evidence file's appendix before the probe was reverted.
+
+---
+
+## ADR-061: the HS256 signing-key floor rises from 16 characters to 32
+
+**Context**
+`Settings.jwt_secret` has carried `min_length=16` since Phase 1, when no code signed anything.
+PyJWT 2.14.0 emits `InsecureKeyLengthWarning` when an HS256 key is shorter than 32 bytes, and
+`pytest.ini` sets `filterwarnings = error`. RFC 7518 §3.2 requires a key of at least the hash
+output size — 256 bits, 32 bytes — for HMAC-SHA256.
+
+**Options**
+
+- **Leave the floor at 16 and suppress the warning.** Rejected twice over: it would put a
+  `filterwarnings` exemption in `pytest.ini` for a warning that is *correct*, and it would leave
+  a deployable configuration whose tokens are brute-forceable offline (threat T-5-02).
+- **Leave the floor at 16 and rely on operators reading `.env.example`.** Rejected: the whole
+  point of validating settings at boot is that a misconfigured container fails fast.
+- **Raise the floor to 32.**
+
+**Decision**
+`jwt_secret: str = Field(min_length=32)`. `.env.example`'s comment states the minimum and why,
+and keeps its `secrets.token_urlsafe(32)` generation command. The boundary is pinned at 31/32
+rather than at an obviously tiny value, so the floor cannot be lowered back towards PyJWT's
+threshold without a red test.
+
+**Consequences**
+
+- **Nothing had to be lengthened, and that was established before the field changed.** Every
+  secret in the repository was counted first: `.env.example` 34 characters, `.github/workflows/ci.yml`
+  36, `tests/conftest.py` `"b" * 32`. That finding is what made D-26 a one-line change rather
+  than a repository-wide one.
+- **A developer whose local, uncommitted `.env` carries a 16-to-31 character `JWT_SECRET` now
+  fails at boot** with a `ValidationError` naming the field. That is the intended behaviour and
+  is recorded here because it is the only way this change can be felt.
+- The warning is now unreachable rather than suppressed, which is the difference between a
+  configuration that is safe and one that is quiet.
+
+---
+
+## ADR-062: the PyJWT decode policy, and the one failure deliberately left outside the catch
+
+**Context**
+`JwtTokenService.decode` is the single place an attacker-supplied string becomes an identity.
+python-jose is disqualified project-wide (CLAUDE.md § What NOT to Use, CVE-2024-33663 and
+CVE-2024-33664), so the adapter is PyJWT 2.14.0 and every policy choice is ours to make
+explicitly.
+
+**Options**
+
+- **Read the algorithm from the token's own header** — the default shape of many tutorials.
+  Rejected outright: that is RFC 8725 §2.1's algorithm-confusion attack. Verified against the
+  pinned library, a token whose header says `alg: none` is refused with `InvalidAlgorithmError`
+  once the accepted list is pinned.
+- **Accept a token missing `exp`.** Rejected: a token with no expiry is a permanent credential.
+- **Allow a few seconds of clock leeway.** Rejected: the expiry proof in the test suite is a
+  boundary, and a tolerance would make that test measure the tolerance instead. Nothing in this
+  deployment has two clocks to reconcile.
+- **Catch the library's own base exception class.** Rejected — see the decision.
+
+**Decision**
+`algorithms=[self._algorithm]`, taken from `Settings.jwt_algorithm` and never from the token;
+`require=["sub", "exp", "iat"]`; no leeway; and a catch narrow enough to exclude
+`InvalidKeyError`. `grep -c 'algorithms='` over the adapter prints exactly `1`.
+
+**Consequences**
+
+- **A misconfigured server is a 500, not a 401.** `InvalidKeyError` means *this deployment's key
+  is unusable* — the caller did nothing wrong, and answering them "your credentials are invalid"
+  would send an operator hunting for a client bug. It escapes the adapter and becomes Phase 2's
+  fixed problem+json 500 (T-5-02).
+- **Nine forgeries are one parametrised table** — unsigned, foreign-signed, expired, missing
+  `iat`, missing `sub`, missing `exp`, a non-UUID subject, `""` and `"garbage"` — and a tenth
+  test asserts every refusal carries an identical message, empty details and no fragment of any
+  token (D-11, T-5-04).
+- **The expired case needs no `sleep` and no clock-rewriting library.** PyJWT compares `exp`
+  against the real `time.time()`, so only the *issuing* side is controllable: a `FrozenClock` two
+  hours in the past mints a token that expired ninety minutes ago. That asymmetry is the reason
+  the adapter takes a `Clock` at all.
+- **The plan's own `alg=none` construction could not be built, and the corrected one is
+  stronger.** `jwt.encode(claims, secret, algorithm="HS256", headers={"alg": "none"})` raises
+  `InvalidKeyError` at *encode* time in PyJWT 2.14.0 — the library prepares the key for the
+  header's algorithm, and `alg=none` requires a `None` key. The token an attacker actually sends
+  is `jwt.encode(claims, None, algorithm="none")`, and that is what the table uses.
+- Three literals are argued in prose rather than spelled, because the plan's own grep criteria
+  required `InvalidKeyError` once, `PyJWTError` zero times and `leeway=` zero times. The
+  01-03 prose-not-literal convention.
+
+---
+
+## ADR-063: Argon2 runs off the event loop through `anyio.to_thread`, which is imported unpinned
+
+**Context**
+Argon2's cost is the point of Argon2 — measured here at 37 ms to hash and 26 ms to verify. Under
+asyncio, a 37 ms synchronous call in a coroutine is not a slow request, it is a **stalled
+server**: nothing else on that event loop runs for its duration. AUTH-04 requires the hashing to
+run off the loop (threat T-5-07).
+
+**Options**
+
+- **`asyncio.to_thread`.** Works, and opens a *second*, invisible thread pool alongside
+  Starlette's, with its own unbounded concurrency. Rejected.
+- **A `concurrent.futures.ThreadPoolExecutor` owned by the adapter.** Same objection plus a
+  lifecycle to manage.
+- **`anyio.to_thread.run_sync`.** Shares Starlette's own threadpool and its `CapacityLimiter`,
+  which is the pool the framework already sizes and already blocks on.
+
+**Decision**
+`anyio.to_thread.run_sync` for both `hash` and `verify`. **No package was added**: `anyio` is a
+hard transitive of the pinned Starlette, which `fastapi==0.141.1` in turn pins.
+`requirements.txt` records it as a comment in the convention `requirements-dev.txt` already uses
+for `coverage` and `grimp`: `grep -c anyio` prints 1, `grep -cE '^anyio=='` prints 0.
+
+**Consequences**
+
+- **Residual risk, recorded rather than dismissed:** this project imports a library it does not
+  pin. If a future FastAPI release dropped Starlette, or Starlette dropped anyio, the import
+  would break at build time rather than at runtime — loudly, in CI, before a deployment. The
+  alternative, pinning `anyio==` ourselves, risks a resolver conflict with whatever Starlette
+  requires, which is a quieter and worse failure. The comment in `requirements.txt` is what makes
+  the choice visible to whoever hits it.
+- **The off-loop claim is asserted by recording the offload, never by timing.** A recorder
+  appends `(callable, args)` and then awaits the real `run_sync`, so the round trip still has to
+  work. A stopwatch assertion in a unit suite is a flake.
+- **That same recorder is the guard against a transposed call.** pwdlib's `recommended()`
+  docstring has shown `verify(hash, password)` since 0.2; the correct order is
+  `verify(password, hash)`. A transposed call raises `UnknownHashError`, which this adapter
+  catches and turns into `False` — so the two mistakes cancel into an application where every
+  login silently fails and nothing reports an error. A green round trip is not evidence; the
+  recorded argument tuple is.
+- `verify` catches `UnknownHashError` narrowly and answers `False`.
+  `grep -cE 'except (Exception|BaseException)'` over the adapter prints `0`. The case is
+  concrete: the Phase 4 demo seed wrote `password_hash = "!"`, so a developer database still
+  holding that row would otherwise have answered a login attempt with a 500.
+
+---
+
+## ADR-064: `PasswordHasher.dummy_verify` — the one port extension this phase took (D-21)
+
+**Context**
+D-12 and roadmap SC-2 require a login with a wrong password to be indistinguishable from a login
+with an unknown email. Same status and same body is the easy half; **equal work** is the other
+half, because a request that returns in 0.2 ms when the address is unknown and 26 ms when it is
+known is an account-enumeration oracle with a stopwatch instead of a diff. 05-CONTEXT's
+carried-forward note said the ports keep their shape "unless research proves a need".
+
+**Options**
+
+- **Compute a throwaway hash in the `Login` use case.** Rejected: `application` would have to
+  import `pwdlib`, which the `application-framework-free` contract in `.importlinter` forbids —
+  and rightly, because a hashing library is infrastructure.
+- **A hard-coded encoded Argon2 string as a module constant.** Rejected: it reads as a
+  credential to anyone grepping the repository, and it pins the cost parameters of a library
+  that is allowed to change its recommendations.
+- **Re-hash a constant per request inside the use case.** Rejected: that is the 26 ms paid twice
+  on every unknown-address login, for no property.
+- **One method on the port.**
+
+**Decision**
+`PasswordHasher.dummy_verify(password) -> None`, implemented by the adapter as a verify against
+one throwaway hash built lazily, **once per instance**, from `secrets.token_urlsafe(32)`. The
+measured cost of the two login legs is 23.4 ms and 23.6 ms.
+
+**Consequences**
+
+- **The plaintext behind the dummy hash is generated, not written.** The plan only forbade a
+  hard-coded *encoded* hash; generating the seed too means no string in the file looks like a
+  credential at all (T-5-03), at zero cost, because the value is never compared to anything.
+- **The `-> None` return is enforced by the type checker, not by a runtime assertion.** The
+  obvious test — `assert await hasher.dummy_verify("pw") is None` — fails `mypy --strict` with
+  `Function does not return a value (it only ever returns None) [func-returns-value]`. That
+  failure *is* the property the port's comment asks for: no caller anywhere can read this return
+  and branch on it, which a passing runtime assertion could never establish. The assertion was
+  dropped and the reason written into the test's docstring.
+- **The equalisation is asserted as a port call count, never as elapsed time.**
+  `FakePasswordHasher` records `dummy_verifications`, `hashed` and `verifications`, and three
+  tests pin the per-leg pattern: unknown address calls `dummy_verify` and not `verify`, wrong
+  password the other way round, success calls `verify` exactly once and nothing else.
+- The cached hash costs ~37 ms **once per application**. A `PwdlibPasswordHasher()` constructed
+  per request would pay it per login, which is the exact cost this decision exists to control —
+  which is why the adapter travels in the composition root's container (ADR-078) and not in a
+  provider.
+
+---
+
+## ADR-065: the 401 message lives on `AuthenticationError`, and this API has two 401 wordings
+
+**Context**
+D-11 requires that a missing token, a malformed token, a badly-signed token, an expired token
+and a perfectly valid token whose subject has no user row all produce the **same** generic 401
+body. Two components raise that refusal: the token adapter in `infrastructure/security/tokens.py`
+and the `AuthenticateActor` use case in `application/`. The adapter held the message in a private
+module constant, `_REFUSAL`, which the application layer cannot import — the layer contract
+forbids it.
+
+**Options**
+
+- **Retype the string in `authenticate.py`.** Two constants in two layers that agree only until
+  somebody edits one — and nothing would have failed at that moment: `test_tokens.py` asserts the
+  adapter's refusals share *one* message without asserting what it is, and no test compared the
+  two components. Rejected.
+- **Move the constant into a shared module.** There is no layer both may import that is not the
+  domain, which brings us to the third option anyway.
+- **Put the message on the exception class.**
+
+**Decision**
+`AuthenticationError.REFUSAL: ClassVar[str]`, defaulted into `__init__`. Both components now
+write `raise AuthenticationError()` and **neither spells the message**. `tokens.py` lost its
+private constant and gained a comment recording where the message went and why. Two files
+outside the owning plan's declared file list were changed to do it, which is recorded in that
+plan's summary as a deviation.
+
+**Consequences**
+
+- **D-11 became structural rather than careful.** A deleted user's live token and a junk token
+  produce byte-identical bodies because there is exactly one string, in one place, and that place
+  is the class both raisers name.
+- **This API nevertheless has two distinct 401 wordings, and that is deliberate.**
+  `AuthenticationError.REFUSAL` — "Could not validate credentials." — answers anything to do with
+  a token. `use_cases/auth/login.py`'s own constant — "Incorrect email or password." — answers a
+  rejected credential at the login door. The two endpoints answer different questions, and D-12's
+  requirement is that *login's two legs* match each other, which one constant in one module
+  guarantees. Sharing the token wording would tie two unrelated messages together for no
+  property.
+- **The cost is a rule for every future assertion:** both carry `code: authentication_failed` and
+  both carry the `WWW-Authenticate: Bearer` challenge, so a test asserting on a 401 `detail` must
+  say which door it is at. Plan 05-15 found this the hard way — its first draft asserted
+  `AuthenticationError.REFUSAL` on every 401 in the permission matrix, and login's bad-credential
+  cell failed with `'Incorrect email or password.' != 'Could not validate credentials.'`. The
+  matrix now asserts the shared half (status, media type, challenge, six members, `code`) for
+  every cell and the wording only where it applies.
+
+---
+
+## ADR-066: register's 409 is an account-enumeration oracle — conceded, not mitigated
+
+**Context**
+AUTH-01 requires: "duplicate email returns 409". A 409 that is reachable by an unauthenticated
+caller and that distinguishes a registered address from an unregistered one *is* an
+account-enumeration oracle, by construction. There is no way to satisfy the requirement and
+remove the property. Threat T-5-06 is dispositioned **accept, documented**.
+
+**Options**
+
+- **Answer 201 for a duplicate and send a "somebody tried to register your address" email
+  instead** — the shape a consumer product uses. Rejected: it contradicts the brief's literal
+  wording, which this project's core value says is met to the letter, and this project transmits
+  no real email.
+- **Answer 202 Accepted for every registration and resolve asynchronously.** Rejected for the
+  same reason plus a state machine nobody asked for.
+- **Ship the 409 and write down what it costs.**
+
+**Decision**
+The 409 ships. The requirement was chosen over the property, deliberately, and this entry says so
+in those words rather than presenting a compensating control as a fix. What is done **instead**,
+and what bounds the damage:
+
+- `EmailAlreadyRegisteredError.__init__` takes no argument at all, by design, so the address
+  never reaches a body or a log line. `test_auth.py` registers `Ana@X.com`, then `ana@x.com`, and
+  asserts the 409 document contains **neither spelling** — it carries `code:
+  email_already_registered` and `{"field": "email"}` and nothing else.
+- `GET /api/v1/users` already discloses every address to every authenticated caller (ADR-068), so
+  the residual disclosure is to *unauthenticated* callers only.
+- The login door, which is the one an attacker would actually use at scale, stays
+  indistinguishable (D-12, ADR-064).
+
+**Consequences**
+
+- **An unauthenticated attacker can test whether an address has an account here, one request at a
+  time, with no rate limit in front of them (ADR-067).** That is the honest statement of the
+  residual risk and it is not reduced by anything above.
+- Phase 7's README security note owes the same sentence. A reader who finds this concession in
+  the decision log and not in the documentation would be right to distrust both.
+- The bound is a test rather than an intention, which is the only part of this that a reviewer
+  can check.
+
+---
+
+## ADR-067: there is no rate limiting on login, and Argon2 is not a substitute for one
+
+**Context**
+Threat T-5-08 is login brute force. 05-CONTEXT lists "login throttling / lockout" under Deferred
+Ideas, alongside refresh tokens and password reset, as v2 work.
+
+**Options**
+
+- **A per-address or per-IP counter in the database.** A migration, a cleanup story, and a new
+  failure mode (a shared NAT locking out a whole office) for a deliverable with no deployment.
+- **`slowapi` or an equivalent middleware.** A new dependency and a second source of truth about
+  what a 429 body looks like, which this project's single RFC 9457 handler would have to be
+  taught.
+- **Nothing, recorded as nothing.**
+
+**Decision**
+Nothing, recorded as nothing. There is no rate limiting, no lockout and no CAPTCHA on
+`POST /api/v1/auth/login`.
+
+**Consequences**
+
+- **Argon2's ~25 ms floor is an incidental throttle, not a control.** It bounds an attacker to
+  roughly forty attempts per second per core — which is a meaningful cost for one attacker on one
+  connection and no cost at all for a distributed one. Calling it a mitigation would be the same
+  category error as calling the 409's silence a fix for enumeration (ADR-066).
+- **The same 25 ms is also the denial-of-service surface in the other direction:** an
+  unauthenticated caller can make this server do Argon2 work. What is bounded is the *size* of
+  that work — D-10's 128-character cap runs before the hasher is reached, and
+  `test_register_user.py` asserts `hasher.hashed == []` on the over-long path (T-5-07). The
+  *rate* is not bounded.
+- Owed to Phase 7's README future-work list, beside refresh tokens (AUTH-07) and password reset
+  (AUTH-08).
+
+---
+
+## ADR-068: `GET /api/v1/users` is an email directory readable by every authenticated caller
+
+**Context**
+ASGN-03 asks, literally, for a way to "list users (id, name, email) so an assignee id is
+discoverable". `PUT .../assignee` takes a `UUID`, and a `UUID` is not something a human can guess
+or be told over a chat window, so without a directory the assignment feature is unusable through
+Swagger — which is the only client this deliverable has.
+
+**Options**
+
+- **Scope the directory to a team, organisation or tenancy.** The correct answer in a real
+  product. Rejected because this brief has no such concept: there is no membership model, no
+  invitation that grants anything, and inventing one would be a schema and a set of rules nobody
+  asked for (05-CONTEXT lists it under Deferred Ideas).
+- **A lookup-by-email endpoint — `GET /users?email=...` — returning one id or a 404.** Rejected:
+  it discloses strictly less in bulk and strictly more precisely (it is a *confirmation* oracle
+  for any address an attacker already suspects), it needs the pagination-free contract anyway,
+  and it does not let a Swagger user discover the teammate they just registered.
+- **The full directory.**
+
+**Decision**
+`GET /api/v1/users` returns `id`, `full_name` and `email` for every user, ordered by
+`created_at`, `id`, with no pagination (ADR-043) and no query parameters at all
+(`grep -cE "Query\(|limit|offset|page"` over the router prints `0`). Any authenticated caller may
+read it.
+
+**Consequences**
+
+- **Every authenticated user can read every registered address.** Stated plainly, because that is
+  the one deliberate disclosure in this API and a reader should meet it here rather than discover
+  it in the code.
+- **It is also the bound that makes another decision safe.** D-08's `user_not_found` 404 on
+  `PUT .../assignee` — reachable only by a list owner, who is authenticated by definition —
+  discloses nothing the same caller could not learn from one `GET /api/v1/users`. That
+  consequence is what allowed the ownership guard to be the only thing standing between a
+  stranger and the user-existence oracle (T-5-12, ADR-069).
+- **The trade-off is written where a client reads it, not only where a maintainer does.** The
+  route's `response_description` says it is an email directory readable by anyone logged in, that
+  a product with a tenancy concept would scope it, and that **no client should treat it as
+  restricted**. Describing it as restricted was the one available wording that would actively
+  mislead.
+- Phase 7's README owes it in the documented trade-offs.
+
+---
+
+## ADR-069: the assignment door — one URL, two verbs, two no-ops, and self-assignment allowed
+
+**Context**
+ASGN-01 requires a list owner to assign and unassign a task. ADR-048 already settled the shape
+for a side-effecting verb on an existing resource: a dedicated sub-resource route, not a field in
+the generic `PATCH`. Assignment additionally sends an email (NOTF-01), which makes keeping it out
+of the generic patch a correctness question and not only a tidiness one.
+
+**Options**
+
+- **`assignee_id` as a field of `PATCH /tasks/{id}`.** Rejected: a partial update would acquire a
+  side effect, the notification would fire from a use case whose job is field copying, and
+  T-5-10 (mass assignment) would be a live surface rather than a refused key.
+- **`POST /tasks/{id}/assignments` creating an assignment resource, `DELETE .../assignments/{id}`
+  removing it.** A defensible REST reading, rejected because there is no assignment *entity* —
+  `tasks.assignee_id` is a nullable column, a task has at most one assignee, and inventing an
+  identifier for a field would leak into the schema, the response and the URL space.
+- **One URL, two verbs.**
+
+**Decision**
+`PUT /api/v1/task-lists/{list_id}/tasks/{task_id}/assignee` with body `{"assignee_id": "<uuid>"}`
+(`extra="forbid"`) assigns; `DELETE` on the same URL unassigns. Both answer **200 with the full
+`TaskResponse`** — not 204 — because what is deleted is a *field of a resource*, not the
+resource. Both are owner-only, reached through `owned_task(..., for_update=True)` (ADR-059,
+ADR-058).
+
+**Consequences**
+
+- **A repeat of either verb is a 200 no-op, not a 409** — the same reading Phase 2 D-02 gave the
+  same-state status request. `PUT` naming the current assignee changes nothing, commits nothing
+  and **sends no second email**; `DELETE` on an unassigned task likewise; unassigning notifies
+  nobody.
+- **That idempotence lives in the use case, not in the entity, and the asymmetry is deliberate.**
+  `Task.assign` and `Task.unassign` stamp `updated_at` unconditionally, by design (there is a
+  test asserting an unassign on an unassigned task still moves the timestamp, precisely so a
+  later reader cannot "fix" the asymmetry). Only the use case can skip three things at once: the
+  mutation, the commit and the email. The no-op tests assert `updated_at` **unchanged** as well as
+  `commits == 0`, because an implementation that returned early *after* calling `Task.assign`
+  satisfies every counter while moving the timestamp.
+- **Self-assignment is allowed and is emailed like any other assignment (D-08).** No special case
+  for the owner — a special case would be a rule nobody asked for and a branch no requirement
+  covers.
+- **A non-existent `assignee_id` is a 404 `user_not_found`, and the ordering of the two checks is
+  a security property.** Ownership is verified *before* the assignee is looked up, so a stranger
+  naming an invented id and a stranger naming a real one receive byte-identical documents. That
+  is asserted by producing both refusals and comparing them, and it was observed failing —
+  `assert 'user_not_found' == 'task_not_found'` — against a deliberately reordered implementation
+  (T-5-12, `evidence/05-14-falsification.txt`).
+- **`UnassignTask` takes no notifier, and its constructor is the proof.** A port accepted and
+  never called would contradict the very rule its sibling cites to justify taking one; the test
+  asserts `"notifier" not in signature(...)` and says plainly that the zero-message count beside
+  it is the weaker half of the claim.
+- **The body-less `DELETE` still declares a 422.** Its two path segments are `UUID`-annotated, so
+  `DELETE /api/v1/task-lists/not-a-uuid/tasks/x/assignee` is a validation 422 before any use case
+  runs. The owning plan's behaviour block excluded the leg and contradicted itself doing so; the
+  sibling body-less `DELETE` in `routers/tasks.py` has declared it since 04-08 for the identical
+  reason. An omitted reachable leg and a declared unreachable one are the same defect in two
+  directions.
+- **Exactly four operations in this API declare a 403**, and it is asserted by set *equality*
+  rather than containment: the generic task `PATCH`, the task `DELETE`, and the two assignee
+  verbs. A documented refusal a route cannot produce misleads a client as much as a missing one.
+
+---
+
+## ADR-070: the invitation is attempted after the commit, and its failure is swallowed
+
+**Context**
+NOTF-01 requires the simulated invitation to be sent *after the transaction commits*; NOTF-03
+requires a notifier failure never to fail the assignment request. The two together fix the
+ordering and the error handling, and leave open only where the call lives.
+
+**Options**
+
+- **Inside the `async with self._uow:` block.** Rejected by NOTF-01 directly: an email announcing
+  an assignment that a later failure rolls back is a message about something that never happened.
+- **FastAPI's `BackgroundTasks`.** Rejected on two counts. It moves ownership of an
+  application-layer side effect into the presentation layer, which the whole architecture exists
+  to prevent; and it makes the send happen *after* the response, so every test asserting the
+  email would need a sleep or a polling loop. With the call inline, by the time the response
+  returns the email has been attempted.
+- **A queue or a task runner.** Over-engineering for a simulated message; explicitly out of scope
+  in REQUIREMENTS.md.
+- **Inline in the use case, after the commit, outside the block, in a `try/except` that logs at
+  WARNING and swallows.**
+
+**Decision**
+The last. `AssignTask` commits, leaves the block, and then attempts
+`notifier.send_task_assigned(...)` inside a broad `except Exception` that logs a WARNING naming
+the task id and continues. The recipient's address is read **inside** the block, while the unit
+of work is still open.
+
+**Consequences**
+
+- **The ordering is proved as a sequence, not as two counts.** `_RecordingUnitOfWork` and
+  `_RecordingEmailNotifier` append to one shared list and the assertion is
+  `events == ["commit", "send"]`. "One commit and one send" is equally true of a send that ran
+  first, which is exactly the thing this decision exists to prevent.
+- **"The address is captured inside the block" is a failing test rather than a comment.**
+  `_ClosingUnitOfWork` swaps in a user repository that raises on every method as its block ends —
+  which is what `SqlAlchemyUnitOfWork.__aexit__` does in domain terms and what a dictionary-backed
+  fake cannot model. An implementation reaching back for `uow.users.get(...)` to build the email
+  fails in the unit suite instead of in production.
+- **NOTF-03 is proved by a re-read, not by a status code.** With the notifier overridden by one
+  that raises, the request is still 200, **and a fresh `GET` still shows the assignment**. "No
+  exception escaped" is equally true of an implementation that swallowed the error and rolled the
+  write back. Removing `AssignTask`'s `commit()` was observed turning exactly that second request
+  red while the 200 and the response body still passed — which is the whole argument for making
+  it a second request.
+- **The WARNING carries the task id and the traceback and *not* the task title.** Caller-supplied
+  text does not go into a log line (T-5-13), and a test asserts the title is absent from it.
+- **The cost, stated: a notification can be lost silently.** If the notifier fails, the
+  assignment stands and the assignee is never told. For a simulated email that logs to stdout
+  that is the right trade; for a real delivery path it would need an outbox table, and this entry
+  is where that future reader should start.
+
+---
+
+## ADR-071: nothing in this repository's flake8 configuration objects to a bare `except Exception`
+
+**Context**
+ADR-070's swallow requires a broad `except Exception`. Two artifacts in this repository implied
+that such a line would trip the linter and need a suppression: `docker/entrypoint.sh` carries a
+`# noqa: BLE001` on one, and `05-RESEARCH.md` §Pattern 7 instructs the executor to run
+`make lint` and add whichever code fires.
+
+**Options**
+
+- **Write `# noqa: BLE001` because the convention appears to exist.** Rejected once it was
+  measured.
+- **Guess a different flake8 code.** Rejected for the same reason.
+- **Run the line with no suppression and record what actually happens.**
+
+**Decision**
+No `noqa`. The line was committed with no suppression and `flake8` exited `0`. The installed
+plugin set is flake8-bugbear 26.9.9, flake8-comprehensions 3.17.0 and pep8-naming 0.15.1, and
+none of the three has a check for this shape. **`BLE001` is a Ruff code** — and ruff is excluded
+from this project because the brief mandates flake8. The `# noqa: BLE001` in
+`docker/entrypoint.sh` that established the apparent convention sits inside a **shell heredoc
+flake8 never reads**, so it has never suppressed anything either. The capture is
+`evidence/05-08-broad-except-lint.txt`.
+
+**Consequences**
+
+- A suppression naming a code that cannot fire is worse than no suppression: it tells the next
+  reader that a gate objected when no gate did. The explanatory comment stays on the `except` and
+  now records the measurement and points at the capture.
+- **The broad catch is therefore ungated, and that is a real gap**, not a clean result. Nothing
+  in this repository would stop a future `except Exception` that swallows something it should
+  not. If that becomes a concern, the honest fix is a small AST gate of the kind
+  `tests/architecture/` already contains — not a `noqa` restating a belief.
+- Recorded as an ADR because the next person to write a broad catch here should not have to
+  re-measure it, and because two project artifacts still imply the opposite.
+
+---
+
+## ADR-072: the JSON log handler is attached to the whole `taskmanager` package
+
+**Context**
+D-15 requires the runtime notifier to emit one structured JSON line at INFO, findable with one
+`grep` in `docker compose logs api`. Research established by **execution** that no such line was
+being written at all: uvicorn's `LOGGING_CONFIG` configures only the `uvicorn*` loggers, attaches
+nothing to root and leaves the root level at `WARNING`, so
+`logging.getLogger("taskmanager.notifications").info(...)` is filtered out entirely. Without a
+decision here, NOTF-02 would have shipped with nothing to grep.
+
+**Options**
+
+- **A `--log-config` YAML file passed to uvicorn.** Rejected: it is untested by anything in this
+  suite, invisible to coverage, does nothing for `caplog` assertions, and adds a second
+  configuration format to a project that reads all of its configuration through
+  pydantic-settings.
+- **A handler on `taskmanager.notifications` alone.** The narrowest change, and the one whose
+  blast radius is zero. Rejected on 05-RESEARCH's recommendation: the application would then have
+  one machine-readable log line and everything else unformatted, which is worse than either
+  consistent choice.
+- **A handler on the `taskmanager` package logger.**
+
+**Decision**
+`configure_logging()` attaches exactly one `StreamHandler(sys.stdout)` carrying `JsonFormatter`
+to the `taskmanager` logger at INFO, and `create_app()` calls it as its **first statement** —
+before the settings are even resolved, so a failure during container construction is logged, and
+not in the lifespan, because the HTTP harness never enters the lifespan (ADR-056) and D-06 keeps
+the startup half empty. The call is idempotent: a second invocation returns early because the
+handler carries a private marker attribute, which matters because `create_app()` runs hundreds of
+times across this suite.
+
+**Consequences**
+
+- **Named blast radius (T-5-03, accepted): the fixed-500 record is JSON from now on.**
+  `presentation/api/errors/handlers.py` already logged the unexpected-error case, and its output
+  format changes as a direct result of this decision. The content is unchanged. This is recorded
+  in the module docstring rather than left for someone to discover in a log aggregator.
+- **`propagate` is left `True`, and both halves are asserted** — the flag itself *and* a record
+  reaching `caplog`, which attaches to the **root** logger. The flag alone would pass against a
+  handler that swallowed the record some other way. Two pre-existing assertions in
+  `tests/api/test_error_contract.py` depend on this; setting `propagate = False` would break them.
+- **Log injection is mitigated by construction rather than by sanitising.** Every value goes
+  through `json.dumps`, so a newline inside a task title is escaped. The formatter test builds a
+  message containing `\n` and a complete `{"level": "ERROR", ...}` object and asserts **one**
+  parseable line with the injected text as the `message` *value*; the notifier test does the same
+  end to end through a task title (T-5-13).
+- `stack_info` is deliberately not rendered: nothing in this project passes it, so the branch
+  would be unreachable, and the no-`pragma` coverage rule has no way to excuse an unreachable
+  line. Stated in the docstring so the absence reads as a choice.
+- `json.dumps` is called with no `default=` fallback. The one caller stringifies its `UUID` at the
+  call site; a silent coercion here would hide a call-site bug and pick a wire shape nobody chose.
+
+---
+
+## ADR-073: the formatter renders `exc_info`, and the notifier names its logger literally
+
+**Context**
+Two decisions taken **against** the written instructions this phase was executing, both caught by
+reading what the code would actually do rather than what the documents said it would.
+
+**Options and decisions**
+
+**1. `exc_info` is rendered.** The formatter specified by the plan and by 05-RESEARCH §Pattern 8
+serialises three base fields plus every *non-reserved* record attribute — exactly the set a caller
+passed through `extra=`. `exc_info` **is** a reserved `LogRecord` attribute, so it is excluded
+from that merge and never rendered. `handlers.py` logs the fixed 500 with `exc_info=exc` and its
+docstring promises "the traceback goes to the log and nowhere else". Attaching this handler to
+the package logger (ADR-072) would therefore have made every traceback in the application go
+**nowhere at all** — and nothing would have failed: the two existing assertions read
+`record.exc_info`, an attribute of the record object, not the handler's output. The formatter now
+writes `payload["exception"] = self.formatException(...)`, escaped onto one line by `json.dumps`
+like everything else, with a test for each leg.
+
+**2. The notifier's logger is named with the literal `taskmanager.notifications`.** The plan
+specified `logging.getLogger(__name__)`. In
+`src/taskmanager/infrastructure/notifications/logging.py`, `__name__` is
+`taskmanager.infrastructure.notifications.logging`. Records on that logger propagate to
+`taskmanager.infrastructure.notifications`, `taskmanager.infrastructure`, `taskmanager` and root
+— **never** to `taskmanager.notifications`, which is a sibling branch. D-15 names that logger,
+the plan's own behaviour block asserted "exactly one record on `taskmanager.notifications`", and
+its acceptance snippet attached a handler there and expected one record: all three would have
+been false. The name is exported as `LOGGER_NAME` so the tests, the assignment use case's warning
+and the cold-start grep read one constant. A second reason is recorded in the comment: a
+path-derived name changes the day the file moves, and an operator's log filter breaks with it.
+
+**Consequences**
+
+- Both are recorded here rather than in a plan summary because the append-only log is where a
+  decision made *against* the instructions belongs. The first would have been a silent regression
+  in an area no test could see; the second would have been a feature that was documented, tested
+  against the wrong logger, and invisible in production.
+- The rule these two share: a logging change is verified by reading the record that comes out, not
+  by reading the call that goes in.
+
+---
+
+## ADR-074: `OAuth2PasswordBearer(auto_error=False)` is how ADR-051 and AUTH-02 hold together
+
+**Context**
+Two requirements meet in one object. AUTH-02 requires Swagger's **Authorize** button to work,
+which means the OpenAPI document must publish a `securitySchemes` entry and a per-route `security`
+array — and the supported way to get both is FastAPI's `OAuth2PasswordBearer`. ADR-051, widened by
+the Phase 4 review's WR-05, forbids any module under `presentation/api` from raising **or
+importing** `HTTPException`. FastAPI's default `OAuth2PasswordBearer(auto_error=True)` raises
+`HTTPException` itself on a missing or non-bearer header — from inside the library, but the
+project's own 401 body would then never be produced, and the error contract would have two shapes.
+
+**Options**
+
+- **Hand-roll the header parse.** Read `Authorization` off the request, split the scheme, raise
+  `AuthenticationError`. Satisfies the AST gate perfectly and **loses the Authorize button**:
+  nothing would appear in `securitySchemes`, and every route would look open in `/docs`.
+- **Keep `auto_error=True` and translate.** Would require catching and re-raising the framework's
+  exception class somewhere under `presentation/api`, which is what the gate forbids.
+- **`auto_error=False`.**
+
+**Decision**
+`OAuth2PasswordBearer(tokenUrl=..., auto_error=False)`. The dependency returns `None` for a
+missing header *and* for a non-bearer scheme; `get_current_actor` treats a falsy token — covering
+both `None` and `""` — as `AuthenticationError`, which the single RFC 9457 handler turns into the
+project's own 401 with `WWW-Authenticate: Bearer`.
+
+**Consequences**
+
+- **Both properties hold at once, and both are asserted.** `presentation/api` neither raises nor
+  imports the framework's exception class — the widened AST gate covers the whole package and
+  names `actor.py` in `REQUIRED_SCANNED_MODULES`. And because the scheme is still a `Depends`,
+  `components.securitySchemes.OAuth2PasswordBearer` and a per-route
+  `security: [{"OAuth2PasswordBearer": []}]` are emitted **through the nested dependency**, with
+  nothing repeated per route.
+- **The published contract is asserted as a partition, from the document.**
+  `tests/unit/presentation/test_security_scheme.py` reads `app.openapi()` (ADR-057) and asserts
+  that every operation is either one of the three named open ones — `/health`, register, login —
+  or carries a `security` array naming the scheme, and that the three open ones carry no
+  `security` key at all. A route shipped with no token requirement fails by name.
+- **That test was falsified rather than trusted.** Its subject already existed when it was
+  written, so a throwaway `GET /api/v1/auth/_falsification` with no caller parameter was planted;
+  the partition failed naming it by path and the count test failed with `assert 12 == (16 - 3)`.
+  The route was removed; both runs are in `evidence/05-11-open-route-falsification.txt`.
+- The four routes added after this decision — the directory, the two assignee verbs and the
+  discovery collection — joined the secured set with **no edit** to the partition test, which is
+  the property this shape buys.
+
+---
+
+## ADR-075: the demo account is deleted and nothing replaces it, refining ADR-045
+
+**Context**
+ADR-045 put an idempotent demo-user seed in the container entrypoint, because Phase 4's actor seam
+answered with one fixed `DEMO_USER_ID` and `docker compose up` had to produce a database in which
+that identifier resolved. Phase 5 replaces the seam with real authentication, so the seed's reason
+is gone — and a shipped account with a known identity in a public repository is a liability rather
+than a convenience.
+
+**Options**
+
+- **Keep the seed and give it a real password.** Rejected: the password would have to live
+  somewhere readable — the repository, the compose file or the README — and would then be a real
+  credential on every machine that runs this stack (T-5-03).
+- **Keep the seed with an unusable `password_hash` as a discoverable "example row".** Rejected:
+  it is a row nobody can log in as, whose only effect is to make `GET /users` non-empty and
+  confuse the first person who reads it.
+- **Delete it.**
+
+**Decision**
+Step 2b of `docker/entrypoint.sh` is deleted in full — 94 lines — and the header's step list is
+back to 1 / 2 / 3: wait, migrate, serve. `DEMO_USER_ID` is gone from `src/`, `tests/` and
+`docker/`; `grep -rn DEMO_USER_ID src/ tests/ docker/` exits 1. **A fresh volume ships zero
+users**, and no account and no password exists anywhere in the repository. The documented path is
+register → click **Authorize** in Swagger → call anything, stated in the OpenAPI description
+itself (D-14).
+
+**Consequences**
+
+- **The claim is rehearsed, not asserted.** `evidence/05-15-cold-start.txt` runs
+  `docker compose down -v`, records what the wipe destroyed, brings the stack up on an empty
+  volume, observes three startup steps and no fourth, `SELECT count(*) FROM users` returning `0`,
+  and then walks the documented path end to end: register, register a teammate, log in, read the
+  profile, create a list, create a task, `GET /users`, assign — followed by one
+  `docker compose logs api | grep task_assigned_email` returning exactly one line. One attempt.
+- **A gate was retired as a deliberate act, and replaced rather than deleted.**
+  `test_the_module_says_it_is_not_authentication` asserted that `actor.py` told the reader it was
+  a seam and not authentication (ADR-044). Phase 5 made that sentence false in the most direct
+  way possible: the module *is* authentication now. It is replaced by a **positive** assertion of
+  the property that still matters — that `actor.py` names no credential library and no signing
+  scheme, scanning for `jwt`, `pwdlib`, `argon2`, `hs256` and `rs256`, because a decode
+  hand-rolled in the presentation layer would have to spell one of them. A first draft of that
+  list forbade the English words "algorithm" and "secret" and immediately collided with the
+  docstring the same change required; the shipped tuple is implementation names only, and
+  `actor.py` says "bearer token" throughout rather than naming the format.
+- **One demo row survives on developer machines and cannot become an account.** Its stored
+  `password_hash` is `"!"`, which is not an encoded Argon2 hash, and the adapter answers `False`
+  for it (ADR-063). `docker compose down -v` removes it; a fresh volume never has it. The
+  05-15 cold start did exactly that and recorded the row it destroyed.
+- `ADR-045` is refined, not contradicted: the seed was the right answer for a phase with a fixed
+  actor and the wrong one for a phase with real accounts.
+
+---
+
+## ADR-076: the HTTP harness splits in two, and the statement counts become 2 and 4
+
+**Context**
+ADR-054 recorded measured statement counts — 1 for the task-list collection, 3 for the task
+collection — and the property they defend: *invariance*, that one list and many lists cost the
+same number of statements, which is what "no N+1" means. D-11 adds a per-request `SELECT` on
+`users` to confirm the token's subject still exists. 05-CONTEXT stated that consequence as
+unconditional. Research found it was not: `api_client` did not override `get_current_actor`, so
+if Phase 5's harness *started* overriding it, the counts would stay at 1 and 3 and D-11's cost
+would never be observed. A statement-count test still reading 1 and 3 because the dependency was
+overridden would hide the very thing it was measuring.
+
+**Options**
+
+- **Issue real tokens everywhere.** Every one of ~120 Phase 4 HTTP tests would have to seed its
+  own caller row and mint a header, for a property none of them is about.
+- **Override everywhere.** Cheap, and D-11 becomes unmeasurable.
+- **Two harnesses, with the choice between them written down.**
+
+**Decision**
+`api_client` installs a default `get_current_actor` override, so the Phase 4 suites keep testing
+task lists rather than tokens. `authenticated_client` is the same fixture **minus that one line**
+— it overrides `get_uow` and nothing else, so the real dependency runs, the real token is decoded
+and the confirmation read happens. The 401 legs, the permission matrix's anonymous column and
+`test_statements.py` all use it. Each fixture's docstring states what the other cannot measure.
+
+The measured counts, on the real authenticated path, **as the owner**: `GET /api/v1/task-lists`
+issues **2**, the task collection issues **4**. Each entry is named in the constant's comment,
+with the actor lookup first.
+
+**Consequences**
+
+- **The property under test did not change; a measurement did.** The module docstring says so
+  explicitly, so a later reader does not mistake a number for a target and "fix" it. The
+  `for_one == for_many` assertions are untouched.
+- **Counts now differ by role, and that difference was measured rather than derived.** Owner
+  `GET` of one task: three `SELECT`s. Assignee: two. Owner `PATCH .../status`: four `SELECT`s and
+  one `UPDATE`. Assignee: three and one `UPDATE`. The saving is ADR-059's assignee short-circuit,
+  and the *reason* for it is the disclosure, not the statement. **The rule that follows: any
+  statement-count assertion must name the role it measures**, or it will read as a regression to
+  the next person.
+- `bearer_header(app, user_id)` mints through the application's **own** token service, narrowed
+  once off `app.state.security`. `grep -c "JwtTokenService" tests/integration/conftest.py` prints
+  `0`, so no test can restate a secret, an algorithm or a lifetime and drift from the application.
+- `acting_as` impersonates and does not authenticate; its docstring now says so, and says that
+  combining it with `authenticated_client` is a contradiction rather than a convenience.
+
+---
+
+## ADR-077: `GetProfile` is a second use case, so ADR-044's seam type never had to change
+
+**Context**
+AUTH-05 needs `GET /api/v1/auth/me` to return the caller's own profile. The dependency that
+authenticates the caller has already loaded that user's row — D-11 confirms it on every request —
+so the profile is, in one sense, already in hand.
+
+**Options**
+
+- **Widen `CurrentActor` from a `UUID` to a `User` (or to a small actor object).** Free at
+  `/auth/me` and expensive everywhere else: `CurrentActor` is a parameter of every router handler
+  in the project, and every command in the application layer starts with `actor_id: UUID`.
+  Changing the seam's type would rewrite eleven router signatures and reach into the DTOs, to
+  serve one route.
+- **Return the profile from the actor dependency as a second value.** The same coupling with a
+  worse shape.
+- **A second use case that loads the user by id.**
+
+**Decision**
+`GetProfile`. `CurrentActor` keeps its name, its `UUID` type and its target function, and not one
+router, request schema, command or use-case signature moved because authentication arrived. The
+clearest evidence is that `test_current_actor_depends_on_this_module_s_provider` survived the
+rewrite of `actor.py` verbatim.
+
+**Consequences**
+
+- **Named cost: `GET /auth/me` issues two `SELECT`s against `users`** — one in the actor
+  dependency, one in the use case. It is written in `profile.py`'s docstring rather than left for
+  a reader to discover in a query log. For the one route in the API where the caller *is* the
+  resource, paying one redundant indexed lookup is the cheaper side of the trade.
+- **ADR-044 is what paid out here.** That entry called the Phase 4 actor a seam and predicted that
+  only its body would be replaced. It was, in one file.
+- `GET /auth/me` also declares a **404** that the plan enumerating its legs (200/401/500) omitted:
+  `GetProfile` raises `UserNotFoundError` when the account is deleted between the token check and
+  the profile read, and `profile.py` documents that race. This module's rule is that every route
+  declares its full refusal set, and an undeclared but reachable refusal is exactly the
+  dishonesty the rule exists to prevent.
+
+---
+
+## ADR-078: `SecurityResources` carries the token lifetime as well as the two adapters
+
+**Context**
+Phase 3 established the composition-root shape: `create_app` builds a frozen, typed container
+from `Settings` and stores it on `app.state`; `dependencies.py` narrows it **once**, privately;
+every provider reads a field off it. `dependencies.py` reads no configuration at all
+(`grep -c "get_settings"` over it prints `0`), which the research flagged as a property a naive
+Phase 5 would break by calling `get_settings()` inside each new security provider (correction
+RC-3). Then `POST /auth/login` needed `expires_in`, which must describe the lifetime the token
+was *actually* signed with — and the `TokenService` port exposes no lifetime, while `Login` needs
+the number as a plain `int`.
+
+**Options**
+
+- **`get_settings()` in the login router.** The exact shape RC-3 forbids, and it would make
+  `dependencies.py`'s "one narrowing, no per-request configuration" claim false.
+- **A second read of `settings.jwt_expire_minutes` in a provider.** Two reads of one setting,
+  which agree until one of them is changed.
+- **A third member on the container both answers are built from.**
+
+**Decision**
+`SecurityResources` is a frozen slotted dataclass with three members: the `PasswordHasher`, the
+`TokenService`, and `access_token_expire_minutes: int`. `create_security_resources(settings,
+clock)` populates all three from one call, so `expires_in` and the `exp` the token was signed
+with come from a single expression two lines apart. `dependencies.py` narrows it in one private
+helper, `_security`, beside the database narrowing, and hands out port-annotated providers.
+
+**Consequences**
+
+- **The container is no longer "the two adapters", and the inconsistency is argued at the field
+  rather than in a changelog.** A reader comparing the third member to its two neighbours would
+  otherwise read it as an accident.
+- **The field annotations are the ports, and that is pinned with `get_type_hints`.** Both adapters
+  satisfy their ports, so annotating the fields with the concrete classes would type-check and run
+  identically — the only thing it would break is the reason the container exists, which is a claim
+  no other test could make.
+- **Two narrowings, not one per module.** `dependencies.py`'s docstring argues the count: fusing
+  the database and security containers would couple every unit test of one half to the other.
+- **Building the container performs no I/O, falsifiably**: `socket` and `open` are replaced with
+  objects that raise and the builder is called between them. That is what keeps
+  `test_creating_the_app_opens_no_connection` true.
+- The hasher's ~37 ms cached dummy hash (ADR-064) is therefore paid once per application rather
+  than once per login, which is the practical payoff of the container over a per-request provider.
+
+---
+
+## ADR-079: register answers 201 with a `Location` of `/api/v1/auth/me`
+
+**Context**
+D-09 fixes register's answer: **201 with the profile and no token** — `{id, email, full_name,
+created_at}`, never the hash — because logging in is a separate step through the OAuth2 form,
+which is what Swagger's Authorize button drives (AUTH-02). This project's convention, from
+Phase 4, is that a 201 carries a `Location` header pointing at the created resource. There is no
+`GET /users/{id}` route in this phase.
+
+**Options**
+
+- **Add `GET /api/v1/users/{id}`** so the header can point at the canonical resource. Rejected:
+  it is a route no requirement asks for, it would need its own permission answer in the matrix,
+  and it would widen the directory disclosure of ADR-068 from a list to a probe.
+- **Omit the `Location` header.** Rejected: the convention exists so a client is told where the
+  thing it created lives, and a 201 without one is the weaker answer.
+- **Point at `/api/v1/auth/me`.**
+
+**Decision**
+`Location: /api/v1/auth/me`, resolved from the profile handler's *name* rather than written as a
+literal. It is a divergence from the Phase 4 convention — the URL is not the created resource's
+canonical address, it is "the place the caller will read this profile from once they have a
+token" — and the argument is written in `register_user`'s docstring, which is the copy this entry
+points at.
+
+**Consequences**
+
+- A client following the header without authenticating first gets a 401, which is correct and
+  slightly surprising. The docstring says so.
+- **Register also returns a token to nobody, on purpose.** An account is created and then
+  exchanged for a token in a second call. That keeps exactly one code path that issues tokens, and
+  it is the path Swagger drives.
+- Register and login are the only two handlers in the project with **no caller parameter**, and an
+  absent parameter is invisible. Each docstring states the absence, why it exists, and that the
+  permission matrix's anonymous column is what proves it over HTTP.
+
+---
+
+## ADR-080: revision `0002` — a transient `server_default`, and one index argued against two refusals
+
+**Context**
+`User` had no `full_name`, which AUTH-01 and ASGN-03 both require, so the column had to be added
+`NOT NULL` to a table that may already hold rows. Separately, D-25 asks for an index on
+`tasks.assignee_id`.
+
+**Options for the column**
+
+- **Add it nullable and leave it nullable.** Rejected: the entity requires it, so the schema
+  would be weaker than the domain for no reason.
+- **Add it `NOT NULL` with a permanent `server_default`.** Rejected: a default in the schema is a
+  second place the value can come from, and the application always supplies one.
+- **Add it `NOT NULL` with a `server_default` dropped in the same `upgrade()`.**
+
+**Decision**
+The third. `alembic check` is the gate that proves the default did not survive — it compares the
+reflected database to the models, and a leftover default is drift.
+
+**Options for the index**
+
+`models.py` already refuses two other speculative indexes with written-out reasons, so a third
+index needs its argument written in the same voice or it reads as inconsistency.
+
+**Decision**
+`ix_tasks_assignee_id` is created, and the argument is: PostgreSQL does not index a foreign key
+automatically; no unique constraint covers `assignee_id` (unlike `task_lists.owner_id`); it is the
+**entire** `WHERE` clause of `GET /api/v1/tasks/assigned-to-me` (D-02); and it is the scan
+performed for every `ON DELETE SET NULL` when a user is removed. The name joins
+`constraints.py` as its thirteenth entry, spelled as a literal in the revision per ADR-025, and
+`test_the_naming_convention_produces_every_d12_constraint_name` asserts thirteen names against
+the compiled DDL as an exact count.
+
+**Consequences**
+
+- **The populated-table claim cannot be proved by this test suite, and that gap is the reason a
+  live rehearsal was scheduled.** `migrated_database` runs `downgrade base` first, so
+  `taskmanager_test` is always empty when `0002` runs and the transient default is never
+  exercised. The compose `taskmanager` database was at `0001` with a row in it — the exact case —
+  so the image was rebuilt and the container restarted, which runs `alembic upgrade head` through
+  its own entrypoint. Capture: `evidence/05-03-live-upgrade.txt`. Afterwards: `version_num =
+  0002`, the existing row carrying the default's filler, `\d users` showing `full_name | character
+  varying(100) | not null` with an **empty Default column**, and `alembic check` reporting no new
+  operations.
+- **That rehearsal found a defect no test in this repository could have found.** The Phase 4 demo
+  seed wrote its row with a hand-written column list that did not include `full_name`. The
+  `INSERT` became a `NotNullViolation`, and `ON CONFLICT DO NOTHING` did not absorb it and could
+  not have — PostgreSQL checks `NOT NULL` while building the candidate row, before the arbiter
+  index is consulted. Under `set -eu` the container aborted before serving: `docker compose up`,
+  this project's core value, broken by one column. The seed is a shell heredoc (ADR-037), so
+  nothing imports that `INSERT`; ADR-037 argues that the cold-start rehearsal is the stronger
+  proof in exchange, and this is that argument paying out. (The seed itself was deleted three
+  plans later by ADR-075.)
+- **The rule that follows:** if a migration's claim is about rows that already exist, the suite
+  cannot prove it — schedule a run against a populated database.
+- `test_the_migration_directory_holds_exactly_one_revision` was retired out loud, named in the
+  docstring of `test_the_revisions_form_one_unbroken_chain_ending_at_the_head` that replaces it.
+  A file count says nothing about whether the revisions can be *walked*; a second head or a wrong
+  `down_revision` would satisfy the count and break `upgrade head`. The chain test reads through
+  Alembic's own `ScriptDirectory` against a deliberately unusable DSN, so an edit that made it
+  touch a database would fail loudly rather than quietly connect to whatever the environment
+  points at.
+- Splitting one revision file across two commits left the *developer's* test database at a version
+  whose newer `downgrade()` could not run. Repaired with one `CREATE INDEX IF NOT EXISTS` against
+  `taskmanager_test` only. It is an artifact of the commit split, not of the shipped chain: a real
+  deployment only ever walks `0001 -> 0002` forward.
+
+---
+
+## ADR-081: `GET /api/v1/tasks/assigned-to-me` is a flat route returning a bare array
+
+**Context**
+D-01 makes an assignee's parent list invisible: `GET /task-lists/{id}` and
+`GET /task-lists/{id}/tasks` answer them 404, and `GET /task-lists` stays strictly "lists I own".
+An assignee can therefore reach their task only through the nested URL — and has no way to find
+out what that URL is.
+
+**Options**
+
+- **Let assignees see the lists their tasks live in.** Rejected: it discloses the list's name, its
+  owner and its other tasks, which is the whole property D-01 buys.
+- **A query parameter on the existing collection — `GET /task-lists/{id}/tasks?assignee=me`.**
+  Rejected: it still requires knowing the list id, which is the thing the assignee does not have.
+- **One new flat, read-only route.**
+
+**Decision**
+`GET /api/v1/tasks/assigned-to-me`, filtered on the **token's subject** and never on a
+client-supplied identifier, ordered by `created_at`, `id`, with no pagination (ADR-043). It
+returns a **bare array** of `TaskResponse` rather than the per-list envelope, because that
+envelope carries completion statistics and a percentage has no meaning spread across lists.
+
+**Consequences**
+
+- **Each entry's `task_list_id` is the point of the route**, not incidental: it is how a caller
+  who cannot see the list builds the nested URL the task is actually worked on through. The HTTP
+  test does not assert the field is present — it **builds the nested URL from it and follows it**,
+  for a task in a list the caller cannot see.
+- **The safety property is the argument, not the query.** `list_for_assignee` takes exactly one
+  parameter and filters in SQL; what makes that safe is that the *argument* comes from the token.
+  The use case's docstring names the condition under which a future change would need a guard
+  (T-5-11).
+- The discovery fixture puts one of the assignee's tasks in a list a third party owns, so the
+  three plausible wrong answers — every assigned task, every task in a reachable list, insertion
+  order — each fail.
+- `list_for_assignee` takes no `status` or `priority` keyword, and the port comment records that
+  as a decision rather than an oversight: filtering `assigned-to-me` is a Deferred Idea, and
+  widening a signature later is additive while a caller depending on filters nobody asked for is
+  not.
+
+---
+
+## ADR-082: an address that crosses an `EmailStr` boundary must use a real top-level domain
+
+**Context**
+The integration suite's address convention is `demo@example.test`, which works everywhere it is
+used because those addresses are seeded straight onto the `User` entity, and the entity validates
+no format (Phase 2 D-04 puts that at the boundary). `RegisterRequest.email` is an `EmailStr`,
+backed by `email-validator`, which refuses reserved and special-use names outright: *"The part
+after the @-sign is a special-use or reserved name that cannot be used with email."* `.test` and
+`.local` are both refused; this was verified directly against the validator.
+
+**Options**
+
+- **Loosen the schema** — `str` with a regex, or `EmailStr` with the deliverability check
+  relaxed. Rejected: the point of `EmailStr` is that we do not hand-write address validation.
+- **Change the whole suite's convention to a real TLD.** Rejected as unnecessary churn: the
+  seeded addresses never cross the boundary.
+- **Use a real TLD for the addresses that cross it, and record the rule.**
+
+**Decision**
+Addresses posted through an HTTP boundary use `example.com`. Addresses seeded as entities keep
+`example.test`. This entry is the record, because the failure mode is not obvious.
+
+**Consequences**
+
+- **The insidious half is worth naming.** Six tests failed loudly with a 422 where a 201 was
+  expected. One failed *green-looking*: a short-password test asserting a domain 422 received a
+  **request-validation** 422 instead — same status, differing only in the shape of `errors`. A
+  weaker assertion would have passed while testing nothing.
+- Phase 7's README and any `curl` example it carries must use a real TLD for the same reason, or
+  the documented quickstart fails on its first command.
+
+---
+
+## ADR-083: the permission model is one table, bound to the published document
+
+**Context**
+AUTH-06 is a cross-product, not a list: nineteen operations by four kinds of caller — owner,
+assignee, stranger, anonymous. D-04 requires it to be proven by one parametrized test over the
+real HTTP harness, with a missing cell **visible in the table**, and the same table reused as
+documentation in Phase 7.
+
+**Options**
+
+- **Per-route test modules asserting each role separately.** That is what the rest of the suite
+  already does, and it cannot answer "is every cell covered?" — an unwritten test is an absence in
+  a file, which nobody sees.
+- **A table assembled from constants imported from the five sibling modules that own those
+  paths.** This package's strongest convention, and set aside here on purpose: a table assembled
+  from fragments defined elsewhere is no longer a table a human can read, and D-04 says this one
+  is read as documentation.
+- **One module-level table, spelled out, with the paths bound to the document by a test.**
+
+**Decision**
+`MATRIX` holds nineteen `Row` entries, each naming the method, the published path template and the
+four expected statuses in the research document's own column order, positionally — naming each
+field would make every entry three lines long and destroy the one property D-04 asks for above all
+others. 76 cells are driven by one parametrized test whose ids read
+`08-assignee-GET-/api/v1/task-lists/{list_id}`, so `-k anonymous` selects exactly that column and
+a failure names the row it came from.
+
+**Consequences**
+
+- **Nothing is lost by spelling the paths out, because the table is bound to the published
+  contract.** `test_the_table_covers_every_operation_the_document_publishes` reads
+  `app.openapi()["paths"]` (ADR-057) and asserts set equality in **both** directions — an
+  unmeasured route and a stale row both fail — with `len(published) == 19` as the non-vacuity
+  guard. A fourth test pins the row numbers to 1..19, the `(method, path)` pairs to unique, and
+  the cell count to `4 x 19`, because a set swallows a duplicate the coverage test would not see.
+  **This is a stronger check than agreeing with a helper in a sibling test.**
+- **Every cell asserts a document, not a number.** 401 cells assert the challenge header, the
+  six-member body and the `code`; 403 cells go through `assert_forbidden`; 404 cells go through
+  `assert_not_found` or `assert_task_not_found` according to which shape the row is owed. Every
+  2xx cell additionally asserts that **no** challenge header came back, so "open" means open
+  rather than a refusal that happened to carry a 2xx.
+- **The matrix deliberately does not re-litigate per-route behaviour.** The assignee's legs are
+  already proven in `test_assignment.py` with owner-side re-reads. The matrix's contribution is
+  completeness and the anonymous column.
+- **Every destructive cell is isolated rather than ordered.** The fixture is function-scoped:
+  two rows delete the subject the middle rows address and one renames it. A matrix whose later
+  rows depend on its earlier ones passes for the wrong reason.
+- **One provider is overridden beyond the harness's own, and it is argued:** `get_engine`, pointed
+  at the connection the test already owns. `/health` is the single route in the table that asks
+  the database a question outside the unit of work, and against the harness's deliberately
+  fictional DSN it answers 503 — row 1 would then be measuring the fixture rather than the route's
+  openness. Nothing about authentication is replaced.
+- **All 76 cells were right on the first run.** The table lifted from `05-RESEARCH.md` matched the
+  running application exactly; no cell surprised and no production defect was exposed. That is
+  recorded because it is the first time this cross-product had been driven as a cross-product,
+  and because a suite that finds nothing is either well-built or badly written — the distinction
+  matters (the same note ADR-056 makes about Phase 4's 79 HTTP tests).
+- Adding a twentieth operation without a row is now a failing test that names the unmeasured
+  `(method, path)`. The same table is what Phase 7's README should reproduce.
+
+---
