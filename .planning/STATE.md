@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-09-19T05:29:10.415Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-09-19T05:41:24.143Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 30
+  completed_plans: 31
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [████████░░] 79%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Progress: [████████░░] 79%
 | Phase 04 P02 | 18min | 3 tasks | 10 files |
 | Phase 04 P03 | 12min | 2 tasks | 6 files |
 | Phase 04 P04 | 14min | 2 tasks | 3 files |
+| Phase 04 P05 | 12min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,12 @@ Recent decisions affecting current work:
 - [Phase 04-04]: UpdateTaskCommand's absence test asserts four names - status (D-08) plus owner_id, assignee_id and completed_at - so T-4-17's mass-assignment surface is refused as a set rather than one field at a time
 - [Phase 04-04]: ChangeTaskStatusCommand moved to the end of the tasks banner with its body byte-identical, so the file reads task-lists-then-tasks and the status verb sits after the CRUD five it is deliberately not part of (D-08); nothing 04-03 decided was reverted
 - [Phase 04-04]: requirement tick ARC-05 deliberately NOT taken - 04-12 is the last claimant, and this plan ships only the frozen-dataclass half; the Pydantic-at-every-HTTP-boundary half does not exist until the schemas and routers do
+- [Phase 04-05]: updated_at moves whenever a field is PROVIDED, and therefore does not move at all when a command carries neither - the plan's task text expected an unconditional stamp, which contradicts both 04-PATTERNS Pitfall 10 and the verified 04-RESEARCH body; D-06 refuses an empty body at the schema, so the case never reaches the API
+- [Phase 04-05]: list.py spells list_for_owner_with_stats exactly once, on the call, and names the capability in prose in the docstring - the plan's grep -c criterion is met literally rather than 'in substance', applying the project's prose-not-literal convention to a counter the plan itself wrote
+- [Phase 04-05]: the N+1 proof is a counting subclass declared in the test module, and the list repository is handed a SECOND uncounted task repository sharing the same stored dict - counting the fake's own bookkeeping would have made the zero-calls assertion measure nothing
+- [Phase 04-05]: GetTaskList, ListTaskLists and DeleteTaskList take no Clock and make nothing durable; their SUCCESS path asserts commits == 0 AND rollbacks == 1, because commits == 0 is equally true of a transaction nobody ever closed
+- [Phase 04-05]: DeleteTaskList loads through visible_task_list and discards the entity - without the load a foreign list answers 204, the loudest possible way to tell a stranger their delete worked; the tasks go with it through ON DELETE CASCADE rather than a second cascade written in Python
+- [Phase 04-05]: requirement ticks LIST-01..LIST-06 deliberately NOT taken - 04-12 is the last claimant, and this plan ships orchestration with no endpoint above it
 
 ### Pending Todos
 
@@ -294,6 +301,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T05:29:10.409Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-09-19T05:41:24.137Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
