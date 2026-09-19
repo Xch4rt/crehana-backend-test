@@ -73,6 +73,14 @@ from tests.conftest import DATABASE_URL, JWT_SECRET
 # tests/integration/conftest.py -> tests/integration -> tests -> repository root.
 ROOT = Path(__file__).resolve().parents[2]
 
+# The caller `api_client` runs as, in the readable identifier series every
+# integration module already uses. It lives here rather than in one of them
+# because the fixture below is what makes it the caller: a second copy in a
+# test module would be the one that quietly disagreed the first time this one
+# moved, and the modules that seed a matching `users` row import it from here
+# (the argument `test_task_lists.py` already makes for `PROBLEM_JSON`).
+OWNER_ID = UUID("00000000-0000-4000-8000-000000000001")
+
 
 def alembic_config(database_url: str) -> Config:
     """An Alembic `Config` aimed at `database_url`, with logging left alone.
@@ -340,12 +348,31 @@ async def api_client(
     Overriding `get_current_actor` is the only way to reach D-04's not-owned
     legs over HTTP, and a test cannot override a provider on an application it
     cannot name.
+
+    **The actor is overridden by default, and that is a cost as well as a
+    convenience (D-20).** Until plan 05-10 the seam answered with one fixed
+    constant, so every test in this suite ran as the same caller without asking
+    to; `get_current_actor` now decodes a real bearer token and confirms the
+    row behind it, so the same ~120 tests would each need a login, a token and
+    an `Authorization` header to assert anything about a task list. The
+    override below supplies the caller explicitly instead, which keeps those
+    tests about the behaviour they were written for.
+
+    What it does not do is exercise authentication at all - a request through
+    this client never reaches the decode, so no assertion made here says
+    anything about tokens. Plan 05-13's `authenticated_client` is the fixture
+    that deliberately does *not* override the seam, and it is the one the 401
+    legs, the permission matrix's anonymous column and `test_statements.py`
+    must use: a statement count taken through this fixture would be missing
+    D-11's confirmation read, which is exactly the statement that decision
+    added.
     """
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
 
     app = create_app(Settings(_env_file=None))
     app.dependency_overrides[get_uow] = lambda: SqlAlchemyUnitOfWork(session_factory)
+    app.dependency_overrides[get_current_actor] = lambda: OWNER_ID
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -364,9 +391,12 @@ def acting_as(app: FastAPI, user_id: UUID) -> Iterator[None]:
     route instead of at the fixture. Exiting the block restores whatever
     override was in place before, including none.
 
-    This is the *only* way to reach D-04's not-owned legs over HTTP: the seam in
-    `presentation/api/actor.py` answers with one fixed identifier until Phase 5
-    replaces its body, so a second actor exists in a test and nowhere else.
+    This is how D-04's not-owned legs are reached over HTTP without minting a
+    second token: `api_client` installs `OWNER_ID` as the caller, and this
+    swaps in a stranger for the length of a block. The restore therefore has
+    real work to do now - exiting puts the fixture's own default back, where
+    before there was nothing to put back and the `pop` branch was the only one
+    a test ever took.
     """
     previous = app.dependency_overrides.get(get_current_actor)
     app.dependency_overrides[get_current_actor] = lambda: user_id

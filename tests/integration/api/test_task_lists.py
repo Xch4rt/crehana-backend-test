@@ -33,7 +33,6 @@ from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.repositories.tasks import SqlAlchemyTaskRepository
-from taskmanager.presentation.api.actor import DEMO_USER_ID
 
 # Imported rather than re-declared. The media type and the six-member list
 # are the error contract Phase 2 fixed, and `tests/api/test_error_contract.py`
@@ -41,7 +40,10 @@ from taskmanager.presentation.api.actor import DEMO_USER_ID
 # disagreed the first time the contract moved. A rename over there breaks this
 # import loudly, which is the failure mode to prefer.
 from tests.api.test_error_contract import MEMBERS, PROBLEM_JSON
-from tests.integration.conftest import acting_as, seed
+
+# `OWNER_ID` comes from the harness for the same reason: `api_client` installs
+# it as the caller, so the identifier and the override have to be one value.
+from tests.integration.conftest import OWNER_ID, acting_as, seed
 
 # The `session_factory` fixture's type, spelled once: every seeding call below
 # takes it, and repeating the two-part annotation per test would add noise
@@ -92,17 +94,21 @@ TASK_LIST_MEMBERS = [
 
 def a_user(
     *,
-    user_id: uuid.UUID = DEMO_USER_ID,
+    user_id: uuid.UUID = OWNER_ID,
     email: str = DEMO_EMAIL,
     full_name: str = DEMO_FULL_NAME,
 ) -> User:
-    """A valid user entity, differing from the demo actor only where asked.
+    """A valid user entity, differing from the harness's caller only where asked.
 
     `task_lists.owner_id` is a foreign key, so every test that creates a list
-    needs the row behind the actor the seam hands out. Tests never rely on the
-    container's demo seed (D-02): the `test` stage carries no entrypoint, and a
-    suite that depended on one would pass or fail according to how the database
-    was started.
+    needs the row behind the actor `api_client` overrides the seam with. The
+    default is that actor, which is why almost every call below takes no
+    argument at all.
+
+    Nothing here depends on a row the container wrote. Plan 05-10 deleted the
+    entrypoint's demo seed outright, and even before that the `test` stage
+    carried no entrypoint - a suite that relied on one would pass or fail
+    according to how the database happened to be started.
     """
     return User.create(
         user_id=user_id,
@@ -128,7 +134,7 @@ def moment(value: str) -> datetime:
 def a_task_list(
     *,
     task_list_id: uuid.UUID = LIST_ID,
-    owner_id: uuid.UUID = DEMO_USER_ID,
+    owner_id: uuid.UUID = OWNER_ID,
     name: str = "Groceries",
     description: str | None = "Everything for the week",
     created_at: datetime = NOW,
@@ -238,7 +244,7 @@ async def test_create_returns_201_with_a_location_header_and_the_full_representa
     body = response.json()
 
     assert list(body) == TASK_LIST_MEMBERS
-    assert body["owner_id"] == str(DEMO_USER_ID)
+    assert body["owner_id"] == str(OWNER_ID)
     assert body["name"] == "Groceries"
     assert body["description"] == "Everything for the week"
     assert body["created_at"] == body["updated_at"]
@@ -757,7 +763,7 @@ async def test_a_name_another_actor_uses_is_not_a_conflict(
     response = await client.post(TASK_LISTS, json={"name": "Groceries"})
 
     assert response.status_code == 201
-    assert response.json()["owner_id"] == str(DEMO_USER_ID)
+    assert response.json()["owner_id"] == str(OWNER_ID)
 
 
 async def test_a_name_differing_only_in_case_is_not_a_conflict(
