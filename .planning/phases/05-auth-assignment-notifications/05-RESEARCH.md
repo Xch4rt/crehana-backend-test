@@ -1351,7 +1351,7 @@ This phase deletes a seeded database row and an OS-visible startup step, so the 
 | T-5-16 | **Timing side channel in token comparison** | Information disclosure | HMAC verification is `hmac.compare_digest` inside PyJWT; nothing in this project compares a token by `==` |
 | T-5-17 | **Assignment as a write amplifier** — two writers race on one task row | Tampering | ADR-058: every new write path goes through `for_update=True`. Test: the new owner-vs-assignee case in `test_concurrent_writes.py` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What does `Location` on `POST /auth/register` point at? (D-09 locks its presence.)**
    - What we know: D-09 says 201 with the profile "plus a `Location` header". `TaskResponse`'s create route uses
@@ -1362,6 +1362,7 @@ This phase deletes a seeded database row and an OS-visible startup step, so the 
    - Recommendation: `Location: /api/v1/auth/me`, with one sentence in the route description saying it becomes
      readable after login. The alternative — adding `GET /users/{id}` — is scope the phase boundary does not list.
      **Confirm with the user before planning**, because D-09 is locked and this is the only defensible reading.
+   - RESOLVED — see D-19: `Location: /api/v1/auth/me`, and no `GET /users/{id}` is added.
 
 2. **Does `Settings.jwt_secret`'s `min_length` move from 16 to 32?**
    - What we know: PyJWT emits `InsecureKeyLengthWarning` below 32 bytes for HS256, and `filterwarnings = error`
@@ -1370,6 +1371,7 @@ This phase deletes a seeded database row and an OS-visible startup step, so the 
      floor, but changing an existing validated setting is a visible decision.
    - Recommendation: raise to 32 and update `test_short_secret_is_rejected`'s assertion string and `.env.example`'s
      comment. Record as an ADR naming RFC 7518 §3.2.
+   - RESOLVED — see D-26: the floor rises to 32; implemented by plan 05-01 Task 3.
 
 3. **Does `PasswordHasher` gain a dummy-verify method?**
    - What we know: D-12's timing equalisation needs an Argon2 verify against a throwaway hash, and computing that
@@ -1379,6 +1381,8 @@ This phase deletes a seeded database row and an OS-visible startup step, so the 
    - Recommendation: add one method to `PasswordHasher` (e.g. `async def dummy_verify(self, password: str) -> None`)
      and say in the port docstring that it exists to make the two login paths cost the same. Update
      `tests/unit/application/test_ports.py` and `test_adapter_ports.py`.
+   - RESOLVED — see D-21: the port gains the dummy-verify, and D-27 adds that the existing fakes are extended
+     rather than rewritten.
 
 4. **Which harness strategy, and therefore which statement counts?**
    - What we know: option (c) — default override plus a real-token fixture — keeps ~120 tests untouched and still
@@ -1386,10 +1390,12 @@ This phase deletes a seeded database row and an OS-visible startup step, so the 
    - Recommendation: (c), with `test_statements.py` moved to the real-token fixture and its two constants updated to
      `["SELECT","SELECT"]` and four `"SELECT"`s, each newly-added entry named in the comment the module already has
      the habit of writing.
+   - RESOLVED — see D-20: option (c), and the statement counts become 2 and 4.
 
 5. **Should `ListAssignedTasks` be visible in the OpenAPI `tasks` tag or its own?**
    - Purely cosmetic; no evidence either way. Recommendation: a third tag (`assignments`) so `/docs` groups the
      three assignment-related operations together, matching how `task lists` and `tasks` are already split.
+   - RESOLVED — see plan 05-12 Task 2: a third `assignments` tag.
 
 ## State of the Art
 

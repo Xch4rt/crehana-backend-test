@@ -240,7 +240,57 @@ Plans:
   4. A list owner can assign a task to an existing user and unassign it, a non-existent assignee is rejected, task responses expose the assignee, and `GET /users` makes assignee ids discoverable.
   5. Assigning a task produces a simulated invitation email through the `EmailNotifier` port after the transaction commits — the runtime adapter only logs a structured message, the in-memory adapter lets tests assert on it without mocks, and a notifier that raises still leaves the assignment succeeding.
 
-**Plans**: TBD
+**Plans**: 16 plans (11 waves)
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — require_password, Task.assign/unassign and the HS256 key floor at 32
+- [ ] 05-02-PLAN.md — The two port extensions, the assignee query, and the fakes brought back into line
+- [ ] 05-04-PLAN.md — access.py gains owned_task and the assignee short-circuit; the 04-03 test flips back
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-03-PLAN.md — users.full_name end to end and the 0002 revision with ix_tasks_assignee_id
+- [ ] 05-05-PLAN.md — PwdlibPasswordHasher, JwtTokenService and the typed SecurityResources container
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 05-06-PLAN.md — JSON logging that is actually emitted, and the LoggingEmailNotifier
+- [ ] 05-07-PLAN.md — RegisterUser, AuthenticateActor, GetProfile and the login that says nothing
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 05-08-PLAN.md — AssignTask, UnassignTask, ListUsers, ListAssignedTasks and the post-commit notification
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 05-09-PLAN.md — The auth, users and assignee schemas, and D-06/D-08 proven by absence
+- [ ] 05-10-PLAN.md — The real actor seam, the security providers, and the demo user's deletion
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 05-11-PLAN.md — routers/auth.py, configure_logging in the composition root, and the Authorize-button contract
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 05-12-PLAN.md — routers/users.py, routers/assignments.py, and the 401/403 legs every route now owes
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 05-13-PLAN.md — authenticated_client, and the auth and directory routes over real PostgreSQL
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 05-14-PLAN.md — Assignment and the notification over HTTP, the new statement counts, owner vs assignee
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 05-15-PLAN.md — The 19x4 permission matrix and the cold-start rehearsal on an empty volume
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
+- [ ] 05-16-PLAN.md — Phase 5 ADRs, the AI_WORKFLOW entries, the twelve requirement ticks and the full phase gate
 
 ### Phase 6: Test Hardening & Coverage
 
@@ -284,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
+| 5. Auth, Assignment & Notifications | 0/16 | Planned | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
