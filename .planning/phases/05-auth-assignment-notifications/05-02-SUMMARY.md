@@ -238,3 +238,8 @@ None. Every file touched is either a Protocol declaration, one SQL `SELECT` with
 `ORDER BY`, or test material. The one new query is dispositioned in the plan's register as T-5-11
 and is mitigated as written: it takes exactly one argument, filters in SQL, and has no `owner_id`
 widening for a caller to reach through.
+
+## Self-Check: PASSED
+
+All nine files named above exist on disk, and all four commits
+(`5f1d25f`, `ab6bb39`, `2d267e5`, `ae279f0`) are reachable from `main`.
