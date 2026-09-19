@@ -846,6 +846,36 @@ stop/start cycle and `docker compose run --rm --build test` reporting
 entrypoint's retry bound, which deliberately has no unit test (`DECISION_LOG.md` ADR-037) — the
 project would rather pay for an end-to-end rehearsal than add a coverage `omit` entry.
 
+### 2026-09-18 — The commit gate had been red on the developer host for two phases, and only the research found it
+
+**What happened.** `tests/unit/test_settings.py::test_get_settings_is_cached` failed on the
+developer host while passing in CI and in the Docker `test` stage. `Settings` declares
+`model_config = SettingsConfigDict(env_file=".env")`, and pydantic-settings resolves that
+*relative* name against the process working directory. So `get_settings()` — a bare `Settings()` —
+read the repository's real, untracked `.env`, which since plan 03-03 exports `TEST_DATABASE_URL`,
+while the test's comparison object `Settings(_env_file=None)` deliberately read nothing. The two
+objects differed on exactly that one field and the equality assertion failed. CI and the image
+have no `.env`, so neither ever saw it.
+
+**How it was caught.** Not by a gate. The Phase 4 research agent ran the baseline suite before
+planning and recorded `1 failed, 292 passed` in `04-RESEARCH.md` §"Environment Availability". That
+is two phases after the `.env` key that triggered it was added, and `make test` is named in
+`CLAUDE.md` as a gate that must be green before *every* commit — so for two phases the developer
+either did not run it or read past the failure.
+
+**Consequence.** A gate whose verdict depends on an untracked file is not a gate. Worse, a
+permanently red test trains the reader to ignore red, which is precisely how a real Phase 4
+regression would have been let through.
+
+**What changed.** The test's *isolation* was fixed, not its assertion: `monkeypatch.chdir(tmp_path)`
+now runs before `get_settings.cache_clear()`, so the relative `.env` name resolves inside an empty
+directory and both constructions read exactly the monkeypatched environment. All three assertions
+are untouched — `first is second`, `first == Settings(_env_file=None)`, and the `database_url`
+check — because each of the easy alternatives destroys the claim the test exists to make:
+`_env_file=None` on the `get_settings()` path would stop testing the function as production calls
+it, `skipif` would hide the failure on the only machine that reproduces it, and deleting the test
+would drop the "the cached instance carries the current environment" guarantee altogether.
+
 ---
 
 This log is appended to at the end of every subsequent phase.

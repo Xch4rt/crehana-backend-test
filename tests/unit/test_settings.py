@@ -74,13 +74,21 @@ def test_test_database_url_is_read_from_the_environment(
     assert Settings(_env_file=None).test_database_url == explicit
 
 
-def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_is_cached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """get_settings() hands back one identical instance per process."""
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)
 
     # Clear before, so no earlier test's environment is still cached, and clear
     # after, so this test's Settings object does not leak into a later one.
+    # The working directory moves to an empty one first, because Settings
+    # declares `env_file=".env"` as a *relative* name: a developer host with a
+    # real `.env` beside the repository root would otherwise have get_settings()
+    # read that untracked file while the comparison object below does not, which
+    # makes this test's outcome depend on a file no gate can see.
+    monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
     first = get_settings()
     second = get_settings()
