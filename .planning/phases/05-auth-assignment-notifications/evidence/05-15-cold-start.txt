@@ -1,0 +1,472 @@
+Plan 05-15 Task 2 - the cold-start rehearsal on an empty volume
+===============================================================
+
+ATTEMPTS: ONE. The sequence below ran start to finish on the first attempt. No
+step failed, nothing was fixed and re-run, and nothing is stitched together from
+two runs - which matters, because a cold start assembled from two attempts is
+not a cold start.
+
+Captured 2026-09-19 on macOS (Darwin 25.5.0) / Docker Desktop, linux/arm64,
+against the committed docker-compose.yml, Dockerfile, docker/entrypoint.sh and
+Makefile, with no override file of any kind and no edit to any of them - the
+last command in this transcript is `git status --porcelain`, and it prints
+nothing.
+
+This extends evidence/03-10-cold-start.txt and evidence/04-11-cold-start.txt
+rather than replacing either. Phase 3's rehearsal showed that a fresh stack
+reaches `api healthy`; Phase 4's walked the mandatory use case on it. Neither
+could show this phase's path, because both ran against a container that seeded
+a demo account at boot. Plan 05-10 deleted that step (D-14), so the stack now
+starts with **zero** users and the documented path begins with a registration -
+and the first person to run that path must not be the evaluator.
+
+What this transcript proves, in order:
+
+  1. STEP 0 records what the wipe was about to destroy, so "the volume was
+     empty afterwards" is a change rather than an assertion about an unknown
+     starting point. The compose `taskmanager` database held exactly one user,
+     one task list and one task - leftovers of the Phase 4 rehearsal and of the
+     account plan 05-10 stopped writing - plus the throwaway `taskmanager_test`
+     database. That row is the ONLY place a demo account appears in this file,
+     and it appears as something being deleted.
+  2. `docker compose down -v` removes the two containers, the `test_default`
+     network and the `test_pgdata` volume, and nothing else: no image, and no
+     container of the profiled `test` service (03-10's finding - `down -v` does
+     not reach a disabled profile; none was running here). `docker volume ls`
+     afterwards prints the header and no row.
+  3. `docker compose up -d --build`. The `--build` flag is what an evaluator
+     gets for free and this machine did not: `down -v` discards containers,
+     network and volume but NOT images, and the `test-api` image on this
+     machine predated plans 05-11 and 05-12 - it carried no `configure_logging()`
+     in `create_app()` and none of the four routes this phase added. Somebody
+     cloning the repository has no image at all, so their plain
+     `docker compose up` builds one; `--build` is the faithful equivalent here.
+     The build output is verbatim below: two layers re-ran (`COPY src` and
+     `pip install --no-deps .`), the rest came from cache.
+  4. `api` reaches `healthy` 7 seconds after `up` returns - three polls, 2s
+     apart - and `db` with it. `docker compose ps -a` shows two services, not
+     three: `test` stays out of `up` because of its profile.
+  5. The startup log shows **three** steps and no fourth. The readiness probe
+     is silent on success (a ready database prints nothing, by design), then
+     Alembic runs `-> 0001, baseline` and `0001 -> 0002, full_name and the
+     assignee index`, then uvicorn starts. There is no seed line, and
+     `SELECT count(*) FROM users` on the fresh volume returns **0**: T-5-03's
+     mitigation - the project ships no credential - observed rather than
+     claimed.
+  6. The documented path, and it is the *shipped* documentation rather than a
+     path invented for this file: `/openapi.json`'s own description is printed
+     first, and what follows is those three numbered steps. Register, register
+     a second person, log in, read the profile back, create a list, create a
+     task in it, `GET /api/v1/users` to discover the second person's id, and
+     `PUT .../assignee` naming it. Every request and every response is here,
+     headers included.
+  7. The invitation (NOTF-02, D-15, D-24). One command -
+     `docker compose logs api | grep task_assigned_email` - prints exactly one
+     line; the same line parses through `python3 -m json.tool` as a single JSON
+     object; and it carries `to`, `subject`, `body` and `task_id`, checked by
+     membership rather than by eye. `grep -c` prints 1: one assignment, one
+     invitation.
+  8. The recipient's side. As the teammate, `GET /api/v1/tasks/assigned-to-me`
+     returns the task, `GET /api/v1/task-lists` returns `[]`, and the list the
+     task lives in answers **404**. D-01 and D-02 in the running container, not
+     only in the test suite: the assignee can reach their work and cannot see
+     the list it belongs to.
+  9. The negative leg. The same call with no `Authorization` header is 401
+     `application/problem+json` carrying the RFC 9110 challenge
+     `WWW-Authenticate: Bearer` and the generic refusal - no hint that the
+     route exists for somebody else. The transcript shows the field name
+     lower-cased, `www-authenticate: Bearer`, because that is how uvicorn puts
+     it on the wire; HTTP field names are case-insensitive, and the capture is
+     left exactly as it was observed rather than tidied to match the spelling
+     used in prose.
+ 10. The stack is left UP and HEALTHY (`docker compose ps` at the end),
+     `/health` reports `"database":"ok"`, and `make test` passes **998 tests at
+     100.00% coverage** against `taskmanager_test` - which the initdb script
+     recreated along with the volume. A later plan's gate is therefore not the
+     thing that discovers the volume was wiped.
+
+On credentials, because this rehearsal necessarily has some:
+
+  * The two passwords used below - `cold-start-rehearsal-2026` and
+    `teammate-cold-start-2026` - were invented for this file and appear nowhere
+    else in the repository. That is the whole of D-14: the project ships no
+    known credential, and a password that had to be documented anywhere would
+    be one. Both accounts exist only in a local volume that
+    `docker compose down -v` discards.
+  * The ONE redaction in this file is the two access tokens. Each was a live
+    bearer credential for thirty minutes against this local stack, signed with
+    the `.env` secret that is never committed, and a transcript in the
+    repository is readable by anyone who can read the repository - the same
+    argument docker/entrypoint.sh makes about a container log (T-3-31). Each is
+    replaced by a marker, and the command immediately after each login records
+    the length the redacted value had.
+  * The `tee` and `sed` steps write to a scratch path outside the repository.
+    That is deliberate (the 03-11 precedent): writing them inside `.planning/`
+    would make the `git status --porcelain` at the end non-empty, and that is
+    the one line in this transcript that has to be blank.
+
+Nothing below is elided. Everything is verbatim, including the build output and
+the timings - with one mechanical exception that is worth stating rather than
+leaving for a reader to wonder about: the repository's `trailing-whitespace`
+pre-commit hook trimmed the spaces `psql` and `docker compose` pad some of
+their lines with. No character that carries information was touched, and the
+two earlier captures in this project were committed through the same hook.
+
+------------------------------------------------------------------------------
+
+### STEP 0 - what is about to be destroyed
+$ date -u '+%Y-%m-%dT%H:%M:%SZ'
+2026-09-19T18:07:18Z
+
+$ test -f .env && echo '.env present (never committed, not edited by this rehearsal)'
+.env present (never committed, not edited by this rehearsal)
+
+$ docker compose ps --format '{{.Service}} {{.Health}}'
+api healthy
+db healthy
+
+$ docker compose exec -T db psql -U taskmanager -d taskmanager -c 'SELECT (SELECT count(*) FROM users) AS users, (SELECT count(*) FROM task_lists) AS task_lists, (SELECT count(*) FROM tasks) AS tasks'
+ users | task_lists | tasks
+-------+------------+-------
+     1 |          1 |     1
+(1 row)
+
+
+$ docker compose exec -T db psql -U taskmanager -d taskmanager -tAc 'SELECT id, email FROM users'
+00000000-0000-4000-8000-00000000de00|demo@taskmanager.local
+
+$ docker volume ls --filter name=test_pgdata
+DRIVER    VOLUME NAME
+local     test_pgdata
+
+$ docker compose exec -T db psql -U taskmanager -d postgres -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'taskmanager%' ORDER BY datname"
+taskmanager
+taskmanager_test
+
+### STEP 1 - discard the volume
+$ docker compose down -v
+ Container test-api-1 Stopping
+ Container test-api-1 Stopped
+ Container test-api-1 Removing
+ Container test-api-1 Removed
+ Container test-db-1 Stopping
+ Container test-db-1 Stopped
+ Container test-db-1 Removing
+ Container test-db-1 Removed
+ Network test_default Removing
+ Volume test_pgdata Removing
+ Volume test_pgdata Removed
+ Network test_default Removed
+
+$ docker volume ls --filter name=test_pgdata
+DRIVER    VOLUME NAME
+
+$ docker compose ps -a --format '{{.Service}} {{.State}}'
+
+### STEP 2 - up from nothing, and wait for healthy
+$ docker compose up -d --build
+ Image test-api Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 537B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 6.16kB 0.0s done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#3 DONE 1.0s
+
+#4 docker-image://docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+#4 resolve docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32 done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/python:3.13-slim-trixie
+#5 DONE 0.8s
+
+#6 [internal] load .dockerignore
+#6 transferring context:
+#6 transferring context: 444B done
+#6 DONE 0.4s
+
+#7 [builder 1/8] FROM docker.io/library/python:3.13-slim-trixie@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0
+#7 resolve docker.io/library/python:3.13-slim-trixie@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0 done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 256.40kB 0.0s done
+#8 DONE 0.0s
+
+#9 [builder 4/8] COPY requirements.txt ./
+#9 CACHED
+
+#10 [builder 5/8] RUN pip install -r requirements.txt
+#10 CACHED
+
+#11 [builder 3/8] RUN python -m venv /opt/venv
+#11 CACHED
+
+#12 [builder 2/8] WORKDIR /app
+#12 CACHED
+
+#13 [builder 6/8] COPY pyproject.toml ./
+#13 CACHED
+
+#14 [builder 7/8] COPY src ./src
+#14 DONE 0.1s
+
+#15 [builder 8/8] RUN pip install --no-deps .
+#15 0.906 Processing ./.
+#15 0.909   Installing build dependencies: started
+#15 2.679   Installing build dependencies: finished with status 'done'
+#15 2.684   Getting requirements to build wheel: started
+#15 3.682   Getting requirements to build wheel: finished with status 'done'
+#15 3.689   Preparing metadata (pyproject.toml): started
+#15 4.380   Preparing metadata (pyproject.toml): finished with status 'done'
+#15 4.389 Building wheels for collected packages: taskmanager
+#15 4.392   Building wheel for taskmanager (pyproject.toml): started
+#15 4.930   Building wheel for taskmanager (pyproject.toml): finished with status 'done'
+#15 4.931   Created wheel for taskmanager: filename=taskmanager-0.1.0-py3-none-any.whl size=185286 sha256=ad49e7a842dc60010c4dc71211d2a577e59e5b5c445db3ea88d2f9f889020a2e
+#15 4.932   Stored in directory: /tmp/pip-ephem-wheel-cache-szwldicz/wheels/19/62/e5/caf0138816cbbc0c92b8fb19626cf9ac282f22194a65231821
+#15 4.940 Successfully built taskmanager
+#15 4.965 Installing collected packages: taskmanager
+#15 5.033 Successfully installed taskmanager-0.1.0
+#15 DONE 5.1s
+
+#16 [runtime 2/8] RUN useradd --system --create-home --shell /usr/sbin/nologin app
+#16 CACHED
+
+#17 [runtime 3/8] COPY --from=builder /opt/venv /opt/venv
+#17 DONE 1.1s
+
+#18 [runtime 4/8] WORKDIR /app
+#18 DONE 0.1s
+
+#19 [runtime 5/8] COPY --chown=app:app alembic.ini ./
+#19 DONE 0.1s
+
+#20 [runtime 6/8] COPY --chown=app:app migrations ./migrations
+#20 DONE 0.4s
+
+#21 [runtime 7/8] COPY --chown=app:app docker/entrypoint.sh ./docker/entrypoint.sh
+#21 DONE 0.0s
+
+#22 [runtime 8/8] RUN chmod +x ./docker/entrypoint.sh
+#22 DONE 0.2s
+
+#23 exporting to image
+#23 exporting layers
+#23 exporting layers 3.5s done
+#23 exporting manifest sha256:95a918fed2fcd6a72242142fca843ae060173786bb70309717d24a11bd1c869a 0.0s done
+#23 exporting config sha256:bf37d3aee9cb1405fd93024a8547f8b2674043a7a20cf5cd87247f5dd4891379 done
+#23 exporting attestation manifest sha256:cd3c1b5d8d4092214b53b2b0eab1d4f0d39613e1dfe7e9dd550d86168731b94a 0.0s done
+#23 exporting manifest list sha256:ab29435bf5a836d0548cfc4c5f3e098ae3cca3e685173e1ec55c2f4374ce5a54 done
+#23 naming to docker.io/library/test-api:latest done
+#23 unpacking to docker.io/library/test-api:latest
+#23 unpacking to docker.io/library/test-api:latest 2.2s done
+#23 DONE 6.0s
+
+#24 resolving provenance for metadata file
+#24 DONE 0.0s
+ Image test-api Built
+ Network test_default Creating
+ Network test_default Created
+ Volume test_pgdata Creating
+ Volume test_pgdata Created
+ Container test-db-1 Creating
+ Container test-db-1 Created
+ Container test-api-1 Creating
+ Container test-api-1 Created
+ Container test-db-1 Starting
+ Container test-db-1 Started
+ Container test-db-1 Waiting
+ Container test-db-1 Healthy
+ Container test-api-1 Starting
+ Container test-api-1 Started
+
+$ start=$(date +%s); polls=0; until docker compose ps --format "{{.Service}} {{.Health}}" | grep -q "api healthy"; do polls=$((polls+1)); sleep 2; done; echo "(api reached healthy after $polls poll(s) 2s apart, $(( $(date +%s) - start ))s elapsed from the moment up returned)"
+(api reached healthy after 3 poll(s) 2s apart, 7s elapsed from the moment up returned)
+
+$ docker compose ps --format '{{.Service}} {{.Health}}'
+api healthy
+db healthy
+
+$ docker compose ps -a --format '{{.Service}} {{.State}}'
+api running
+db running
+
+$ docker compose logs api
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+api-1  | INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, full_name and the assignee index
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:51534 - "GET /health HTTP/1.1" 200 OK
+
+$ docker compose exec -T db psql -U taskmanager -d taskmanager -c 'SELECT count(*) AS users FROM users'
+ users
+-------
+     0
+(1 row)
+
+
+$ docker compose exec -T db psql -U taskmanager -d postgres -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'taskmanager%' ORDER BY datname"
+taskmanager
+taskmanager_test
+
+### STEP 3 - the documented path, as an evaluator with no account
+$ curl -s localhost:8000/openapi.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["description"])'
+
+A REST API for task lists and the tasks inside them.
+
+**There is no seeded account, so start by making one.**
+
+1. `POST /api/v1/auth/register` with an email, a full name and a password.
+2. Click **Authorize** at the top right of `/docs` and enter that same email
+   (in the `username` field - OAuth2 fixes the name, this API's usernames are
+   email addresses) and password.
+3. Every other route is then callable, and each one acts as the account you
+   registered.
+
+Errors are RFC 9457 `application/problem+json` documents, from every route.
+
+
+$ curl -s -i -X POST localhost:8000/api/v1/auth/register -H 'content-type: application/json' -d '{"email":"evaluator@example.com","full_name":"The Evaluator","password":"cold-start-rehearsal-2026"}'
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 18:07:52 GMT
+server: uvicorn
+content-length: 148
+content-type: application/json
+location: http://localhost:8000/api/v1/auth/me
+
+{"id":"649c1cf0-9872-439a-8b1a-2f38b56f2913","email":"evaluator@example.com","full_name":"The Evaluator","created_at":"2026-09-19T18:07:52.845708Z"}
+$ curl -s -i -X POST localhost:8000/api/v1/auth/register -H 'content-type: application/json' -d '{"email":"teammate@example.com","full_name":"A Teammate","password":"teammate-cold-start-2026"}'
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 18:07:52 GMT
+server: uvicorn
+content-length: 144
+content-type: application/json
+location: http://localhost:8000/api/v1/auth/me
+
+{"id":"705dd69f-b0c0-4bb3-ba97-36afbd94e624","email":"teammate@example.com","full_name":"A Teammate","created_at":"2026-09-19T18:07:53.202708Z"}
+$ curl -s -i -X POST localhost:8000/api/v1/auth/login -d 'username=evaluator@example.com&password=cold-start-rehearsal-2026' | tee /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/login.http
+HTTP/1.1 200 OK
+date: Sat, 19 Sep 2026 18:07:53 GMT
+server: uvicorn
+content-length: 247
+content-type: application/json
+
+{"access_token":"<ACCESS TOKEN REDACTED - a three-part HS256 JWT; its length is recorded by the next command>","token_type":"bearer","expires_in":1800}
+$ TOKEN=$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/login.http); echo "(the token above, in a shell variable: ${#TOKEN} characters)"
+(the token above, in a shell variable: 188 characters)
+
+$ curl -s localhost:8000/api/v1/auth/me -H "authorization: Bearer $TOKEN"
+{"id":"649c1cf0-9872-439a-8b1a-2f38b56f2913","email":"evaluator@example.com","full_name":"The Evaluator","created_at":"2026-09-19T18:07:52.845708Z"}
+$ curl -s -i -X POST localhost:8000/api/v1/task-lists -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"name":"Release checklist","description":"What has to happen before we ship"}' | tee /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/list.http
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 18:07:53 GMT
+server: uvicorn
+content-length: 322
+content-type: application/json
+location: http://localhost:8000/api/v1/task-lists/e5f8b7d4-1199-45f6-83d9-26c34a14ac4d
+
+{"id":"e5f8b7d4-1199-45f6-83d9-26c34a14ac4d","owner_id":"649c1cf0-9872-439a-8b1a-2f38b56f2913","name":"Release checklist","description":"What has to happen before we ship","created_at":"2026-09-19T18:07:53.473066Z","updated_at":"2026-09-19T18:07:53.473066Z","total_tasks":0,"completed_tasks":0,"completion_percentage":0.0}
+$ LIST_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/list.http); echo LIST_ID=$LIST_ID
+LIST_ID=e5f8b7d4-1199-45f6-83d9-26c34a14ac4d
+
+$ curl -s -i -X POST localhost:8000/api/v1/task-lists/$LIST_ID/tasks -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"title":"Water the plants","priority":"high"}' | tee /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/task.http
+HTTP/1.1 201 Created
+date: Sat, 19 Sep 2026 18:07:53 GMT
+server: uvicorn
+content-length: 323
+content-type: application/json
+location: http://localhost:8000/api/v1/task-lists/e5f8b7d4-1199-45f6-83d9-26c34a14ac4d/tasks/0bf1d9a0-3f36-4921-8ee4-398365f9b0c9
+
+{"id":"0bf1d9a0-3f36-4921-8ee4-398365f9b0c9","task_list_id":"e5f8b7d4-1199-45f6-83d9-26c34a14ac4d","title":"Water the plants","description":null,"status":"pending","priority":"high","created_at":"2026-09-19T18:07:53.497384Z","updated_at":"2026-09-19T18:07:53.497384Z","due_date":null,"completed_at":null,"assignee_id":null}
+$ TASK_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/task.http); echo TASK_ID=$TASK_ID
+TASK_ID=0bf1d9a0-3f36-4921-8ee4-398365f9b0c9
+
+$ curl -s localhost:8000/api/v1/users -H "authorization: Bearer $TOKEN"
+[{"id":"649c1cf0-9872-439a-8b1a-2f38b56f2913","full_name":"The Evaluator","email":"evaluator@example.com"},{"id":"705dd69f-b0c0-4bb3-ba97-36afbd94e624","full_name":"A Teammate","email":"teammate@example.com"}]
+$ TEAMMATE_ID=$(curl -s localhost:8000/api/v1/users -H "authorization: Bearer $TOKEN" | python3 -c 'import json,sys; print([u["id"] for u in json.load(sys.stdin) if u["email"]=="teammate@example.com"][0])'); echo TEAMMATE_ID=$TEAMMATE_ID
+TEAMMATE_ID=705dd69f-b0c0-4bb3-ba97-36afbd94e624
+
+$ curl -s -i -X PUT localhost:8000/api/v1/task-lists/$LIST_ID/tasks/$TASK_ID/assignee -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"assignee_id\":\"$TEAMMATE_ID\"}"
+HTTP/1.1 200 OK
+date: Sat, 19 Sep 2026 18:07:53 GMT
+server: uvicorn
+content-length: 357
+content-type: application/json
+
+{"id":"0bf1d9a0-3f36-4921-8ee4-398365f9b0c9","task_list_id":"e5f8b7d4-1199-45f6-83d9-26c34a14ac4d","title":"Water the plants","description":null,"status":"pending","priority":"high","created_at":"2026-09-19T18:07:53.497384Z","updated_at":"2026-09-19T18:07:53.553659Z","due_date":null,"completed_at":null,"assignee_id":"705dd69f-b0c0-4bb3-ba97-36afbd94e624"}
+### STEP 4 - the one grep D-15 promises
+$ docker compose logs api | grep task_assigned_email
+api-1  | {"level": "INFO", "logger": "taskmanager.notifications", "message": "Task assignment invitation", "event": "task_assigned_email", "to": "teammate@example.com", "subject": "You have been assigned a task: Water the plants", "body": "You have been assigned the task \"Water the plants\". Open /api/v1/tasks/assigned-to-me to see every task assigned to you.", "task_id": "0bf1d9a0-3f36-4921-8ee4-398365f9b0c9"}
+
+$ docker compose logs api --no-log-prefix | grep task_assigned_email | python3 -m json.tool
+{
+    "level": "INFO",
+    "logger": "taskmanager.notifications",
+    "message": "Task assignment invitation",
+    "event": "task_assigned_email",
+    "to": "teammate@example.com",
+    "subject": "You have been assigned a task: Water the plants",
+    "body": "You have been assigned the task \"Water the plants\". Open /api/v1/tasks/assigned-to-me to see every task assigned to you.",
+    "task_id": "0bf1d9a0-3f36-4921-8ee4-398365f9b0c9"
+}
+
+$ docker compose logs api --no-log-prefix | grep task_assigned_email | python3 -c 'import json,sys; d=json.load(sys.stdin); print("members:", sorted(d)); print("to/subject/body/task_id present:", all(k in d for k in ("to","subject","body","task_id")))'
+members: ['body', 'event', 'level', 'logger', 'message', 'subject', 'task_id', 'to']
+to/subject/body/task_id present: True
+
+$ docker compose logs api | grep -c task_assigned_email
+1
+
+### STEP 5 - the recipient's side
+$ curl -s -X POST localhost:8000/api/v1/auth/login -d 'username=teammate@example.com&password=teammate-cold-start-2026' | tee /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/mate.json; echo
+{"access_token":"<ACCESS TOKEN REDACTED - a three-part HS256 JWT; its length is recorded by the next command>","token_type":"bearer","expires_in":1800}
+
+$ MATE_TOKEN=$(sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' /private/tmp/claude-501/-Users-xch4rt-work-myself-crehana-test/0e4b3967-ab2b-42d8-b386-cd2517b6738b/scratchpad/mate.json); echo "(the teammate's token: ${#MATE_TOKEN} characters)"
+(the teammate's token: 188 characters)
+
+$ curl -s localhost:8000/api/v1/tasks/assigned-to-me -H "authorization: Bearer $MATE_TOKEN"
+[{"id":"0bf1d9a0-3f36-4921-8ee4-398365f9b0c9","task_list_id":"e5f8b7d4-1199-45f6-83d9-26c34a14ac4d","title":"Water the plants","description":null,"status":"pending","priority":"high","created_at":"2026-09-19T18:07:53.497384Z","updated_at":"2026-09-19T18:07:53.553659Z","due_date":null,"completed_at":null,"assignee_id":"705dd69f-b0c0-4bb3-ba97-36afbd94e624"}]
+$ curl -s localhost:8000/api/v1/task-lists -H "authorization: Bearer $MATE_TOKEN"
+[]
+$ curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/v1/task-lists/$LIST_ID -H "authorization: Bearer $MATE_TOKEN"
+404
+
+### STEP 6 - the same call with no credential
+$ curl -s -i localhost:8000/api/v1/tasks/assigned-to-me
+HTTP/1.1 401 Unauthorized
+date: Sat, 19 Sep 2026 18:07:53 GMT
+server: uvicorn
+content-length: 217
+content-type: application/problem+json
+www-authenticate: Bearer
+
+{"type":"urn:taskmanager:problem:authentication_failed","title":"Authentication failed","status":401,"detail":"Could not validate credentials.","instance":"/api/v1/tasks/assigned-to-me","code":"authentication_failed"}
+### STEP 7 - the stack is left up, and taskmanager_test is back
+$ curl -s localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}
+$ docker compose ps
+NAME         IMAGE                COMMAND                  SERVICE   CREATED          STATUS                    PORTS
+test-api-1   test-api             "./docker/entrypoint…"   api       15 seconds ago   Up 8 seconds (healthy)    0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+test-db-1    postgres:18-alpine   "docker-entrypoint.s…"   db        15 seconds ago   Up 14 seconds (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+
+$ docker compose ps --format '{{.Service}} {{.Health}}'
+api healthy
+db healthy
+
+$ make test 2>&1 | tail -6
+src/taskmanager/presentation/api/schemas/users.py                       7      0      0      0   100%
+---------------------------------------------------------------------------------------------------------------
+TOTAL                                                                1619      0    146      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================= 998 passed in 9.81s ==============================
+
+$ git status --porcelain
