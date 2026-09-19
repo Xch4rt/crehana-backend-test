@@ -1703,6 +1703,161 @@ configuration a project ships needs an assertion of its own.
 
 ---
 
+### 2026-09-19 — Five deliberate defects, and the two this suite could not see
+
+**What happened.** The entry earlier in this log titled "What Phase 4's 79 HTTP tests found under
+`src/`: nothing" ends by saying that the claim gets tested properly in Phase 6 by inverting the completion
+percentage and requiring the suite to go red. That is this entry. Five one-literal defects were
+planted in `src/` by hand against tree `cfa6f8d`, the whole suite was run against each, and the
+result was three clean catches and two near-misses. Both near-misses were fixed in plan 06-01, and
+all five are now reproducible by anybody in one command — `make break-check`, whose output is
+quoted in full below.
+
+The three that were caught outright: the completion percentage inverted (17 failures), a
+`completed -> pending` transition added to `ALLOWED_TRANSITIONS` (6), and the assignee comparison
+inverted in both visibility guards (33).
+
+**Survival 1 — nothing over HTTP was checking token expiry.** Adding `"verify_exp": False` to the
+decode options in `src/taskmanager/infrastructure/security/tokens.py` turned exactly three tests
+red, all of them unit tests of the token adapter. Not one of the 79 HTTP tests noticed that the API
+had stopped refusing expired credentials.
+
+The reason was in the test, not in the code.
+`test_unauthenticated_requests_are_refused_with_the_one_shared_body` drove seven credentials
+— including an expired token — against a protected route and asserted the one shared 401 body. It
+never seeded a `users` row for the caller it was signing for, and `AuthenticateActor` confirms the
+subject on every request, so six of the seven cases were refused for the unknown-subject reason
+whatever credential they carried. The expiry case passed because the token was rejected, but never
+for being expired. Its sibling
+`test_every_unauthenticated_refusal_carries_the_same_body_as_the_others` then compared six copies
+of the same answer and concluded the bodies were identical — true by construction rather than by
+design.
+
+Plan 06-01 seeded the caller in both tests. The same plant now reddens
+`[an_expired_token]` and the comparative body test with it, which is what break 4 reports below.
+The one case that still relies on an unseeded subject is `a_token_for_an_unknown_subject`, which
+signs for a fresh UUID on purpose, and its docstring says so.
+
+**Survival 2 — the list deletion's lock was pinned only by a mirror of itself.** Dropping
+`for_update=True` from `application/use_cases/task_lists/delete.py` turned exactly one test red:
+the fakes-based road pin in `test_write_paths_hold_what_they_change.py`, which asserts which
+repository method the use case calls. That test is worth having, but it can say nothing about
+whether a database ever made anyone wait — with the locking read gone it would have failed for
+calling `get` instead of `get_for_update`, not for anything a client could observe.
+`tests/integration/test_concurrent_writes.py` had four cases and none of them was a deletion.
+
+The fix was harder to write than it looks, and the first instinct was wrong: asserting the end
+state cannot distinguish the two versions at all, because a plain read passes the visibility guard
+on a stale row and the `DELETE` statement then blocks on the same lock by itself. The list ends up
+gone, and somebody waits, either way. What the plain read loses is the *answer*: the second caller
+is told 204 — "your delete succeeded" — for a list another caller had already removed. The fifth
+case in `test_concurrent_writes.py` queues a real `DeleteTaskList` behind a held lock on two real
+connections and asserts the refusal, plus the mandatory `assert waited`.
+
+**What the check reports now.** `make break-check` applies each break, runs that break's test
+files, asserts the run failed, restores the file and reports the failures by name. It exits
+non-zero if any break survives:
+
+```
+sh scripts/break-check.sh
+
+--- break 1: the completion percentage is inverted
+    src/taskmanager/domain/value_objects/completion.py
+    red: 7 test(s) failed
+      tests/unit/domain/test_completion.py::test_completion_percentage_is_rounded_to_two_decimals
+      tests/unit/domain/test_completion.py::test_completion_percentage_of_a_finished_list_is_one_hundred
+      tests/unit/domain/test_completion.py::test_completion_percentage_of_an_untouched_list_is_zero
+      tests/integration/api/test_task_lists.py::test_get_returns_the_list_with_its_statistics
+      tests/integration/api/test_task_lists.py::test_the_collection_returns_every_list_of_the_actor_with_statistics
+      tests/integration/api/test_tasks.py::test_filtering_by_both_applies_the_conjunction
+      tests/integration/api/test_tasks.py::test_the_statistics_cover_the_whole_list_whatever_the_filter
+
+--- break 2: completed -> pending becomes a legal transition
+    src/taskmanager/domain/value_objects/task_status.py
+    red: 5 test(s) failed
+      tests/unit/domain/test_task_status.py::test_transition_table_matches_the_documented_matrix
+      tests/unit/domain/test_task_status.py::test_completed_to_pending_is_not_an_allowed_transition
+      tests/unit/application/test_change_task_status.py::test_change_task_status_propagates_a_forbidden_transition
+      tests/integration/api/test_tasks.py::test_an_invalid_transition_is_409_naming_the_transition
+      tests/integration/test_concurrent_writes.py::test_a_stale_writer_cannot_persist_a_forbidden_transition
+
+--- break 3: the assignee visibility comparison is inverted
+    src/taskmanager/application/use_cases/access.py
+    red: 30 test(s) failed
+      tests/unit/application/test_access.py::test_visible_task_hides_a_task_whose_parent_list_is_absent
+      tests/unit/application/test_access.py::test_visible_task_hides_a_task_on_a_list_the_actor_does_not_own
+      tests/unit/application/test_access.py::test_visible_task_answers_its_assignee_without_reading_the_parent_list
+      tests/unit/application/test_access.py::test_the_assignee_leg_holds_the_task_and_still_reads_no_list
+      tests/unit/application/test_access.py::test_visible_task_hides_a_task_from_a_stranger_who_is_not_its_assignee
+      tests/unit/application/test_access.py::test_owned_task_refuses_the_assignee_with_the_projects_first_403
+      tests/unit/application/test_access.py::test_owned_task_hides_the_task_from_a_stranger
+      tests/unit/application/test_access.py::test_owned_task_hides_a_task_whose_parent_list_is_absent
+      tests/unit/application/test_access.py::test_the_owned_task_403_and_404_are_two_different_answers
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[13-assignee-GET-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[13-stranger-GET-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[14-assignee-PATCH-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[14-stranger-PATCH-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[15-assignee-DELETE-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[15-stranger-DELETE-/api/v1/task-lists/{list_id}/tasks/{task_id}]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[16-assignee-PATCH-/api/v1/task-lists/{list_id}/tasks/{task_id}/status]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[16-stranger-PATCH-/api/v1/task-lists/{list_id}/tasks/{task_id}/status]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[17-assignee-PUT-/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[17-stranger-PUT-/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[18-assignee-DELETE-/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee]
+      tests/integration/api/test_permission_matrix.py::test_the_permission_matrix_answers_what_the_table_promises[18-stranger-DELETE-/api/v1/task-lists/{list_id}/tasks/{task_id}/assignee]
+      tests/integration/api/test_assignment.py::test_a_stranger_naming_an_unknown_assignee_is_refused_as_an_absent_task
+      tests/integration/api/test_assignment.py::test_the_assignee_may_read_their_task
+      tests/integration/api/test_assignment.py::test_the_assignee_may_change_the_status_of_their_task
+      tests/integration/api/test_assignment.py::test_the_assignee_may_not_patch_the_task_assigned_to_them
+      tests/integration/api/test_assignment.py::test_the_assignee_may_not_delete_the_task_assigned_to_them
+      tests/integration/api/test_assignment.py::test_the_assignee_may_not_assign_the_task_to_anybody_else
+      tests/integration/api/test_assignment.py::test_the_assignee_may_not_unassign_themselves
+      tests/integration/api/test_assignment.py::test_the_assignee_cannot_see_the_list_the_task_lives_in
+      tests/integration/api/test_assignment.py::test_assigned_to_me_carries_the_task_list_id_that_addresses_each_task
+
+--- break 4: token expiry is not verified
+    src/taskmanager/infrastructure/security/tokens.py
+    red: 5 test(s) failed
+      tests/unit/infrastructure/test_tokens.py::test_a_token_that_cannot_be_trusted_is_refused[expired]
+      tests/unit/infrastructure/test_tokens.py::test_a_token_minted_two_hours_ago_has_already_expired
+      tests/unit/infrastructure/test_tokens.py::test_every_refusal_carries_the_same_message
+      tests/integration/api/test_auth.py::test_unauthenticated_requests_are_refused_with_the_one_shared_body[an_expired_token]
+      tests/integration/api/test_auth.py::test_every_unauthenticated_refusal_carries_the_same_body_as_the_others
+
+--- break 5: the list deletion no longer locks the row it removes
+    src/taskmanager/application/use_cases/task_lists/delete.py
+    red: 2 test(s) failed
+      tests/unit/application/test_write_paths_hold_what_they_change.py::test_delete_task_list_holds_the_list_it_removes
+      tests/integration/test_concurrent_writes.py::test_a_list_deletion_waits_and_then_sees_that_it_has_nothing_to_delete
+
+All 5 breaks turned the suite red. src/ is back as it was.
+Exit code: 0
+```
+
+The counts are not the by-hand ones quoted above, and both directions are informative. Breaks 1-3
+are lower (7, 5, 30 against 17, 6, 33) because the script runs a named selection per break rather
+than the whole suite, which is what keeps it to about thirteen seconds and what makes each result
+readable. Breaks 4 and 5 are *higher* (5 and 2 against 3 and 1), and that difference is exactly
+plan 06-01's two fixes: the new failures are `test_auth.py`'s two HTTP cases and
+`test_concurrent_writes.py`'s deletion case. Every break now reddens at least one test that is not
+a mirror of the implementation.
+
+**Why it is in no gate.** `make break-check` is deliberately absent from `make test`,
+`.pre-commit-config.yaml` and `.github/workflows/ci.yml` (D-09): it runs a large selection five
+times over, and the commit loop's value is that it is fast enough that nobody is tempted to skip
+it. This is a spot check an evaluator runs on demand — which is also why it refuses to start
+unless `git status --porcelain -- src/` is empty, restores through a trap installed before the
+first mutation, and restores only the files it touched rather than blanket-checking-out the tree.
+It is the one tool here that writes to `src/` on purpose, and `tests/unit/test_break_check.py`
+drives it in a throwaway repository to prove all three of those properties, each falsified once by
+removing the line that provides it.
+
+**The rule this episode is really about:** a test can pass for a reason that has nothing to do with
+what it is named after, and no amount of green tells you which. Breaking the code on purpose is
+the only cheap way to ask. Both survivals were tests that had been passing since the phase that
+wrote them, and one of them was reporting that token expiry was enforced while nothing in the API
+checked it.
+
 This log is appended to at the end of every subsequent phase.
 
 ---
