@@ -1,0 +1,58 @@
+# 05-02 TDD RED captures - the two port extensions, observed failing first
+# Captured 2026-09-19 on the developer host.
+#
+# The project cannot commit a red tree: the pre-commit mypy (strict) hook
+# rejects a test that names a member no module exports, and --no-verify is
+# forbidden. Adding a method to a Protocol also breaks every implementation at
+# once, so the port and its implementations have to arrive together. The red
+# step is therefore observed and captured here instead of being a separate
+# test() commit - the 02-01, 04-02 and 05-01 precedent.
+
+
+================================================================================
+Task 1: PasswordHasher.dummy_verify (D-21) does not exist yet
+================================================================================
+
+$ .venv/bin/pytest tests/unit/application/test_ports.py -q --no-cov
+.......F........                                                         [100%]
+=================================== FAILURES ===================================
+______ test_the_password_hasher_port_declares_the_equalising_dummy_verify ______
+
+>       assert "dummy_verify" in PasswordHasher.__dict__
+E       AssertionError: assert 'dummy_verify' in mappingproxy({'__module__':
+        'taskmanager.application.ports.security', ...,
+        '__protocol_attrs__': {'hash', 'verify'}})
+E        +  where mappingproxy({...'__protocol_attrs__': {'hash', 'verify'}})
+             = PasswordHasher.__dict__
+
+tests/unit/application/test_ports.py:107: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/application/test_ports.py::test_the_password_hasher_port_declares_the_equalising_dummy_verify
+1 failed, 15 passed in 0.04s
+
+$ .venv/bin/mypy src tests
+tests/unit/application/test_ports.py:112: error: "PasswordHasher" has no attribute "dummy_verify"  [attr-defined]
+tests/unit/application/test_ports.py:114: error: "FakePasswordHasher" has no attribute "dummy_verifications"  [attr-defined]
+Found 2 errors in 1 file (checked 141 source files)
+
+--- a finding, not a failure: the first draft asserted the return value -------
+
+The test was first written as `assert await hasher.dummy_verify("pw") is None`.
+With the port declaring `-> None`, mypy strict answers:
+
+$ .venv/bin/mypy src tests
+tests/unit/application/test_ports.py:112: error: Function does not return a value (it only ever returns None)  [func-returns-value]
+Found 1 error in 1 file (checked 141 source files)
+
+That is the port comment's rule being enforced by the type checker rather than
+by a convention: no caller can read this method's return at all, so a caller
+cannot be tempted to branch on it. The assertion was dropped and the reason
+written into the test's docstring; the runtime `is None` claim is kept in the
+plan's acceptance snippet, which runs outside mypy.
+
+$ .venv/bin/pytest tests/unit/application/test_ports.py -q --no-cov
+................                                                         [100%]
+16 passed in 0.02s
+
+$ .venv/bin/mypy src tests
+Success: no issues found in 141 source files

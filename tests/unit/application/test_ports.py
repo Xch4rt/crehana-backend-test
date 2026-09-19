@@ -93,6 +93,33 @@ def test_fake_password_hasher_satisfies_the_password_hasher_port() -> None:
     assert hasher is not None
 
 
+async def test_the_password_hasher_port_declares_the_equalising_dummy_verify() -> None:
+    """D-21's method, bound through the port and asserted on the recorder.
+
+    The declaration is asserted for the reason the two tests above assert
+    theirs: dropped from the Protocol *and* from the fake together, the binding
+    below would still type-check and D-12's unknown-email leg would have nothing
+    to call. The call then goes through the port-typed local, and the recorder is
+    what plan 05-07's `Login` tests assert the work was requested with, without
+    measuring a clock.
+
+    There is deliberately no `assert await ... is None` here, and the omission is
+    the stronger claim. Written that way, mypy strict reports `Function does not
+    return a value (it only ever returns None)` and `make typecheck` fails - so
+    the type checker already refuses to let any caller read this method's return,
+    which is exactly what the port's comment asks for and more than a runtime
+    assertion could establish.
+    """
+    assert "dummy_verify" in PasswordHasher.__dict__
+
+    fake = FakePasswordHasher()
+    hasher: PasswordHasher = fake
+
+    await hasher.dummy_verify("wrong-password")
+
+    assert fake.dummy_verifications == ["wrong-password"]
+
+
 def test_fake_token_service_satisfies_the_token_service_port() -> None:
     tokens: TokenService = FakeTokenService()
     assert tokens is not None

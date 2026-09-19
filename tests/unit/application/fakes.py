@@ -325,15 +325,31 @@ class FakePasswordHasher:
     Real hashing is intentionally expensive, which is a property no unit test
     wants to pay for on every run. The prefix keeps `verify` honest - a wrong
     password still fails - without any of the cost.
+
+    `dummy_verifications` is the recorder for D-21's `dummy_verify`. The real
+    method exists to make the unknown-email leg of a login cost the same as the
+    wrong-password leg, and a test that tried to prove that by reading a clock
+    would be measuring a machine rather than a decision - so the fake records
+    that the work was *requested*, and plan 05-07's `Login` tests assert on the
+    list instead.
     """
 
     PREFIX = "fake-hash:"
+
+    def __init__(self) -> None:
+        self.dummy_verifications: list[str] = []
 
     async def hash(self, password: str) -> str:
         return f"{self.PREFIX}{password}"
 
     async def verify(self, password: str, hashed: str) -> bool:
         return hashed == f"{self.PREFIX}{password}"
+
+    async def dummy_verify(self, password: str) -> None:
+        # Nothing expensive and nothing returned, exactly as the port declares:
+        # the cost being equalised belongs to Argon2id, which this class exists
+        # to avoid paying. Recording the call is the whole behaviour.
+        self.dummy_verifications.append(password)
 
 
 class FakeTokenService:
