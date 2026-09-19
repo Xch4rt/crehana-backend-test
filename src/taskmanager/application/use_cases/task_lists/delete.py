@@ -37,6 +37,10 @@ class DeleteTaskList:
         async with self._uow:
             # Loaded to decide whether this actor may see it at all; the return
             # value is deliberately unused, because the guard is the point.
-            await visible_task_list(self._uow, command.task_list_id, command.actor_id)
+            # `for_update=True`: a write path holds what it is about to remove,
+            # so it cannot interleave with a concurrent change (ADR-058).
+            await visible_task_list(
+                self._uow, command.task_list_id, command.actor_id, for_update=True
+            )
             await self._uow.task_lists.delete(command.task_list_id)
             await self._uow.commit()

@@ -75,6 +75,35 @@ def completion_statement(task_list_id: UUID) -> Select[tuple[int, int]]:
     ).where(TaskRow.task_list_id == task_list_id)
 
 
+def task_for_update_statement(task_id: UUID) -> Select[tuple[TaskRow]]:
+    """The write-path read: one task row, locked until the transaction ends.
+
+    ADR-058, from the Phase 4 review's CR-01. Every mutating use case loads a
+    task, asks the entity whether the change is legal and writes the whole entity
+    back, so two overlapping requests used to validate against the same stale
+    copy - and the second one persisted `completed -> pending`, which the state
+    machine forbids, while erasing the first one's completion. `FOR UPDATE` makes
+    the second writer wait here, and under READ COMMITTED a statement that waited
+    on a row lock re-reads the row once the lock is released, so what it gets back
+    is what the first writer committed.
+
+    `populate_existing` is the other half of "latest committed state". A session
+    that already held this row in its identity map would otherwise be handed that
+    cached object back with its old attribute values, lock or no lock, which is
+    the defect again by a quieter road.
+
+    A module-level function for the reason `completion_statement` is one: the SQL
+    can be compiled and asserted on with no server, so a refactor that drops the
+    lock fails a unit test as well as the two-connection integration test.
+    """
+    return (
+        select(TaskRow)
+        .where(TaskRow.id == task_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 class SqlAlchemyTaskRepository:
     """`TaskRepository` (D-19) over an `AsyncSession` it does not own.
 
@@ -91,6 +120,17 @@ class SqlAlchemyTaskRepository:
     async def get(self, task_id: UUID) -> Task | None:
         """The task with this identifier as an entity, or `None`."""
         row = await self._session.get(TaskRow, task_id)
+        return None if row is None else task_to_entity(row)
+
+    async def get_for_update(self, task_id: UUID) -> Task | None:
+        """The task's latest committed state, held against other writers.
+
+        The port states the contract; `task_for_update_statement` is how it is
+        kept. The lock is released by whatever ends the transaction, which is the
+        unit of work's decision and never this method's. `update` below then finds
+        the row in the identity map, so the write path costs no extra statement.
+        """
+        row = await self._session.scalar(task_for_update_statement(task_id))
         return None if row is None else task_to_entity(row)
 
     async def add(self, task: Task) -> None:

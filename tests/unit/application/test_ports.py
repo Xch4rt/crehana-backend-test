@@ -65,6 +65,19 @@ def test_the_task_list_repository_port_declares_the_stats_listing() -> None:
     assert "list_for_owner_with_stats" in TaskListRepository.__dict__
 
 
+def test_both_aggregate_ports_declare_the_write_path_read() -> None:
+    """ADR-058's capability is on the ports themselves, for the same reason.
+
+    `get_for_update` is what closes the Phase 4 review's CR-01, the lost update
+    between two overlapping read-validate-write requests. Dropped from a port
+    *and* from its fake together, every binding here would still type-check and
+    the write paths would have nothing to call - so the declaration is asserted,
+    on both aggregates a request can change.
+    """
+    assert "get_for_update" in TaskRepository.__dict__
+    assert "get_for_update" in TaskListRepository.__dict__
+
+
 def test_fake_user_repository_satisfies_the_user_repository_port() -> None:
     repository: UserRepository = FakeUserRepository()
     assert repository is not None

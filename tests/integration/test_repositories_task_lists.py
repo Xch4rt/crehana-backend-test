@@ -49,6 +49,7 @@ from taskmanager.infrastructure.db.models import TaskListRow
 from taskmanager.infrastructure.db.repositories.task_lists import (
     SqlAlchemyTaskListRepository,
     lists_with_stats_statement,
+    task_list_for_update_statement,
 )
 
 pytestmark = pytest.mark.integration
@@ -655,3 +656,25 @@ def test_listing_with_stats_is_a_single_statement() -> None:
     # label is elided first, exactly as the sibling assertion does - `completed`
     # is both the status this query filters on and the name it gives the counter.
     assert TaskStatus.COMPLETED.value not in compiled.replace("AS completed", "")
+
+
+def test_the_write_path_read_locks_the_list_row() -> None:
+    """ADR-058 as a property of the SQL; see the sibling test in the task suite."""
+    compiled = str(task_list_for_update_statement(LIST_ID).compile(dialect=DIALECT))
+
+    assert compiled.rstrip().endswith("FOR UPDATE")
+    assert compiled.count("FROM task_lists") == 1
+    assert str(LIST_ID) not in compiled
+
+
+async def test_get_for_update_returns_the_list_or_none(session: AsyncSession) -> None:
+    """The write-path read answers exactly as `get` does: an entity, or `None`."""
+    await given_an_owner(session)
+    repository = SqlAlchemyTaskListRepository(session)
+    await repository.add(a_task_list())
+
+    fetched = await repository.get_for_update(LIST_ID)
+
+    assert type(fetched) is TaskList
+    assert fetched.name == "Groceries"
+    assert await repository.get_for_update(MISSING_LIST_ID) is None

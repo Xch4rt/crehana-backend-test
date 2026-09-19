@@ -98,6 +98,25 @@ def lists_with_stats_statement(owner_id: UUID) -> Select[tuple[TaskListRow, int,
     )
 
 
+def task_list_for_update_statement(
+    task_list_id: UUID,
+) -> Select[tuple[TaskListRow]]:
+    """The write-path read: one list row, locked until the transaction ends.
+
+    ADR-058. The argument is `task_for_update_statement`'s in `tasks.py`, applied
+    to the other aggregate: two overlapping PATCHes each wrote their whole stale
+    copy back, so one of the two edits was silently lost. `FOR UPDATE` serialises
+    them, and `populate_existing` keeps a cached row from being handed back in
+    place of the committed one.
+    """
+    return (
+        select(TaskListRow)
+        .where(TaskListRow.id == task_list_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 class SqlAlchemyTaskListRepository:
     """`TaskListRepository` (D-19) over an `AsyncSession` it does not own.
 
@@ -114,6 +133,16 @@ class SqlAlchemyTaskListRepository:
     async def get(self, task_list_id: UUID) -> TaskList | None:
         """The list with this identifier as an entity, or `None`."""
         row = await self._session.get(TaskListRow, task_list_id)
+        return None if row is None else task_list_to_entity(row)
+
+    async def get_for_update(self, task_list_id: UUID) -> TaskList | None:
+        """The list's latest committed state, held against other writers.
+
+        The port states the contract; `task_list_for_update_statement` is how it
+        is kept, and the unit of work - never this method - decides when the lock
+        is released.
+        """
+        row = await self._session.scalar(task_list_for_update_statement(task_list_id))
         return None if row is None else task_list_to_entity(row)
 
     async def add(self, task_list: TaskList) -> None:

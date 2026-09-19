@@ -1,0 +1,159 @@
+CR-01 lost-update regression test, driven red - Phase 4 review fix
+Date: 2026-09-19
+Host: macOS arm64, CPython 3.14.3 in .venv, pytest 9.1.1, SQLAlchemy 2.0.54 async,
+      psycopg 3.3.5, PostgreSQL 18.4 from docker compose (database `taskmanager_test`)
+
+Commands, in the order they were run:
+  # PLANT - `.with_for_update()` deleted from both write-path statements
+  .venv/bin/pytest tests/integration/test_concurrent_writes.py --no-cov -q -p no:cacheprovider ; echo exit=$?
+  # plant removed - the shipped tree
+  .venv/bin/pytest tests/integration/test_concurrent_writes.py --no-cov -q -p no:cacheprovider ; echo exit=$?
+
+What this proves: the two-connection suite fails for the reason ADR-058 exists,
+and not merely because a keyword is missing. The plant keeps every signature the
+fix introduced (`get_for_update`, `for_update=True`) and removes only the row
+lock, so the red run below is the defect itself: the second writer did not wait,
+read `in_progress`, committed `pending` and was answered with a successful
+`TaskResult` - and the first writer then committed `completed` over it. A caller
+was told a write was durable and it is gone. With the lock restored the same
+writer waits, re-reads `completed`, and is refused with
+`InvalidStatusTransitionError` (the documented 409).
+
+What this does NOT show: the reviewer's original probe ordering (B commits
+`pending` AFTER A commits `completed`, persisting the forbidden transition). With
+every write path entering through the locking read that ordering can no longer be
+constructed - which is the fix - so the red run necessarily shows the mirror image
+of it: the same two stale validations, with the other writer's commit landing
+last. The reviewer's own reproduction of the original ordering is recorded in
+04-REVIEW.md under CR-01.
+
+`test_a_read_never_waits_on_a_writer` passes in BOTH runs, and that is correct:
+it asserts the property the plant does not touch.
+
+The plant was removed immediately after the red run by restoring byte-identical
+copies of both files; the green run at the bottom is the shipped tree. Captures
+are verbatim apart from the trailing whitespace the pre-commit hook strips and
+the scratch-directory prefix of the diff header, shortened to `fixed/`.
+
+================================================================================
+PLANT - the lock removed from both adapters
+================================================================================
+
+--- the planted diff ---
+--- fixed/tasks.py
++++ planted/src/taskmanager/infrastructure/db/repositories/tasks.py
+@@ -99,7 +99,6 @@
+     return (
+         select(TaskRow)
+         .where(TaskRow.id == task_id)
+-        .with_for_update()
+         .execution_options(populate_existing=True)
+     )
+
+--- fixed/task_lists.py
++++ planted/src/taskmanager/infrastructure/db/repositories/task_lists.py
+@@ -112,7 +112,6 @@
+     return (
+         select(TaskListRow)
+         .where(TaskListRow.id == task_list_id)
+-        .with_for_update()
+         .execution_options(populate_existing=True)
+     )
+
+
+--- the red run ---
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+__________ test_a_stale_writer_cannot_persist_a_forbidden_transition ___________
+
+database = _Database(engine=<sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x10d157790>, session_factory=async_sessionmaker...ion', bind=<sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x10d157790>, autoflush=False, expire_on_commit=False))
+
+    async def test_a_stale_writer_cannot_persist_a_forbidden_transition(
+        database: _Database,
+    ) -> None:
+        """CR-01 itself: `completed -> pending` must not reach the row, by any timing.
+
+        A holds the task and completes it; B asks for `pending` while A is still in
+        flight. B has to wait, see `completed`, and be refused with the documented
+        409 - and A's completion and its `completed_at` have to survive.
+        """
+        first = database.unit_of_work()
+        async with first:
+            task = await visible_task(first, LIST_ID, TASK_ID, OWNER_ID, for_update=True)
+            second: asyncio.Task[TaskResult] = asyncio.create_task(
+                ChangeTaskStatus(database.unit_of_work(), _Clock()).execute(
+                    ChangeTaskStatusCommand(
+                        actor_id=OWNER_ID,
+                        task_list_id=LIST_ID,
+                        task_id=TASK_ID,
+                        new_status=TaskStatus.PENDING,
+                    )
+                )
+            )
+            try:
+                waited = await _until_it_waits_or_finishes(database, second)
+                task.change_status(TaskStatus.COMPLETED, now=LATER)
+                await first.tasks.update(task)
+                await first.commit()
+            finally:
+                outcome = await _settle(second)
+
+>       assert isinstance(outcome, InvalidStatusTransitionError), (
+            "the second writer must be refused: it asked for `pending` on a task the "
+            f"first writer had completed, and was answered with {outcome!r}"
+        )
+E       AssertionError: the second writer must be refused: it asked for `pending` on a task the first writer had completed, and was answered with TaskResult(id=UUID('c0c0c0c0-0003-4000-8000-000000000003'), task_list_id=UUID('c0c0c0c0-0002-4000-8000-000000000002'), title='Contended', description=None, status=<TaskStatus.PENDING: 'pending'>, priority=<TaskPriority.MEDIUM: 'medium'>, created_at=datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc), updated_at=datetime.datetime(2026, 1, 1, 13, 0, tzinfo=datetime.timezone.utc), due_date=None, completed_at=None, assignee_id=None)
+E       assert False
+E        +  where False = isinstance(TaskResult(id=UUID('c0c0c0c0-0003-4000-8000-000000000003'), task_list_id=UUID('c0c0c0c0-0002-4000-8000-000000000002'),...datetime.datetime(2026, 1, 1, 13, 0, tzinfo=datetime.timezone.utc), due_date=None, completed_at=None, assignee_id=None), InvalidStatusTransitionError)
+
+tests/integration/test_concurrent_writes.py:263: AssertionError
+________ test_two_list_patches_are_serialised_and_neither_edit_is_lost _________
+
+database = _Database(engine=<sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x10d1a9f90>, session_factory=async_sessionmaker...ion', bind=<sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x10d1a9f90>, autoflush=False, expire_on_commit=False))
+
+    async def test_two_list_patches_are_serialised_and_neither_edit_is_lost(
+        database: _Database,
+    ) -> None:
+        """The same guarantee on the other aggregate a request can change.
+
+        A renames the list; B re-describes it while A is in flight. B waits, so the
+        representation it answers with carries A's new name rather than the one B
+        would have read a moment earlier - and both edits are in the row.
+        """
+        first = database.unit_of_work()
+        async with first:
+            task_list = await visible_task_list(first, LIST_ID, OWNER_ID, for_update=True)
+            second: asyncio.Task[TaskListResult] = asyncio.create_task(
+                UpdateTaskList(database.unit_of_work(), _Clock()).execute(
+                    UpdateTaskListCommand(
+                        actor_id=OWNER_ID, task_list_id=LIST_ID, description="From B."
+                    )
+                )
+            )
+            try:
+                waited = await _until_it_waits_or_finishes(database, second)
+                task_list.rename("Renamed by A", now=LATER)
+                await first.task_lists.update(task_list)
+                await first.commit()
+            finally:
+                outcome = await _settle(second)
+
+        assert isinstance(outcome, TaskListResult), outcome
+>       assert waited, "the second PATCH never waited for the first one"
+E       AssertionError: the second PATCH never waited for the first one
+E       assert False
+
+tests/integration/test_concurrent_writes.py:302: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_concurrent_writes.py::test_a_stale_writer_cannot_persist_a_forbidden_transition
+FAILED tests/integration/test_concurrent_writes.py::test_two_list_patches_are_serialised_and_neither_edit_is_lost
+2 failed, 1 passed in 0.33s
+exit=1
+
+================================================================================
+PLANT REMOVED - the shipped tree
+================================================================================
+
+...                                                                      [100%]
+3 passed in 0.26s
+exit=0

@@ -35,8 +35,14 @@ class DeleteTask:
         async with self._uow:
             # Loaded to decide whether this actor may see it at all; the return
             # value is deliberately unused, because the guard is the point.
+            # `for_update=True`: a write path holds what it is about to remove,
+            # so it cannot interleave with a concurrent change (ADR-058).
             await visible_task(
-                self._uow, command.task_list_id, command.task_id, command.actor_id
+                self._uow,
+                command.task_list_id,
+                command.task_id,
+                command.actor_id,
+                for_update=True,
             )
             await self._uow.tasks.delete(command.task_id)
             await self._uow.commit()

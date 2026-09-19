@@ -57,8 +57,17 @@ class UpdateTask:
             # One call, four refusals, all of them `task_not_found`: absent,
             # under another list (D-14), orphaned, or on a list this actor does
             # not own. `access.py` argues each leg.
+            #
+            # `for_update=True` because this is read-validate-write: the entity
+            # must be the latest committed state and must stay so until the
+            # commit below, or a concurrent writer is validated against a copy
+            # that is already stale (ADR-058).
             task = await visible_task(
-                self._uow, command.task_list_id, command.task_id, command.actor_id
+                self._uow,
+                command.task_list_id,
+                command.task_id,
+                command.actor_id,
+                for_update=True,
             )
             # Read once and handed down, so every mutator this request reaches
             # stamps the same instant rather than four readings a microsecond

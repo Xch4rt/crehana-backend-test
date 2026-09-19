@@ -78,8 +78,17 @@ class ChangeTaskStatus:
             # under another list (D-14), orphaned, or on a list this actor does
             # not own. `access.py` argues each leg; the point here is that the
             # rule is entered rather than restated.
+            #
+            # `for_update=True` because this is read-validate-write: the entity
+            # must be the latest committed state and must stay so until the
+            # commit below, or a concurrent writer is validated against a copy
+            # that is already stale (ADR-058).
             task = await visible_task(
-                self._uow, command.task_list_id, command.task_id, command.actor_id
+                self._uow,
+                command.task_list_id,
+                command.task_id,
+                command.actor_id,
+                for_update=True,
             )
             # The entity owns the state machine and the timestamps; this line
             # is the only place the clock is read, and the instant is handed

@@ -2267,3 +2267,85 @@ Every route assertion derives its operations from `app.openapi()["paths"]`, thro
   the weaker form simply stays unused.
 
 ---
+
+## ADR-058: write paths load through a locking read, `get_for_update`, and read paths never do
+
+**Context**
+The Phase 4 code review (CR-01) found that every mutating use case is read-validate-write with
+nothing serialising two writers: it loads a detached entity with a plain `SELECT`, asks the entity
+whether the change is legal, and writes the entity back. The reviewer reproduced the consequence
+with two real units of work on PostgreSQL: a task `in_progress`; A and B both load it; A completes
+it and commits; B, validating against its stale `in_progress` copy, moves it to `pending` and
+commits. The row went `completed -> pending`, which `ALLOWED_TRANSITIONS` forbids, A's completion
+and its `completed_at` were erased, and neither caller was told. The claim in three module
+docstrings that the entity is "the only copy of the state machine" was false under concurrency.
+599 green tests and 100.00% coverage did not see it, because the whole integration harness runs on
+one connection, where a second writer cannot exist.
+
+**Options**
+
+- **A row lock on the write path (`SELECT ... FOR UPDATE`).** The second writer waits at its read;
+  under READ COMMITTED a statement that waited on a row lock re-reads the row when the lock is
+  released, so it validates against what the first writer committed. No schema change, no new
+  error a client has to handle, and the refusal B gets is the 409 the API already documents. Cost:
+  writers to the *same row* queue behind one another for the length of a transaction, which here is
+  a handful of statements with no I/O in between.
+- **A `version` column with optimistic concurrency** (`version_id_col`, `StaleDataError`
+  translated in the adapter). Never blocks, and it is the better tool when a client edits a copy
+  for minutes. But it needs a migration on both tables, a new domain error and problem type for
+  "somebody else changed this", and a retry story for every client - and it answers B with
+  "conflict, try again" where the lock answers with the *real* reason, an invalid transition.
+  It also leaves the entity out of the decision: the state machine is still validated against a
+  stale copy, and only the write is refused.
+- **A conditional `UPDATE ... WHERE status = :expected`.** The smallest SQL, but it moves the
+  transition rule's enforcement into a hand-written statement per mutator, beside the entity that
+  is supposed to own it (Phase 2 D-04), and a zero-row result then has to be reverse-engineered
+  into "not found" or "changed underneath you". It covers the status and nothing else; the list
+  PATCH and Phase 5's assignment would each need their own predicate.
+
+**Decision**
+A row lock, expressed on the ports in domain terms. `TaskRepository` and `TaskListRepository` each
+gain `get_for_update(id) -> Entity | None`, whose contract is stated without naming a database: the
+entity returned is the latest committed state, and until the unit of work ends no other unit of
+work can obtain the same entity through `get_for_update`. The SQLAlchemy adapters keep it with
+`.with_for_update()` plus `populate_existing`, in two module-level statement functions.
+`access.visible_task` and `access.visible_task_list` take a keyword-only `for_update: bool = False`,
+and the five write paths - `ChangeTaskStatus`, `UpdateTask`, `DeleteTask`, `UpdateTaskList`,
+`DeleteTaskList` - pass `for_update=True`. Every read path keeps the default and never waits.
+
+**Consequences**
+
+- B now waits for A, re-reads `completed`, and `change_status(PENDING)` raises
+  `InvalidStatusTransitionError` - the documented 409. The entity is the only copy of the state
+  machine again, and it is so under concurrency because it is always handed the committed state.
+- **Lock ordering is a rule, not an accident:** only the *addressed* resource is held. A task's
+  writer holds the task and reads its parent list plainly, so a list deletion - which reaches its
+  tasks through `ON DELETE CASCADE` - can never wait on a writer that is waiting on it.
+- **Phase 5 inherits this rather than re-deciding it.** The assignee who may change a task's status
+  concurrently with the owner, and the assignment use case, are further writers of the same row.
+  They enter through `uow.tasks.get_for_update(...)` - via `visible_task(..., for_update=True)` or
+  whatever guard replaces it for the assignee - and must not introduce a plain `get` on a write path.
+- A flag on the existing guard rather than a second pair of functions, because a second pair would
+  be a second copy of ADR-055's visibility rule. Keyword-only, so a write path names it at the call
+  site, and defaulted to `False`, so a read cannot start waiting by accident.
+- The write path costs no extra statement: `update` finds the locked row in the session's identity
+  map. `tests/integration/api/test_statements.py` covers GET routes only and its expected counts
+  were not touched.
+- Plain `FOR UPDATE`, not `FOR NO KEY UPDATE`. The weaker mode would let a concurrent `CreateTask`
+  foreign-key check proceed beside a list PATCH; that contention is a few milliseconds on an
+  operation pair nobody runs in a loop, and the stronger mode is the one a `DELETE` takes anyway,
+  so the two list write paths behave identically. Revisit if list PATCHes ever become hot.
+- Proof, in three layers. `tests/integration/test_concurrent_writes.py` leaves the single-connection
+  harness on purpose: two units of work on two connections, the interleaving forced by pausing A
+  and observing B in `pg_stat_activity`, bounded three ways (`lock_timeout`, a polling deadline,
+  `asyncio.wait_for`) so a broken lock is a red test and never a hung run, with the rows it commits
+  removed from a separate connection. It was driven red by deleting `.with_for_update()` and the
+  capture is `evidence/04-review-fix-CR-01-red.txt`. `test_the_write_path_read_locks_the_row` pins
+  the compiled SQL with no server, and
+  `tests/unit/application/test_write_paths_hold_what_they_change.py` pins which road each of the
+  eight use cases takes against the fakes - both directions, so a GET that starts locking fails too.
+- What this does not cover: two `CreateTaskList` requests racing on a name (already converged on
+  one 409 by `uq_task_lists_owner_id_name`), and anything that spans more than one row. Neither
+  exists as a requirement today.
+
+---

@@ -52,8 +52,11 @@ class UpdateTaskList:
         async with self._uow:
             # A list this actor does not own is refused exactly as an absent one
             # is, on this verb as on every other (D-04, ADR-008).
+            # `for_update=True` because this is read-validate-write: two
+            # overlapping PATCHes would otherwise each write their whole stale
+            # copy back, and one of the two edits would be lost (ADR-058).
             task_list = await visible_task_list(
-                self._uow, command.task_list_id, command.actor_id
+                self._uow, command.task_list_id, command.actor_id, for_update=True
             )
             # Read once and handed down, so both mutators stamp the same instant
             # rather than two readings a microsecond apart (D-13).

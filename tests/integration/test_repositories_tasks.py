@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Final
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Dialect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
@@ -48,6 +48,7 @@ from taskmanager.infrastructure.db.models import TaskRow
 from taskmanager.infrastructure.db.repositories.tasks import (
     SqlAlchemyTaskRepository,
     completion_statement,
+    task_for_update_statement,
 )
 
 pytestmark = pytest.mark.integration
@@ -664,3 +665,59 @@ def test_the_aggregate_is_a_single_statement() -> None:
     # The filter value travels as a bound parameter, never as an inlined literal
     # (T-3-17): the same discipline every statement in this package follows.
     assert "completed" not in compiled.replace("AS completed", "")
+
+
+def test_the_write_path_read_locks_the_row() -> None:
+    """ADR-058 as a property of the SQL: the statement says `FOR UPDATE`.
+
+    The two-connection proof is `test_concurrent_writes.py`; this is the cheap
+    half, compiled with no server, so a refactor that drops the lock fails here
+    in milliseconds as well as there. The identifier is a bound parameter, like
+    every other value in this package.
+    """
+    compiled = str(task_for_update_statement(TASK_ID).compile(dialect=DIALECT))
+
+    assert compiled.rstrip().endswith("FOR UPDATE")
+    assert compiled.count("FROM tasks") == 1
+    assert str(TASK_ID) not in compiled
+
+
+async def test_get_for_update_returns_the_entity_or_none(
+    session: AsyncSession,
+) -> None:
+    """The write-path read answers exactly as `get` does: an entity, or `None`."""
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await repository.add(a_task())
+
+    fetched = await repository.get_for_update(TASK_ID)
+
+    assert type(fetched) is Task
+    assert fetched.id == TASK_ID
+    assert await repository.get_for_update(MISSING_TASK_ID) is None
+
+
+async def test_get_for_update_never_answers_from_the_identity_map(
+    session: AsyncSession,
+) -> None:
+    """ "The latest committed state" has to survive a row the session already holds.
+
+    `get` loads the row into the identity map; the title is then changed
+    underneath the session, the way another writer's commit would change it. A
+    locking read that handed the cached object back would return the old title,
+    lock or no lock - which is CR-01 by a quieter road, and what
+    `populate_existing` on the statement is there to prevent.
+    """
+    await given_a_list_with_an_owner(session)
+    repository = SqlAlchemyTaskRepository(session)
+    await repository.add(a_task())
+    assert (await repository.get(TASK_ID)) is not None
+
+    await session.execute(
+        text("UPDATE tasks SET title = 'Changed elsewhere' WHERE id = :id"),
+        {"id": TASK_ID},
+    )
+    fetched = await repository.get_for_update(TASK_ID)
+
+    assert fetched is not None
+    assert fetched.title == "Changed elsewhere"

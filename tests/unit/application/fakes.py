@@ -40,6 +40,14 @@ class FakeTaskRepository:
     `added`, `updated` and `deleted` exist so a use-case test can assert that a
     write happened *exactly once*. Asserting only on the final stored state
     would pass just as happily if the use case saved twice.
+
+    `held_for_update` is the same idea for ADR-058. A dictionary has no second
+    writer to keep out, so this fake cannot model the waiting - the
+    two-connection suite in `tests/integration/test_concurrent_writes.py` is
+    where that is proved. What it can do is record *which road a use case took*:
+    a write path that loaded through `get` leaves this list empty, and a read
+    path that loaded through `get_for_update` fills it, and both are failing
+    assertions in the use-case suites.
     """
 
     def __init__(self) -> None:
@@ -47,8 +55,13 @@ class FakeTaskRepository:
         self.added: list[Task] = []
         self.updated: list[Task] = []
         self.deleted: list[UUID] = []
+        self.held_for_update: list[UUID] = []
 
     async def get(self, task_id: UUID) -> Task | None:
+        return self.stored.get(task_id)
+
+    async def get_for_update(self, task_id: UUID) -> Task | None:
+        self.held_for_update.append(task_id)
         return self.stored.get(task_id)
 
     async def add(self, task: Task) -> None:
@@ -114,8 +127,14 @@ class FakeTaskListRepository:
         self.added: list[TaskList] = []
         self.updated: list[TaskList] = []
         self.deleted: list[UUID] = []
+        # See `FakeTaskRepository`: which road a use case took, not the waiting.
+        self.held_for_update: list[UUID] = []
 
     async def get(self, task_list_id: UUID) -> TaskList | None:
+        return self.stored.get(task_list_id)
+
+    async def get_for_update(self, task_list_id: UUID) -> TaskList | None:
+        self.held_for_update.append(task_list_id)
         return self.stored.get(task_list_id)
 
     async def add(self, task_list: TaskList) -> None:
