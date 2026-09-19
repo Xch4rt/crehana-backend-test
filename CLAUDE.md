@@ -293,10 +293,49 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   single exception-handling point, into an RFC 9457 `application/problem+json` response.
   No handler builds an error body by hand.
 
+### Persistence and transactions
+
+- No call that ends a transaction may appear anywhere under
+  `src/taskmanager/infrastructure/db/repositories/`. The transaction belongs to the use case,
+  through the `UnitOfWork`. Enforced by
+  `tests/architecture/test_no_commit_in_repositories.py`, which scans the package and reports
+  `file:line` for every offender, with a companion test that fails if the package moves or
+  empties.
+- Repositories take and return **domain entities only**. No ORM row and no SQLAlchemy exception
+  ever crosses into `application`: an `IntegrityError` is translated inside the adapter into the
+  `DomainError` the use case's pre-check would have raised, and an unrecognised one is re-raised
+  so it becomes the fixed 500. Enforced by the `application-framework-free` contract in
+  `.importlinter` (which forbids `sqlalchemy` there, so a row type cannot even be named), by the
+  port bindings in `tests/unit/infrastructure/test_adapter_ports.py` under `mypy --strict`, and
+  by `test_a_returned_entity_is_readable_after_the_session_is_gone`, which reads an entity after
+  the session is closed.
+- Migrations run in the container entrypoint (`docker/entrypoint.sh` → `alembic upgrade head`),
+  never in `create_app()` and never in the lifespan. Enforced by
+  `test_creating_the_app_opens_no_connection`, which builds the real application against a dead
+  DSN, and by `test_the_lifespan_disposes_the_engine`, which asserts the pool is untouched
+  *inside* the lifespan block.
+- Constraint names live in exactly one place, `src/taskmanager/infrastructure/db/constraints.py`,
+  and are otherwise *generated* by the `MetaData` naming convention rather than typed per table.
+  Enforced by `tests/unit/infrastructure/test_models.py`, which reads the constants back and
+  asserts all twelve appear in the compiled DDL, and by
+  `tests/integration/test_constraints.py`, which asserts the constraint **name** through
+  `violated_constraint()` rather than asserting `IntegrityError` alone.
+- FastAPI dependencies are injected as `Annotated[T, Depends(provider)]`, never as an argument
+  default. Enforced by flake8-bugbear B008 in `make lint`: `.flake8`'s `extend-immutable-calls`
+  whitelists the dotted spelling `fastapi.Depends`, and this project imports by name, so the
+  default-argument form fails the gate.
+
 ### Quality gates
 
 - `make lint`, `make typecheck`, `make arch` and `make test` must all be green before any
   commit. pre-commit enforces the same set locally on every `git commit`.
+- From Phase 3 onward `make test` runs the whole suite and **requires a reachable PostgreSQL**
+  (`make up`, or `make docker-test` for the zero-host-setup path). This is decision D-03, not a
+  broken setup: an auto-skip would let a run report green having exercised none of the
+  persistence layer, and it would make the coverage number meaningless. Enforced by the
+  session-scoped `_require_database` fixture in `tests/integration/conftest.py`, which fails the
+  run once, fast, with a message naming the URL and the remedy — never dozens of connection
+  tracebacks.
 - Coverage is gated at **75%** over `src/taskmanager` (`--cov-fail-under=75` in
   `pytest.ini`). The threshold is never lowered, and it is never reached with
   `# pragma: no cover` or a coverage `omit` entry. If the number is short, write the test.
