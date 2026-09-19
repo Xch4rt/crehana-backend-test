@@ -1,0 +1,693 @@
+Phase 3 gate - plan 03-11 task 3
+================================
+
+Captured 2026-09-19 01:45 UTC on macOS 15 / Docker Desktop, linux/arm64, against the
+committed tree at 2b7305e, with no override file of any kind.
+
+The sequence is the phase gate defined in 03-VALIDATION.md "Sampling Rate":
+  1. make format, then an empty `git status --porcelain` - so the lint run
+     that follows is honest rather than a rewrite.
+  2. docker compose up -d db
+  3. make lint / typecheck / arch / test, each exiting 0
+  4. make test a second time - same counts, proving D-01 isolation leaves
+     no residue
+  5. docker compose down -v && docker compose up --build -d, polled to
+     `api healthy` on a volume created from scratch
+  6. curl /health - 200 with "database":"ok"
+  7. make docker-test - the whole suite inside the image, against the
+     compose database, with the coverage gate met
+
+================================================================================
+STEP 1 - make format must be a no-op
+================================================================================
+
+$ make format
+.venv/bin/isort src tests
+.venv/bin/black src tests
+All done! ✨ 🍰 ✨
+99 files left unchanged.
+EXIT=0
+
+$ git status --porcelain
+EXIT=0
+(the line above this one is the entire output of git status --porcelain)
+
+================================================================================
+STEP 2 - the database
+================================================================================
+
+$ docker compose up -d db
+ Container test-db-1 Running
+EXIT=0
+
+$ docker compose ps --format {{.Service}} {{.Health}}
+api healthy
+db healthy
+EXIT=0
+
+================================================================================
+STEP 3 - the four gates
+================================================================================
+
+$ make lint
+.venv/bin/black --check src tests
+All done! ✨ 🍰 ✨
+99 files would be left unchanged.
+.venv/bin/isort --check-only src tests
+.venv/bin/flake8 src tests
+EXIT=0
+
+$ make typecheck
+.venv/bin/mypy src tests
+Success: no issues found in 99 source files
+EXIT=0
+
+$ make arch
+.venv/bin/lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 68 files, 166 dependencies.
+------------------------------------
+
+Layered architecture (high to low) KEPT
+Domain is framework-free KEPT
+Application knows no web framework or ORM KEPT
+
+Contracts: 3 kept, 0 broken.
+EXIT=0
+
+$ make test
+.venv/bin/pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 287 items
+
+tests/api/test_error_contract.py .................                       [  5%]
+tests/architecture/test_domain_is_stdlib_only.py ..                      [  6%]
+tests/architecture/test_layer_boundaries.py ..                           [  7%]
+tests/architecture/test_no_commit_in_repositories.py ..                  [  8%]
+tests/integration/test_constraints.py ............                       [ 12%]
+tests/integration/test_dependencies.py ....                              [ 13%]
+tests/integration/test_health.py ...                                     [ 14%]
+tests/integration/test_migrations.py .No new upgrade operations detected.
+...                                [ 16%]
+tests/integration/test_repositories_task_lists.py ............           [ 20%]
+tests/integration/test_repositories_tasks.py .................           [ 26%]
+tests/integration/test_repositories_users.py .........                   [ 29%]
+tests/integration/test_schema.py ......                                  [ 31%]
+tests/integration/test_unit_of_work.py ......                            [ 33%]
+tests/unit/application/test_change_task_status.py ............           [ 37%]
+tests/unit/application/test_fakes.py ..                                  [ 38%]
+tests/unit/application/test_ports.py .............                       [ 42%]
+tests/unit/domain/test_completion.py .......                             [ 45%]
+tests/unit/domain/test_exceptions.py ........                            [ 48%]
+tests/unit/domain/test_task.py ..................................        [ 59%]
+tests/unit/domain/test_task_list.py ............                         [ 64%]
+tests/unit/domain/test_task_priority.py .....                            [ 65%]
+tests/unit/domain/test_task_status.py .........                          [ 68%]
+tests/unit/domain/test_user.py .........                                 [ 72%]
+tests/unit/domain/test_validation.py .............                       [ 76%]
+tests/unit/infrastructure/test_adapter_ports.py .....                    [ 78%]
+tests/unit/infrastructure/test_clock.py ...                              [ 79%]
+tests/unit/infrastructure/test_database_url.py .....                     [ 81%]
+tests/unit/infrastructure/test_engine.py .....                           [ 82%]
+tests/unit/infrastructure/test_errors.py .......                         [ 85%]
+tests/unit/infrastructure/test_mappers.py ...............                [ 90%]
+tests/unit/infrastructure/test_models.py .........                       [ 93%]
+tests/unit/presentation/test_health.py ......                            [ 95%]
+tests/unit/test_app_factory.py ...                                       [ 96%]
+tests/unit/test_settings.py .......                                      [ 99%]
+tests/unit/test_version.py ..                                            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                                             2      0      0      0   100%
+src/taskmanager/application/__init__.py                                 0      0      0      0   100%
+src/taskmanager/application/dto/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/dto/commands.py                             5      0      0      0   100%
+src/taskmanager/application/dto/results.py                             11      0      0      0   100%
+src/taskmanager/application/ports/__init__.py                           0      0      0      0   100%
+src/taskmanager/application/ports/clock.py                              3      0      0      0   100%
+src/taskmanager/application/ports/notifications.py                      3      0      0      0   100%
+src/taskmanager/application/ports/repositories.py                      12      0      0      0   100%
+src/taskmanager/application/ports/security.py                           4      0      0      0   100%
+src/taskmanager/application/ports/unit_of_work.py                       4      0      0      0   100%
+src/taskmanager/application/use_cases/__init__.py                       0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/__init__.py                 0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/change_task_status.py      26      0      4      0   100%
+src/taskmanager/domain/__init__.py                                      0      0      0      0   100%
+src/taskmanager/domain/entities/__init__.py                             0      0      0      0   100%
+src/taskmanager/domain/entities/task.py                                55      0     16      0   100%
+src/taskmanager/domain/entities/task_list.py                           22      0      0      0   100%
+src/taskmanager/domain/entities/user.py                                17      0      0      0   100%
+src/taskmanager/domain/exceptions.py                                   68      0      0      0   100%
+src/taskmanager/domain/validation.py                                   22      0     12      0   100%
+src/taskmanager/domain/value_objects/__init__.py                        0      0      0      0   100%
+src/taskmanager/domain/value_objects/completion.py                      8      0      2      0   100%
+src/taskmanager/domain/value_objects/task_priority.py                   5      0      0      0   100%
+src/taskmanager/domain/value_objects/task_status.py                     8      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py                              0      0      0      0   100%
+src/taskmanager/infrastructure/clock.py                                 4      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py                       0      0      0      0   100%
+src/taskmanager/infrastructure/config/database_url.py                  10      0      2      0   100%
+src/taskmanager/infrastructure/config/settings.py                      14      0      0      0   100%
+src/taskmanager/infrastructure/db/__init__.py                           0      0      0      0   100%
+src/taskmanager/infrastructure/db/base.py                               5      0      0      0   100%
+src/taskmanager/infrastructure/db/constraints.py                       13      0      0      0   100%
+src/taskmanager/infrastructure/db/engine.py                            12      0      0      0   100%
+src/taskmanager/infrastructure/db/errors.py                            13      0      2      0   100%
+src/taskmanager/infrastructure/db/mappers.py                           48      0      4      0   100%
+src/taskmanager/infrastructure/db/models.py                            38      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/task_lists.py           51      0      6      0   100%
+src/taskmanager/infrastructure/db/repositories/tasks.py                60      0     10      0   100%
+src/taskmanager/infrastructure/db/repositories/users.py                35      0      2      0   100%
+src/taskmanager/infrastructure/db/unit_of_work.py                      39      0      4      0   100%
+src/taskmanager/main.py                                                20      0      0      0   100%
+src/taskmanager/presentation/__init__.py                                0      0      0      0   100%
+src/taskmanager/presentation/api/__init__.py                            0      0      0      0   100%
+src/taskmanager/presentation/api/dependencies.py                       16      0      0      0   100%
+src/taskmanager/presentation/api/errors/__init__.py                     0      0      0      0   100%
+src/taskmanager/presentation/api/errors/handlers.py                    35      0      6      0   100%
+src/taskmanager/presentation/api/errors/mapping.py                      5      0      0      0   100%
+src/taskmanager/presentation/api/errors/problem.py                      8      0      2      0   100%
+src/taskmanager/presentation/api/health.py                             29      0      2      0   100%
+---------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 730      0     74      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================= 287 passed in 1.62s ==============================
+EXIT=0
+
+================================================================================
+STEP 4 - make test a second time (D-01 leaves no residue)
+================================================================================
+
+$ make test
+.venv/bin/pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/xch4rt/work/myself/crehana/test
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 287 items
+
+tests/api/test_error_contract.py .................                       [  5%]
+tests/architecture/test_domain_is_stdlib_only.py ..                      [  6%]
+tests/architecture/test_layer_boundaries.py ..                           [  7%]
+tests/architecture/test_no_commit_in_repositories.py ..                  [  8%]
+tests/integration/test_constraints.py ............                       [ 12%]
+tests/integration/test_dependencies.py ....                              [ 13%]
+tests/integration/test_health.py ...                                     [ 14%]
+tests/integration/test_migrations.py .No new upgrade operations detected.
+...                                [ 16%]
+tests/integration/test_repositories_task_lists.py ............           [ 20%]
+tests/integration/test_repositories_tasks.py .................           [ 26%]
+tests/integration/test_repositories_users.py .........                   [ 29%]
+tests/integration/test_schema.py ......                                  [ 31%]
+tests/integration/test_unit_of_work.py ......                            [ 33%]
+tests/unit/application/test_change_task_status.py ............           [ 37%]
+tests/unit/application/test_fakes.py ..                                  [ 38%]
+tests/unit/application/test_ports.py .............                       [ 42%]
+tests/unit/domain/test_completion.py .......                             [ 45%]
+tests/unit/domain/test_exceptions.py ........                            [ 48%]
+tests/unit/domain/test_task.py ..................................        [ 59%]
+tests/unit/domain/test_task_list.py ............                         [ 64%]
+tests/unit/domain/test_task_priority.py .....                            [ 65%]
+tests/unit/domain/test_task_status.py .........                          [ 68%]
+tests/unit/domain/test_user.py .........                                 [ 72%]
+tests/unit/domain/test_validation.py .............                       [ 76%]
+tests/unit/infrastructure/test_adapter_ports.py .....                    [ 78%]
+tests/unit/infrastructure/test_clock.py ...                              [ 79%]
+tests/unit/infrastructure/test_database_url.py .....                     [ 81%]
+tests/unit/infrastructure/test_engine.py .....                           [ 82%]
+tests/unit/infrastructure/test_errors.py .......                         [ 85%]
+tests/unit/infrastructure/test_mappers.py ...............                [ 90%]
+tests/unit/infrastructure/test_models.py .........                       [ 93%]
+tests/unit/presentation/test_health.py ......                            [ 95%]
+tests/unit/test_app_factory.py ...                                       [ 96%]
+tests/unit/test_settings.py .......                                      [ 99%]
+tests/unit/test_version.py ..                                            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.3-final-0 _______________
+
+Name                                                                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                                             2      0      0      0   100%
+src/taskmanager/application/__init__.py                                 0      0      0      0   100%
+src/taskmanager/application/dto/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/dto/commands.py                             5      0      0      0   100%
+src/taskmanager/application/dto/results.py                             11      0      0      0   100%
+src/taskmanager/application/ports/__init__.py                           0      0      0      0   100%
+src/taskmanager/application/ports/clock.py                              3      0      0      0   100%
+src/taskmanager/application/ports/notifications.py                      3      0      0      0   100%
+src/taskmanager/application/ports/repositories.py                      12      0      0      0   100%
+src/taskmanager/application/ports/security.py                           4      0      0      0   100%
+src/taskmanager/application/ports/unit_of_work.py                       4      0      0      0   100%
+src/taskmanager/application/use_cases/__init__.py                       0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/__init__.py                 0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/change_task_status.py      26      0      4      0   100%
+src/taskmanager/domain/__init__.py                                      0      0      0      0   100%
+src/taskmanager/domain/entities/__init__.py                             0      0      0      0   100%
+src/taskmanager/domain/entities/task.py                                55      0     16      0   100%
+src/taskmanager/domain/entities/task_list.py                           22      0      0      0   100%
+src/taskmanager/domain/entities/user.py                                17      0      0      0   100%
+src/taskmanager/domain/exceptions.py                                   68      0      0      0   100%
+src/taskmanager/domain/validation.py                                   22      0     12      0   100%
+src/taskmanager/domain/value_objects/__init__.py                        0      0      0      0   100%
+src/taskmanager/domain/value_objects/completion.py                      8      0      2      0   100%
+src/taskmanager/domain/value_objects/task_priority.py                   5      0      0      0   100%
+src/taskmanager/domain/value_objects/task_status.py                     8      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py                              0      0      0      0   100%
+src/taskmanager/infrastructure/clock.py                                 4      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py                       0      0      0      0   100%
+src/taskmanager/infrastructure/config/database_url.py                  10      0      2      0   100%
+src/taskmanager/infrastructure/config/settings.py                      14      0      0      0   100%
+src/taskmanager/infrastructure/db/__init__.py                           0      0      0      0   100%
+src/taskmanager/infrastructure/db/base.py                               5      0      0      0   100%
+src/taskmanager/infrastructure/db/constraints.py                       13      0      0      0   100%
+src/taskmanager/infrastructure/db/engine.py                            12      0      0      0   100%
+src/taskmanager/infrastructure/db/errors.py                            13      0      2      0   100%
+src/taskmanager/infrastructure/db/mappers.py                           48      0      4      0   100%
+src/taskmanager/infrastructure/db/models.py                            38      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/task_lists.py           51      0      6      0   100%
+src/taskmanager/infrastructure/db/repositories/tasks.py                60      0     10      0   100%
+src/taskmanager/infrastructure/db/repositories/users.py                35      0      2      0   100%
+src/taskmanager/infrastructure/db/unit_of_work.py                      39      0      4      0   100%
+src/taskmanager/main.py                                                20      0      0      0   100%
+src/taskmanager/presentation/__init__.py                                0      0      0      0   100%
+src/taskmanager/presentation/api/__init__.py                            0      0      0      0   100%
+src/taskmanager/presentation/api/dependencies.py                       16      0      0      0   100%
+src/taskmanager/presentation/api/errors/__init__.py                     0      0      0      0   100%
+src/taskmanager/presentation/api/errors/handlers.py                    35      0      6      0   100%
+src/taskmanager/presentation/api/errors/mapping.py                      5      0      0      0   100%
+src/taskmanager/presentation/api/errors/problem.py                      8      0      2      0   100%
+src/taskmanager/presentation/api/health.py                             29      0      2      0   100%
+---------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 730      0     74      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================= 287 passed in 1.97s ==============================
+EXIT=0
+
+$ psql -tAc "SELECT count(*) FROM users" on taskmanager_test
+0
+
+================================================================================
+STEP 5 - cold stack from an empty volume
+================================================================================
+
+$ docker compose down -v
+ Container test-api-1 Stopping
+ Container test-api-1 Stopped
+ Container test-api-1 Removing
+ Container test-api-1 Removed
+ Container test-db-1 Stopping
+ Container test-db-1 Stopped
+ Container test-db-1 Removing
+ Container test-db-1 Removed
+ Volume test_pgdata Removing
+ Network test_default Removing
+ Volume test_pgdata Removed
+ Network test_default Removed
+EXIT=0
+
+$ docker compose up --build -d
+ Image test-api Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 537B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 6.16kB done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#3 DONE 0.9s
+
+#4 docker-image://docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+#4 resolve docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/python:3.13-slim-trixie
+#5 DONE 0.6s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 444B done
+#6 DONE 0.0s
+
+#7 [builder 1/8] FROM docker.io/library/python:3.13-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
+#7 resolve docker.io/library/python:3.13-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 0.0s done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 15.31kB 0.0s done
+#8 DONE 0.0s
+
+#9 [runtime 6/8] COPY --chown=app:app migrations ./migrations
+#9 CACHED
+
+#10 [builder 7/8] COPY src ./src
+#10 CACHED
+
+#11 [runtime 4/8] WORKDIR /app
+#11 CACHED
+
+#12 [builder 3/8] RUN python -m venv /opt/venv
+#12 CACHED
+
+#13 [builder 4/8] COPY requirements.txt ./
+#13 CACHED
+
+#14 [builder 8/8] RUN pip install --no-deps .
+#14 CACHED
+
+#15 [builder 5/8] RUN pip install -r requirements.txt
+#15 CACHED
+
+#16 [builder 6/8] COPY pyproject.toml ./
+#16 CACHED
+
+#17 [runtime 2/8] RUN useradd --system --create-home --shell /usr/sbin/nologin app
+#17 CACHED
+
+#18 [runtime 7/8] COPY --chown=app:app docker/entrypoint.sh ./docker/entrypoint.sh
+#18 CACHED
+
+#19 [runtime 5/8] COPY --chown=app:app alembic.ini ./
+#19 CACHED
+
+#20 [builder 2/8] WORKDIR /app
+#20 CACHED
+
+#21 [runtime 3/8] COPY --from=builder /opt/venv /opt/venv
+#21 CACHED
+
+#22 [runtime 8/8] RUN chmod +x ./docker/entrypoint.sh
+#22 CACHED
+
+#23 exporting to image
+#23 exporting layers done
+#23 exporting manifest sha256:b8ec6ffc5db54c4582a407b2c6c1341034993c72aabd527f3e685875181bbaed done
+#23 exporting config sha256:1aacf97f0993d695a386aafe90885cb3f12ea12c63e94776fc34202c65ac26f4 done
+#23 exporting attestation manifest sha256:2ae9ba547c40d5c4c5f07b80cde69c8db6baf1bc19de8d5fd7ff7a4b7e60b3fc done
+#23 exporting manifest list sha256:8d895dc772c3c078fed659e756ed0dd5c770394c42273c9a29d38b61c39ad152
+#23 exporting manifest list sha256:8d895dc772c3c078fed659e756ed0dd5c770394c42273c9a29d38b61c39ad152 done
+#23 naming to docker.io/library/test-api:latest done
+#23 unpacking to docker.io/library/test-api:latest done
+#23 DONE 0.1s
+
+#24 resolving provenance for metadata file
+#24 DONE 0.0s
+ Image test-api Built
+ Network test_default Creating
+ Network test_default Created
+ Volume test_pgdata Creating
+ Volume test_pgdata Created
+ Container test-db-1 Creating
+ Container test-db-1 Created
+ Container test-api-1 Creating
+ Container test-api-1 Created
+ Container test-db-1 Starting
+ Container test-db-1 Started
+ Container test-db-1 Waiting
+ Container test-db-1 Healthy
+ Container test-api-1 Starting
+ Container test-api-1 Started
+EXIT=0
+
+$ poll docker compose ps until api healthy
+poll 1:
+api starting
+db healthy
+poll 2:
+api starting
+db healthy
+poll 3:
+api healthy
+db healthy
+api healthy after 3 polls
+
+$ docker compose ps --format {{.Service}} {{.Health}}
+api healthy
+db healthy
+EXIT=0
+
+$ docker compose logs api | head -12   (D-06 ordering: migrate, then serve)
+api-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+api-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+api-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+api-1  | INFO:     Started server process [1]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1  | INFO:     127.0.0.1:46280 - "GET /health HTTP/1.1" 200 OK
+
+================================================================================
+STEP 6 - /health on the published port
+================================================================================
+
+$ curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health
+200
+
+$ curl -s http://localhost:8000/health
+{"status":"ok","checks":{"database":"ok"},"version":"0.1.0"}
+
+================================================================================
+STEP 7 - make docker-test
+================================================================================
+
+$ make docker-test
+docker compose run --rm --build test
+ Container test-db-1 Running
+ Image test-test Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 538B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 6.16kB done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#3 DONE 0.3s
+
+#4 docker-image://docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+#4 resolve docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/python:3.13-slim-trixie
+#5 DONE 0.2s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 444B done
+#6 DONE 0.0s
+
+#7 [builder 1/8] FROM docker.io/library/python:3.13-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
+#7 resolve docker.io/library/python:3.13-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 1.21MB 0.0s done
+#8 DONE 0.0s
+
+#9 [test 5/7] COPY alembic.ini ./
+#9 CACHED
+
+#10 [builder 3/8] RUN python -m venv /opt/venv
+#10 CACHED
+
+#11 [builder 8/8] RUN pip install --no-deps .
+#11 CACHED
+
+#12 [test 3/7] COPY pytest.ini .flake8 .importlinter .env.example ./
+#12 CACHED
+
+#13 [test 4/7] COPY tests ./tests
+#13 CACHED
+
+#14 [builder 5/8] RUN pip install -r requirements.txt
+#14 CACHED
+
+#15 [test 6/7] COPY migrations ./migrations
+#15 CACHED
+
+#16 [test 2/7] RUN pip install -r requirements-dev.txt && pip install --no-deps -e .
+#16 CACHED
+
+#17 [builder 6/8] COPY pyproject.toml ./
+#17 CACHED
+
+#18 [test 1/7] COPY requirements-dev.txt ./
+#18 CACHED
+
+#19 [builder 7/8] COPY src ./src
+#19 CACHED
+
+#20 [builder 4/8] COPY requirements.txt ./
+#20 CACHED
+
+#21 [builder 2/8] WORKDIR /app
+#21 CACHED
+
+#22 [test 7/7] RUN useradd --system --create-home --shell /usr/sbin/nologin app     && chown -R app:app /app /opt/venv
+#22 CACHED
+
+#23 exporting to image
+#23 exporting layers done
+#23 exporting manifest sha256:cf48bb4b6d0d379a7c430d7510f9c3ba2a39943acc40a9df6e9d7cecc2861782 done
+#23 exporting config sha256:9e785ddc496c233907a1d9ee9d21d91281199d979b7c9696840ddbfc76eed063 done
+#23 exporting attestation manifest sha256:b5097622395c9364c061a665033eb3fb3589bf527f5ee2f19ba83f1e93def52c 0.0s done
+#23 exporting manifest list sha256:3ce8cf4a7bbb5e2507551d722709140f27c95d58baec39adda7457d5112d37eb
+#23 exporting manifest list sha256:3ce8cf4a7bbb5e2507551d722709140f27c95d58baec39adda7457d5112d37eb done
+#23 naming to docker.io/library/test-test:latest done
+#23 unpacking to docker.io/library/test-test:latest 0.0s done
+#23 DONE 0.1s
+
+#24 resolving provenance for metadata file
+#24 DONE 0.0s
+ Image test-test Built
+ Container test-db-1 Waiting
+ Container test-db-1 Healthy
+ Container test-test-run-58e72101ec54 Creating
+ Container test-test-run-58e72101ec54 Created
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /app
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, asyncio-1.4.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 287 items
+
+tests/api/test_error_contract.py .................                       [  5%]
+tests/architecture/test_domain_is_stdlib_only.py ..                      [  6%]
+tests/architecture/test_layer_boundaries.py ..                           [  7%]
+tests/architecture/test_no_commit_in_repositories.py ..                  [  8%]
+tests/integration/test_constraints.py ............                       [ 12%]
+tests/integration/test_dependencies.py ....                              [ 13%]
+tests/integration/test_health.py ...                                     [ 14%]
+tests/integration/test_migrations.py ....                                [ 16%]
+tests/integration/test_repositories_task_lists.py ............           [ 20%]
+tests/integration/test_repositories_tasks.py .................           [ 26%]
+tests/integration/test_repositories_users.py .........                   [ 29%]
+tests/integration/test_schema.py ......                                  [ 31%]
+tests/integration/test_unit_of_work.py ......                            [ 33%]
+tests/unit/application/test_change_task_status.py ............           [ 37%]
+tests/unit/application/test_fakes.py ..                                  [ 38%]
+tests/unit/application/test_ports.py .............                       [ 42%]
+tests/unit/domain/test_completion.py .......                             [ 45%]
+tests/unit/domain/test_exceptions.py ........                            [ 48%]
+tests/unit/domain/test_task.py ..................................        [ 59%]
+tests/unit/domain/test_task_list.py ............                         [ 64%]
+tests/unit/domain/test_task_priority.py .....                            [ 65%]
+tests/unit/domain/test_task_status.py .........                          [ 68%]
+tests/unit/domain/test_user.py .........                                 [ 72%]
+tests/unit/domain/test_validation.py .............                       [ 76%]
+tests/unit/infrastructure/test_adapter_ports.py .....                    [ 78%]
+tests/unit/infrastructure/test_clock.py ...                              [ 79%]
+tests/unit/infrastructure/test_database_url.py .....                     [ 81%]
+tests/unit/infrastructure/test_engine.py .....                           [ 82%]
+tests/unit/infrastructure/test_errors.py .......                         [ 85%]
+tests/unit/infrastructure/test_mappers.py ...............                [ 90%]
+tests/unit/infrastructure/test_models.py .........                       [ 93%]
+tests/unit/presentation/test_health.py ......                            [ 95%]
+tests/unit/test_app_factory.py ...                                       [ 96%]
+tests/unit/test_settings.py .......                                      [ 99%]
+tests/unit/test_version.py ..                                            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.15-final-0 _______________
+
+Name                                                                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------------------
+src/taskmanager/__init__.py                                             2      0      0      0   100%
+src/taskmanager/application/__init__.py                                 0      0      0      0   100%
+src/taskmanager/application/dto/__init__.py                             0      0      0      0   100%
+src/taskmanager/application/dto/commands.py                             8      0      0      0   100%
+src/taskmanager/application/dto/results.py                             22      0      0      0   100%
+src/taskmanager/application/ports/__init__.py                           0      0      0      0   100%
+src/taskmanager/application/ports/clock.py                              3      0      0      0   100%
+src/taskmanager/application/ports/notifications.py                      3      0      0      0   100%
+src/taskmanager/application/ports/repositories.py                      12      0      0      0   100%
+src/taskmanager/application/ports/security.py                           4      0      0      0   100%
+src/taskmanager/application/ports/unit_of_work.py                       7      0      0      0   100%
+src/taskmanager/application/use_cases/__init__.py                       0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/__init__.py                 0      0      0      0   100%
+src/taskmanager/application/use_cases/tasks/change_task_status.py      26      0      4      0   100%
+src/taskmanager/domain/__init__.py                                      0      0      0      0   100%
+src/taskmanager/domain/entities/__init__.py                             0      0      0      0   100%
+src/taskmanager/domain/entities/task.py                                62      0     16      0   100%
+src/taskmanager/domain/entities/task_list.py                           27      0      0      0   100%
+src/taskmanager/domain/entities/user.py                                22      0      0      0   100%
+src/taskmanager/domain/exceptions.py                                   68      0      0      0   100%
+src/taskmanager/domain/validation.py                                   22      0     12      0   100%
+src/taskmanager/domain/value_objects/__init__.py                        0      0      0      0   100%
+src/taskmanager/domain/value_objects/completion.py                     10      0      2      0   100%
+src/taskmanager/domain/value_objects/task_priority.py                   5      0      0      0   100%
+src/taskmanager/domain/value_objects/task_status.py                     8      0      0      0   100%
+src/taskmanager/infrastructure/__init__.py                              0      0      0      0   100%
+src/taskmanager/infrastructure/clock.py                                 4      0      0      0   100%
+src/taskmanager/infrastructure/config/__init__.py                       0      0      0      0   100%
+src/taskmanager/infrastructure/config/database_url.py                  10      0      2      0   100%
+src/taskmanager/infrastructure/config/settings.py                      15      0      0      0   100%
+src/taskmanager/infrastructure/db/__init__.py                           0      0      0      0   100%
+src/taskmanager/infrastructure/db/base.py                               5      0      0      0   100%
+src/taskmanager/infrastructure/db/constraints.py                       13      0      0      0   100%
+src/taskmanager/infrastructure/db/engine.py                            14      0      0      0   100%
+src/taskmanager/infrastructure/db/errors.py                            13      0      2      0   100%
+src/taskmanager/infrastructure/db/mappers.py                           48      0      4      0   100%
+src/taskmanager/infrastructure/db/models.py                            38      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/__init__.py              0      0      0      0   100%
+src/taskmanager/infrastructure/db/repositories/task_lists.py           51      0      6      0   100%
+src/taskmanager/infrastructure/db/repositories/tasks.py                60      0     10      0   100%
+src/taskmanager/infrastructure/db/repositories/users.py                35      0      2      0   100%
+src/taskmanager/infrastructure/db/unit_of_work.py                      39      0      4      0   100%
+src/taskmanager/main.py                                                20      0      0      0   100%
+src/taskmanager/presentation/__init__.py                                0      0      0      0   100%
+src/taskmanager/presentation/api/__init__.py                            0      0      0      0   100%
+src/taskmanager/presentation/api/dependencies.py                       16      0      0      0   100%
+src/taskmanager/presentation/api/errors/__init__.py                     0      0      0      0   100%
+src/taskmanager/presentation/api/errors/handlers.py                    35      0      6      0   100%
+src/taskmanager/presentation/api/errors/mapping.py                      5      0      0      0   100%
+src/taskmanager/presentation/api/errors/problem.py                      8      0      2      0   100%
+src/taskmanager/presentation/api/health.py                             32      0      2      0   100%
+---------------------------------------------------------------------------------------------------------------
+TOTAL                                                                 772      0     74      0   100%
+Coverage XML written to file coverage.xml
+Required test coverage of 75% reached. Total coverage: 100.00%
+============================= 287 passed in 2.15s ==============================
+EXIT=0
+
+================================================================================
+DONE
+================================================================================
+
+$ git status --porcelain
+EXIT=0
+(only the intended documentation changes, if any, appear above)
