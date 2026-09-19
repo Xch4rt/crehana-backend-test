@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — wave 1 (06-01) complete
-last_updated: 2026-09-19T21:05:00.000Z
-last_activity: 2026-09-19 -- 06-01 complete: four totality gates planted and driven red once each, two D-14 findings fixed; 1038 passed, 100% coverage
+stopped_at: Phase 6 executing (4 plans, 4 sequential waves) — waves 1-2 (06-01, 06-02) complete
+last_updated: 2026-09-19T21:40:00.000Z
+last_activity: 2026-09-19 -- 06-02 complete: the assertion-quality gate (both halves) planted and driven red nine ways, 29 mutating tests swept, ten exemptions registered; 1066 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 59
-  completed_plans: 56
-  percent: 95
+  completed_plans: 57
+  percent: 97
 ---
 
 # Project State
@@ -27,24 +27,25 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 6
-Plan: 2 of 4 (06-01 complete)
+Plan: 3 of 4 (06-01, 06-02 complete)
 Status: Executing Phase 06
-Last activity: 2026-09-19 -- 06-01 complete: use-case, endpoint and error-leaf totality gates plus the
-derived transition complement, each driven red once; the expired-token case and DeleteTaskList's lock
-now fail for the reason they name
+Last activity: 2026-09-19 -- 06-02 complete: a test that asserts only a status code, or mutates
+without reading the change back, now fails the build; 29 mutating tests swept and ten exemptions
+registered, each of which fails the moment it stops being necessary
 
-Progress: [█████████░] 95%
+Progress: [██████████] 97%
 
 The ROADMAP phase checkbox for Phase 5, its Progress-table status cell and its completion
 date are deliberately untouched: they belong to the orchestrator after verification.
-`total_plans` counts planned plans only - phase 7 is not yet planned, so 55/59 means
-"55 plans executed, the four Phase 6 plans written and waiting", not a share of the milestone.
+`total_plans` counts planned plans only - phase 7 is not yet planned, so 57/59 means
+"57 plans executed, the two remaining Phase 6 plans written and waiting", not a share of the
+milestone.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 56
+- Total plans completed: 57
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -58,7 +59,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | 04 | 12 | - | - |
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
-| 06 | 1 | - | - |
+| 06 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -122,6 +123,7 @@ date are deliberately untouched: they belong to the orchestrator after verificat
 | Phase 05 P16 | 30min | 3 tasks | 6 files |
 | Phase 05 P17 | 25min | 5 tasks | 18 files |
 | Phase 06 P01 | 15min | 5 tasks | 7 files |
+| Phase 06 P02 | 30min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -818,6 +820,12 @@ Recent decisions affecting current work:
 - [Phase 06-01]: STATE.md and ROADMAP.md were again updated by hand for the reason 05-16 records; the
   ROADMAP Phase 6 checkbox and its completion date are untouched - only the 06-01 plan box and the
   1/4 count were taken here
+- [Phase 06-02]: Half (a)'s scope is tests that ISSUE a request, not tests that declare a client fixture - one permission-matrix test takes authenticated_client only to reach the app half of the two-tuple and drives nothing, so the plan's literal rule reported it as a status-only offender
+- [Phase 06-02]: Recorder evidence is tracked by TAINT to a fixed point, not by an assert naming the fixture: the notification tests do sent = notifications(caplog) then fields = extras(sent[0]) then assert on fields, and the plan's rule reported two of them
+- [Phase 06-02]: The one real status-only offender was fixed but is NOT reportable by the shipped gate - the same test calls assert_not_found on its other response, so a per-TEST rule is satisfied; a per-RESPONSE rule was rejected as a much larger change with an unmeasured false-positive rate
+- [Phase 06-02]: REQUIRED_NO_REREAD is an equality in both directions, and carries a fourth gate beyond the plan's three: an exempted test must still be an offender with its marker stripped, so an exemption that stops being needed fails until it is removed
+- [Phase 06-02]: Five login tests stay exempt rather than swept even though three of them register first - the register is setup proved by the dedicated re-read test, and adding a directory GET would satisfy a tool rather than add a claim
+- [Phase 06-02]: STATE.md and ROADMAP.md edited by hand again, for the reason 05-16, 05-17 and 06-01 record: the gsd-sdk state handlers reset the percent, inject blank lines between decision bullets and miscount totals
 
 ### Pending Todos
 
@@ -855,6 +863,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T21:05:00.000Z
-Stopped at: Completed 06-01-PLAN.md
-Resume file: .planning/phases/06-test-hardening-coverage/06-02-PLAN.md
+Last session: 2026-09-19T21:40:00.000Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: .planning/phases/06-test-hardening-coverage/06-03-PLAN.md
