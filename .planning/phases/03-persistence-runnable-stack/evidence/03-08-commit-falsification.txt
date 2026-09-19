@@ -1,0 +1,52 @@
+RED/GREEN evidence for the commit proof (plan 03-08, task 3).
+
+The whole suite in tests/integration/test_unit_of_work.py reads back what it
+wrote over the SAME connection the fixture owns, so a `commit()` that had
+silently become a no-op would leave every one of those reads green. That is
+RESEARCH Pitfall 1: `join_transaction_mode` defaults to
+`conditional_savepoint`, which degrades to `rollback_only` for exactly the
+connection shape the `connection` fixture produces, and under that degradation
+the unit of work's commit does nothing at all.
+
+The check below is therefore the one that says the commit is load-bearing. One
+line was commented out in `test_a_successful_block_commits_once`, the test was
+run, the line was restored, and the whole module was run again. Nothing else
+changed between the two runs.
+
+The test goes red, which means the write really was undone by __aexit__'s
+rollback when nothing committed - and so the green run is green because the
+commit happened, not because the savepoint mode silently swallowed it.
+
+=== RED: with 'await uow.commit()' commented out ===
+$ .venv/bin/pytest tests/integration/test_unit_of_work.py::test_a_successful_block_commits_once --no-cov -q
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________________ test_a_successful_block_commits_once _____________________
+
+uow = <taskmanager.infrastructure.db.unit_of_work.SqlAlchemyUnitOfWork object at 0x10ec68590>
+
+    async def test_a_successful_block_commits_once(uow: SqlAlchemyUnitOfWork) -> None:
+        """A committed block's write survives `__aexit__` (ARC-08, roadmap SC-4).
+
+        Asserted as a read rather than as a counter. `commits == 1` would say the
+        method was called; reading the row back through a *second* block says the
+        rollback `__aexit__` performs on every uncommitted exit correctly did not
+        fire here - which is the behaviour a counter cannot distinguish from its
+        opposite.
+        """
+        async with uow:
+            await uow.users.add(a_user())
+            # await uow.commit()
+
+>       assert await rows_in_users(uow, USER_ID)
+E       assert False
+
+tests/integration/test_unit_of_work.py:127: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_unit_of_work.py::test_a_successful_block_commits_once
+1 failed in 0.19s
+
+=== GREEN: with the commit restored, nothing else changed ===
+$ .venv/bin/pytest tests/integration/test_unit_of_work.py --no-cov -q
+......                                                                   [100%]
+6 passed in 0.19s

@@ -51,6 +51,7 @@ from taskmanager.infrastructure.config.database_url import (
     resolve_test_database_url,
 )
 from taskmanager.infrastructure.config.settings import get_settings
+from taskmanager.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 
 # tests/integration/conftest.py -> tests/integration -> tests -> repository root.
 ROOT = Path(__file__).resolve().parents[2]
@@ -248,12 +249,29 @@ async def session(
 
     Closing a session bound to a connection somebody else owns does not close
     that connection - which is the property the `connection` fixture relies on to
-    keep control of the outer transaction. The `uow` fixture the repository tests
-    will want arrives with the unit-of-work adapter in plan 03-08; until then this
-    is the direct handle.
+    keep control of the outer transaction. Tests that want the transaction
+    boundary itself rather than a bare session take `uow` below.
     """
     open_session = session_factory()
     try:
         yield open_session
     finally:
         await open_session.close()
+
+
+@pytest.fixture
+def uow(session_factory: Callable[[], AsyncSession]) -> SqlAlchemyUnitOfWork:
+    """The real unit of work, over the connection-bound factory above.
+
+    Synchronous and function-scoped: the constructor stores the factory and
+    opens nothing, so there is no coroutine here for ADR-012's function-scoped
+    event loop to outlive.
+
+    The factory it receives is the D-01 closure, not an `async_sessionmaker`.
+    That is the whole reason `SqlAlchemyUnitOfWork.__init__` is annotated
+    `Callable[[], AsyncSession]`: production hands it a sessionmaker, which
+    satisfies the same type, while this fixture hands it a plain function
+    returning a session bound to the test connection - and neither end needs a
+    `cast`.
+    """
+    return SqlAlchemyUnitOfWork(session_factory)
