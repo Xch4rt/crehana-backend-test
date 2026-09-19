@@ -314,3 +314,8 @@ None — no external service configuration required.
 ---
 *Phase: 05-auth-assignment-notifications*
 *Completed: 2026-09-19*
+
+## Self-Check: PASSED
+
+All five named artifacts exist on disk and all four commits are reachable from `git log --all`:
+`622bde0`, `a3ba8f6`, `a9654bd`, `f224fa2`.

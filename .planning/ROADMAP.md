@@ -247,7 +247,7 @@ Plans:
 
 - [x] 05-01-PLAN.md — require_password, Task.assign/unassign and the HS256 key floor at 32
 - [x] 05-02-PLAN.md — The two port extensions, the assignee query, and the fakes brought back into line
-- [ ] 05-04-PLAN.md — access.py gains owned_task and the assignee short-circuit; the 04-03 test flips back
+- [x] 05-04-PLAN.md — access.py gains owned_task and the assignee short-circuit; the 04-03 test flips back
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -334,7 +334,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
-| 5. Auth, Assignment & Notifications | 2/16 | In Progress | - |
+| 5. Auth, Assignment & Notifications | 3/16 | In Progress | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 

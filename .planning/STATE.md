@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-09-19T14:48:49.346Z"
-last_activity: 2026-09-19 -- Phase 05 plan 02 complete
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-09-19T15:06:23.212Z"
+last_activity: 2026-09-19 -- Phase 05 plan 04 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 40
-  percent: 74
+  completed_plans: 41
+  percent: 76
 ---
 
 # Project State
@@ -28,10 +28,10 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
 Plan: 3 of 16
-Status: Executing Phase 05 (plan 03 next)
-Last activity: 2026-09-19 -- Phase 05 plan 02 complete
+Status: Executing Phase 05 (plan 04 complete; plan 03 still outstanding)
+Last activity: 2026-09-19 -- Phase 05 plan 04 complete
 
-Progress: [███████░░░] 74%
+Progress: [████████░░] 76%
 
 ## Performance Metrics
 
@@ -96,6 +96,7 @@ Progress: [███████░░░] 74%
 | Phase 04 P12 | 18min | 3 tasks | 7 files |
 | Phase 05 P01 | 6min | 3 tasks | 8 files |
 | Phase 05 P02 | 10min | 3 tasks | 9 files |
+| Phase 05 P04 | 12min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -328,6 +329,39 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 05-01]: requirement ticks AUTH-04 and ASGN-02 deliberately NOT taken despite this plan's frontmatter naming both - 05-16 is the last claimant, and this plan ships a validator and two mutators with no use case and no route above them
 - [Phase ?]: [Phase 05-01]: the TDD RED step is captured in evidence/05-01-tdd-red.txt rather than committed - pre-commit's mypy (strict) hook rejects a test importing a name no module exports and --no-verify is forbidden (the 02-01 and 04-02 precedent)
 
+- [Phase 05-04]: the assignee short-circuit in visible_task sits AFTER the parent-list comparison
+  and before uow.task_lists.get - ADR-050 outranks D-01, so an assignee addressing their task under
+  the wrong list gets 404 and never learns where it really lives; a test pins that ordering on each
+  guard, the owned_task one also asserting the list was never read
+- [Phase 05-04]: the assignee leg is proven by an ABSENT statement - CountingTaskListRepository,
+  declared in the test module, wraps get and get_for_update and the assertion is reads == []; the
+  returned task alone would pass against an implementation that read the list and ignored it, which
+  is the statement the leg exists to save (the 04-05 counting-subclass precedent)
+- [Phase 05-04]: owned_task is a second function, never visible_task(require_owner=True) and never a
+  (task, is_owner) tuple - the two differ by which failure SET they can produce, and a tuple would
+  push the ADR-008 decision back into eleven use cases (ADR-055); both rejections are argued in the
+  function's own docstring rather than left to the plan
+- [Phase 05-04]: the comparative test is INVERTED for AUTH-06 - every other comparison in this suite
+  produces two refusals and asserts they match, and these three produce two from ONE fixture and
+  assert the class and the code DIFFER, because a single-error assertion passes just as happily
+  against an implementation that answered the assignee 404 too
+- [Phase 05-04]: the plan's access.py coverage criterion was already false before the plan - this
+  module's own suite never passed for_update=True to either guard, so both locking roads were
+  covered only by test_write_paths_hold_what_they_change.py; closed by writing the missing test
+  rather than by reinterpreting the criterion
+- [Phase 05-04]: update.py's docstring names the status ENDPOINT in prose because
+  test_update_task_cannot_change_a_status asserts TaskStatus.__name__ is absent from the module
+  source and the use case's name contains it as a substring - observed by probe and reverted
+  (evidence/05-04-tdd-red.txt appendix); the 01-03 prose-not-literal convention protecting a D-08
+  source scan rather than a grep criterion
+- [Phase 05-04]: four docstring sentences beyond D-22's paragraph were falsified by this change
+  ('two functions', 'Both functions', the for_update twin argument, 'reads its parent list plainly')
+  and all four were rewritten in the commits that falsified them - a partial retirement one
+  paragraph from the fix would have been the exact failure D-22 names
+- [Phase 05-04]: requirement ticks AUTH-06/ASGN-01/ASGN-02 deliberately NOT taken - 05-16 is the
+  last claimant, and this plan ships an application-layer rule with no route above it: nothing can
+  set an assignee_id until 05-08, so no HTTP request yet produces this 403
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -362,6 +396,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T14:48:49.218Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-09-19T15:05:42.300Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
