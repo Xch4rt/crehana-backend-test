@@ -40,14 +40,24 @@ Validated in Phase 2: Domain & Error Contract (2026-09-18) — 4/4 success crite
       point — `register_exception_handlers()` in `create_app()`, one `problem()` builder,
       `WWW-Authenticate` on 401, fixed body on any 500, proven against a test-only probe router
 
+Validated in Phase 3: Persistence & Runnable Stack (2026-09-19) — 5/5 success criteria verified,
+293 tests, 100% coverage, `docker compose up` cold-start proven (`evidence/03-10-cold-start.txt`);
+code review: CR-01 + 5 warnings fixed, WR-02/WR-05 deliberately left open (see 03-REVIEW.md).
+- [x] A real database (PostgreSQL) — `postgres:18-alpine`, SQLAlchemy 2.0 async over psycopg 3,
+      Alembic `0001_baseline` proven to round-trip, every constraint proven by a refused statement
+- [x] Docker container that runs the application — runtime stage waits for the DB, runs
+      `alembic upgrade head`, serves as uid 999 with a `HEALTHCHECK` on `/health`
+- [x] docker-compose — `db` + `api` (+ `test` behind a profile); one command reaches `api healthy`
+- [x] `docker-compose.yml`
+- [x] Explicit transaction boundary — `SqlAlchemyUnitOfWork` implements the application port,
+      repositories never `commit()` (AST-enforced), use cases own `async with uow:`
+
 ### Active
 
 **Mandatory — stack (PDF "Requisitos")**
 - [ ] Python + FastAPI
-- [ ] A real database (PostgreSQL)
 - [ ] Tests with pytest
 - [ ] flake8 as linter, black as formatter
-- [ ] Docker container that runs the application
 
 **Mandatory — use cases (PDF 1.a)**
 - [ ] Create, get, update and delete task lists
@@ -66,11 +76,9 @@ Validated in Phase 2: Domain & Error Contract (2026-09-18) — 4/4 success crite
 - [ ] Strong typing with Pydantic
 - [ ] Business validations
 - [ ] Unit and integration testing with pytest
-- [ ] docker-compose (Dockerfile validated in Phase 1)
 - [ ] Complete README + DECISION_LOG.md explaining technical decisions
 
 **Mandatory — tooling files (PDF 3-6)**
-- [ ] `docker-compose.yml` (`Dockerfile` validated in Phase 1)
 - [ ] README.md with: project description, local environment setup, running in Docker,
       running the tests
 
@@ -164,4 +172,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-18 after Phase 2 (Domain & Error Contract) completion*
+*Last updated: 2026-09-19 after Phase 3 (Persistence & Runnable Stack) completion*
