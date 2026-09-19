@@ -86,3 +86,40 @@ $ .venv/bin/mypy src tests
 
 so the hook refuses the commit before pytest is ever consulted. 02-01 hit this
 first and recorded it; 04-02, 05-01 and 05-02 hit it again.
+
+
+Task 3 -- `UpdateTask` and `DeleteTask` on the owner-only door
+==============================================================
+Six tests written first, run while both use cases still load through the wider
+guard.
+
+$ .venv/bin/pytest tests/unit/application/test_update_task.py \
+      tests/unit/application/test_delete_task.py \
+      tests/unit/application/test_write_paths_hold_what_they_change.py -q --no-cov
+
+        assignee_uow = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    >   with pytest.raises(DomainError) as assignee_info:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    E   Failed: DID NOT RAISE DomainError
+
+    tests/unit/application/test_delete_task.py:248: Failed
+    =========================== short test summary info ============================
+    FAILED tests/unit/application/test_update_task.py::test_update_task_refuses_the_assignee_with_a_403
+    FAILED tests/unit/application/test_update_task.py::test_the_assignees_403_and_a_strangers_404_are_different_answers
+    FAILED tests/unit/application/test_delete_task.py::test_delete_task_refuses_the_assignee_with_a_403
+    FAILED tests/unit/application/test_delete_task.py::test_the_assignees_403_and_a_strangers_404_are_different_answers
+    4 failed, 34 passed in 0.18s
+
+Four failures, and the *way* they fail is the finding: not a wrong error class
+but `DID NOT RAISE`. After task 1 the assignee is visible, so the old door hands
+the task straight back and the PATCH and the DELETE both succeed. For the length
+of two commits a user who cannot see a list can rename and destroy a row inside
+it -- which is exactly the defect this task closes, reproduced rather than
+asserted, and the reason the three tasks ship in this order.
+
+The two stranger tests written in the same edit are green here and stay green:
+they are the guard rail that stops the fix over-reaching into a 403 for
+everybody. The new `ChangeTaskStatus` case in
+`test_write_paths_hold_what_they_change.py` is green throughout too -- the
+assignee's status change was already correct after task 1, and that test exists
+to keep it correct while the two neighbouring write paths move away from it.

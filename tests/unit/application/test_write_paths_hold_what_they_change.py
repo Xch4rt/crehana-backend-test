@@ -52,18 +52,23 @@ from tests.unit.application.fakes import FakeUnitOfWork, FrozenClock
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 ACTOR_ID = UUID("11111111-1111-4111-8111-111111111111")
+ASSIGNEE_ID = UUID("55555555-5555-4555-8555-555555555555")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 
 
-def _uow() -> FakeUnitOfWork:
+def _uow(*, assignee_id: UUID | None = None) -> FakeUnitOfWork:
     """One owned list holding one pending task, written straight into `stored`."""
     unit_of_work = FakeUnitOfWork()
     unit_of_work.task_list_repository.stored[LIST_ID] = TaskList.create(
         task_list_id=LIST_ID, owner_id=ACTOR_ID, name="Phase 4", now=NOW
     )
     unit_of_work.task_repository.stored[TASK_ID] = Task.create(
-        task_id=TASK_ID, task_list_id=LIST_ID, title="Hold the row", now=NOW
+        task_id=TASK_ID,
+        task_list_id=LIST_ID,
+        title="Hold the row",
+        assignee_id=assignee_id,
+        now=NOW,
     )
     return unit_of_work
 
@@ -112,6 +117,33 @@ async def test_change_task_status_holds_the_task_it_validates() -> None:
     await ChangeTaskStatus(unit_of_work, FrozenClock(NOW)).execute(
         ChangeTaskStatusCommand(
             actor_id=ACTOR_ID,
+            task_list_id=LIST_ID,
+            task_id=TASK_ID,
+            new_status=TaskStatus.IN_PROGRESS,
+        )
+    )
+
+    assert unit_of_work.task_repository.held_for_update == [TASK_ID]
+    assert unit_of_work.task_list_repository.held_for_update == []
+
+
+async def test_the_assignees_status_change_holds_the_task_and_no_list() -> None:
+    """The second actor who can now reach a write path (D-03, plan 05-04).
+
+    The assignee is not the owner of this list, so their request is answered by
+    the short-circuit in `access.py` and never reads the list at all - which
+    makes "holds no task list" true here for a second, stronger reason than it
+    is on the owner's path. Both halves are asserted anyway, because the claim
+    being kept is the lock-ordering rule, and it must survive a future change
+    that makes the assignee's leg consult the list again.
+
+    Plan 05-08 adds the `AssignTask` and `UnassignTask` cases beside this one.
+    """
+    unit_of_work = _uow(assignee_id=ASSIGNEE_ID)
+
+    await ChangeTaskStatus(unit_of_work, FrozenClock(NOW)).execute(
+        ChangeTaskStatusCommand(
+            actor_id=ASSIGNEE_ID,
             task_list_id=LIST_ID,
             task_id=TASK_ID,
             new_status=TaskStatus.IN_PROGRESS,

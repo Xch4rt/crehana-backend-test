@@ -40,6 +40,10 @@ OTHER_USER_ID = UUID("99999999-9999-4999-8999-999999999999")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 OTHER_LIST_ID = UUID("44444444-4444-4444-8444-444444444444")
+# The third role D-03 introduces. `OTHER_USER_ID` is the foreign *owner* in
+# these fixtures, so a caller who is neither owner nor assignee needs an
+# identifier of their own.
+STRANGER_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 
 def _uow(
@@ -47,6 +51,7 @@ def _uow(
     owner_id: UUID = ACTOR_ID,
     with_task: bool = True,
     stored_under: UUID = TASK_LIST_ID,
+    assignee_id: UUID | None = None,
 ) -> FakeUnitOfWork:
     """Assemble a unit of work holding the list, and optionally the task.
 
@@ -71,6 +76,7 @@ def _uow(
             task_list_id=stored_under,
             title="Delete me",
             priority=TaskPriority.HIGH,
+            assignee_id=assignee_id,
             now=NOW,
         )
         unit_of_work.task_repository.stored[task.id] = task
@@ -187,6 +193,72 @@ async def test_delete_task_hides_a_task_whose_list_the_actor_does_not_own() -> N
     assert TASK_ID in unit_of_work.task_repository.stored
     assert unit_of_work.commits == 0
     assert unit_of_work.rollbacks == 1
+
+
+async def test_delete_task_refuses_the_assignee_with_a_403() -> None:
+    """D-03: an assignee may work on a task, never destroy it.
+
+    This is the loudest of the four verbs to get wrong. An implementation that
+    kept the old visibility door would let a user who cannot even see the list
+    delete a row out of it, and would answer 204 - so the assertion that the
+    task is still stored matters as much as the exception.
+    """
+    unit_of_work = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    use_case = DeleteTask(unit_of_work)
+
+    with pytest.raises(DomainError) as excinfo:
+        await use_case.execute(_command())
+
+    error = excinfo.value
+    assert isinstance(error, AuthorizationError)
+    assert not isinstance(error, TaskNotFoundError)
+    assert str(OTHER_USER_ID) not in str(error)
+    assert unit_of_work.task_repository.deleted == []
+    assert TASK_ID in unit_of_work.task_repository.stored
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
+async def test_delete_task_still_hides_the_task_from_a_stranger() -> None:
+    """The forbidden leg exists in this fixture and this caller misses it."""
+    unit_of_work = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    use_case = DeleteTask(unit_of_work)
+
+    with pytest.raises(DomainError) as excinfo:
+        await use_case.execute(_command(actor_id=STRANGER_ID))
+
+    error = excinfo.value
+    assert isinstance(error, TaskNotFoundError)
+    assert not isinstance(error, AuthorizationError)
+    assert error.details == {"task_id": str(TASK_ID)}
+    assert unit_of_work.task_repository.deleted == []
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
+async def test_the_assignees_403_and_a_strangers_404_are_different_answers() -> None:
+    """The one comparison in this module that must find a difference.
+
+    Its siblings above produce two refusals and assert they match. This one
+    produces two from the identical fixture and asserts they do not, because a
+    use case that answered the assignee 404 would pass every other test here
+    while quietly dropping D-03.
+    """
+    assignee_uow = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    with pytest.raises(DomainError) as assignee_info:
+        await DeleteTask(assignee_uow).execute(_command())
+
+    stranger_uow = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    with pytest.raises(DomainError) as stranger_info:
+        await DeleteTask(stranger_uow).execute(_command(actor_id=STRANGER_ID))
+
+    forbidden, hidden = assignee_info.value, stranger_info.value
+    assert type(forbidden) is not type(hidden)
+    assert forbidden.code != hidden.code
+    assert isinstance(forbidden, AuthorizationError)
+    assert isinstance(hidden, TaskNotFoundError)
+    assert assignee_uow.task_repository.deleted == []
+    assert stranger_uow.task_repository.deleted == []
 
 
 def test_delete_task_declares_no_result_at_all() -> None:

@@ -52,6 +52,10 @@ OTHER_USER_ID = UUID("99999999-9999-4999-8999-999999999999")
 TASK_ID = UUID("22222222-2222-4222-8222-222222222222")
 TASK_LIST_ID = UUID("33333333-3333-4333-8333-333333333333")
 OTHER_LIST_ID = UUID("44444444-4444-4444-8444-444444444444")
+# The third role D-03 introduces. `OTHER_USER_ID` is the foreign *owner* in
+# these fixtures, so a caller who is neither owner nor assignee needs an
+# identifier of their own.
+STRANGER_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 TITLE = "Patch one task"
 NEW_TITLE = "Patch one task, partially"
@@ -71,6 +75,7 @@ def _uow(
     with_task: bool = True,
     stored_under: UUID = TASK_LIST_ID,
     due_date: datetime | None = None,
+    assignee_id: UUID | None = None,
 ) -> FakeUnitOfWork:
     """Assemble a unit of work holding both lists, and optionally the task.
 
@@ -97,6 +102,7 @@ def _uow(
             description=DESCRIPTION,
             priority=TaskPriority.LOW,
             due_date=due_date,
+            assignee_id=assignee_id,
             now=NOW,
         )
         unit_of_work.task_repository.stored[task.id] = task
@@ -381,6 +387,85 @@ async def test_update_task_hides_a_task_whose_list_the_actor_does_not_own() -> N
     assert unit_of_work.task_repository.stored[TASK_ID].title == TITLE
     assert unit_of_work.commits == 0
     assert unit_of_work.rollbacks == 1
+
+
+async def test_update_task_refuses_the_assignee_with_a_403() -> None:
+    """D-03: the assignee may advance the status and may not rewrite the task.
+
+    They can see this task - a `GET` and a `PATCH .../status` both answer 200 -
+    so the generic patch is the first request in this project that has to be
+    refused as forbidden rather than as absent.
+
+    `commits == 0` is asserted beside the exception because an authorization
+    refusal must make nothing durable, and the stored title is read back for the
+    same reason: "refused" and "wrote nothing" are two claims, and a use case
+    can satisfy one while failing the other.
+    """
+    unit_of_work = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    use_case = UpdateTask(unit_of_work, FrozenClock(LATER))
+
+    with pytest.raises(DomainError) as excinfo:
+        await use_case.execute(_command(title=NEW_TITLE))
+
+    error = excinfo.value
+    assert isinstance(error, AuthorizationError)
+    assert not isinstance(error, TaskNotFoundError)
+    assert str(OTHER_USER_ID) not in str(error)
+    assert unit_of_work.task_repository.updated == []
+    assert unit_of_work.task_repository.stored[TASK_ID].title == TITLE
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
+async def test_update_task_still_hides_the_task_from_a_stranger() -> None:
+    """The 403 is for the assignee alone; everybody else still sees nothing.
+
+    Somebody *is* assigned here, so the forbidden leg exists and this caller
+    still does not reach it - which is what separates this from the
+    foreign-list case above, written when no task could have an assignee.
+    """
+    unit_of_work = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    use_case = UpdateTask(unit_of_work, FrozenClock(LATER))
+
+    with pytest.raises(DomainError) as excinfo:
+        await use_case.execute(_command(title=NEW_TITLE, actor_id=STRANGER_ID))
+
+    error = excinfo.value
+    assert isinstance(error, TaskNotFoundError)
+    assert not isinstance(error, AuthorizationError)
+    assert error.details == {"task_id": str(TASK_ID)}
+    assert unit_of_work.task_repository.updated == []
+    assert unit_of_work.commits == 0
+    assert unit_of_work.rollbacks == 1
+
+
+async def test_the_assignees_403_and_a_strangers_404_are_different_answers() -> None:
+    """AUTH-06 is about a pair too, and this pair must *not* match.
+
+    Every other comparative test in this module produces two refusals and
+    asserts they are indistinguishable. This one produces two refusals from the
+    identical fixture - one actor assigned, one not - and asserts they differ in
+    class and in code, because a use case that answered the assignee 404 would
+    satisfy the sibling test above and silently drop D-03.
+    """
+    assignee_uow = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    with pytest.raises(DomainError) as assignee_info:
+        await UpdateTask(assignee_uow, FrozenClock(LATER)).execute(
+            _command(title=NEW_TITLE)
+        )
+
+    stranger_uow = _uow(owner_id=OTHER_USER_ID, assignee_id=ACTOR_ID)
+    with pytest.raises(DomainError) as stranger_info:
+        await UpdateTask(stranger_uow, FrozenClock(LATER)).execute(
+            _command(title=NEW_TITLE, actor_id=STRANGER_ID)
+        )
+
+    forbidden, hidden = assignee_info.value, stranger_info.value
+    assert type(forbidden) is not type(hidden)
+    assert forbidden.code != hidden.code
+    assert isinstance(forbidden, AuthorizationError)
+    assert isinstance(hidden, TaskNotFoundError)
+    assert assignee_uow.commits == stranger_uow.commits == 0
 
 
 async def test_the_refused_patches_answer_exactly_like_an_absent_task() -> None:

@@ -31,6 +31,15 @@ unconditionally, comparing old and new values first would put a second "did this
 actually change?" rule beside them, and D-06 refuses an empty body at the schema
 with a 422, so the no-field request never arrives over HTTP in the first place.
 
+**The door this verb comes through is the owner-only one (D-03).** Editing a
+task is a list owner's privilege; the task's assignee gets a 403 here, which is
+the first refusal in this project that is not a disguised 404. They keep the two
+things D-03 does grant them - reading the task, and advancing its state machine
+through the dedicated endpoint - and those two use cases deliberately stay on
+the wider guard. The whole difference between an assignee who may work on a task
+and one who may re-specify it is which of `access.py`'s two task guards is
+called on the line below.
+
 Nothing here re-validates a blank title, a length or a deadline: `rename`,
 `describe`, `reprioritise` and `reschedule` apply the same guards construction
 applied, and Phase 2 D-04 keeps every business limit in the entity exactly once.
@@ -41,7 +50,7 @@ from taskmanager.application.dto.results import TaskResult
 from taskmanager.application.dto.unset import UNSET
 from taskmanager.application.ports.clock import Clock
 from taskmanager.application.ports.unit_of_work import UnitOfWork
-from taskmanager.application.use_cases.access import visible_task
+from taskmanager.application.use_cases.access import owned_task
 
 
 class UpdateTask:
@@ -54,15 +63,17 @@ class UpdateTask:
     async def execute(self, command: UpdateTaskCommand) -> TaskResult:
         """Apply the provided fields, or raise the refusal that stops them."""
         async with self._uow:
-            # One call, four refusals, all of them `task_not_found`: absent,
-            # under another list (D-14), orphaned, or on a list this actor does
-            # not own. `access.py` argues each leg.
+            # One call, five refusals. Four are `task_not_found`: absent, under
+            # another list (D-14), orphaned, or on a list this actor neither
+            # owns nor has a task assigned to them in. The fifth is the 403 -
+            # the task's assignee can see it and may not rewrite it (D-03).
+            # `access.py` argues each leg.
             #
             # `for_update=True` because this is read-validate-write: the entity
             # must be the latest committed state and must stay so until the
             # commit below, or a concurrent writer is validated against a copy
             # that is already stale (ADR-058).
-            task = await visible_task(
+            task = await owned_task(
                 self._uow,
                 command.task_list_id,
                 command.task_id,
