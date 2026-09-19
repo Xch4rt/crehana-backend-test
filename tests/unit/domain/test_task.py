@@ -21,6 +21,8 @@ BOGOTA = timezone(timedelta(hours=-5))
 AWARE_NON_UTC_DUE = datetime(2026, 1, 2, 7, 0, tzinfo=BOGOTA)
 TASK_ID = UUID("11111111-1111-4111-8111-111111111111")
 TASK_LIST_ID = UUID("22222222-2222-4222-8222-222222222222")
+ASSIGNEE_ID = UUID("33333333-3333-4333-8333-333333333333")
+OTHER_ASSIGNEE_ID = UUID("44444444-4444-4444-8444-444444444444")
 
 # A name that is not a field, held in a constant so mypy does not reject the very
 # assignment this test exists to observe failing at runtime.
@@ -610,3 +612,77 @@ def test_task_default_priority_is_the_one_the_constructor_applies() -> None:
     )
 
     assert task.priority is Task.DEFAULT_PRIORITY
+
+
+def test_task_assign_sets_the_assignee_and_stamps_the_change() -> None:
+    """ASGN-02's mutation: one field moves, and the timestamp with it."""
+    task = _task()
+
+    task.assign(ASSIGNEE_ID, now=LATER)
+
+    assert task.assignee_id == ASSIGNEE_ID
+    assert task.updated_at == LATER
+
+
+def test_task_assign_replaces_an_existing_assignee() -> None:
+    """Reassignment is a plain overwrite; the entity holds no history."""
+    task = _task()
+    task.assign(ASSIGNEE_ID, now=LATER)
+
+    task.assign(OTHER_ASSIGNEE_ID, now=EVEN_LATER)
+
+    assert task.assignee_id == OTHER_ASSIGNEE_ID
+    assert task.updated_at == EVEN_LATER
+
+
+def test_task_unassign_clears_the_assignee_and_stamps_the_change() -> None:
+    """Clearing is the same mutation with `None` as the value."""
+    task = _task()
+    task.assign(ASSIGNEE_ID, now=LATER)
+
+    task.unassign(now=EVEN_LATER)
+
+    assert task.assignee_id is None
+    assert task.updated_at == EVEN_LATER
+
+
+def test_task_unassign_on_an_unassigned_task_still_moves_the_timestamp() -> None:
+    """The entity has no no-op rule, unlike `change_status` (D-02).
+
+    D-07's idempotent assignment has to skip a commit and an email as well as a
+    field, so it lives in the `AssignTask` use case. Asserting the stamp moves
+    here is what stops a later reader from "fixing" the asymmetry by adding a
+    same-value guard the use case has already made unnecessary.
+    """
+    task = _task()
+    assert task.assignee_id is None
+
+    task.unassign(now=LATER)
+
+    assert task.assignee_id is None
+    assert task.updated_at == LATER
+
+
+def test_task_assign_with_a_naive_now_changes_nothing() -> None:
+    """A UUID is typed, so only the `now` guard can refuse this call."""
+    task = _task()
+    before = (task.assignee_id, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.assign(ASSIGNEE_ID, now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task.assignee_id, task.updated_at) == before
+
+
+def test_task_unassign_with_a_naive_now_changes_nothing() -> None:
+    """The guard runs before the first assignment, as in `rename`."""
+    task = _task()
+    task.assign(ASSIGNEE_ID, now=LATER)
+    before = (task.assignee_id, task.updated_at)
+
+    with pytest.raises(ValidationError) as excinfo:
+        task.unassign(now=NAIVE_NOW)
+
+    assert excinfo.value.details == {"field": "now"}
+    assert (task.assignee_id, task.updated_at) == before

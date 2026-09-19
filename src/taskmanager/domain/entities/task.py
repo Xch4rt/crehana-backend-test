@@ -31,8 +31,9 @@ class Task:
     """A unit of work inside a task list, and the rules it enforces on itself.
 
     There is one mutator per field a caller may change - `rename`, `describe`,
-    `reprioritise`, `reschedule` and `change_status` - each following the same
-    `now` keyword convention. `status` deliberately has no setter beyond
+    `reprioritise`, `reschedule`, `assign`, `unassign` and `change_status` -
+    each following the same `now` keyword convention. `status` deliberately has
+    no setter beyond
     `change_status`: the state machine is the reason this entity exists, and a
     plain assignment would route around it (TASK-03).
     """
@@ -58,9 +59,9 @@ class Task:
     description: str | None = None
     due_date: datetime | None = None
     completed_at: datetime | None = None
-    # Declared now so no later phase has to reopen the entity. Assignment
-    # behaviour itself arrives in Phase 5 (ASGN-02); nothing in this phase
-    # writes this field beyond carrying what the caller supplied.
+    # Declared in Phase 2 so no later phase had to reopen the entity; written
+    # by `assign` and `unassign` since Phase 5 (ASGN-02). It stays optional
+    # because an unassigned task is the ordinary case, not a defect.
     assignee_id: UUID | None = None
 
     def __post_init__(self) -> None:
@@ -174,6 +175,39 @@ class Task:
         # this project's coverage norm would then have to excuse with a pragma.
         moment = require_utc(now, field="now")
         self.priority = priority
+        self.updated_at = moment
+
+    def assign(self, assignee_id: UUID, *, now: datetime) -> None:
+        """Hand the task to a user and stamp the change (ASGN-02).
+
+        There is no value guard here, for the same reason `reprioritise` has
+        none: a `UUID` parameter is already the constraint the enum is there,
+        and whether that user *exists* is a different question entirely - one
+        that needs a repository, which the entity has no access to and must not
+        acquire. A defensive check would be a branch no test could reach, which
+        this project's no-pragma coverage norm could not excuse.
+
+        The entity deliberately has **no** same-assignee no-op, unlike
+        `change_status`: D-07's idempotence has to skip a commit and an
+        assignment email as well as a field, so it lives in the `AssignTask` use
+        case, which is the layer that owns all three. The asymmetry is named
+        here so a later reader does not "fix" it by adding a guard that would
+        make the use case's own no-op untestable.
+        """
+        # The guard runs before the first assignment, as in `rename`: a refused
+        # call must leave the in-memory aggregate byte-identical.
+        moment = require_utc(now, field="now")
+        self.assignee_id = assignee_id
+        self.updated_at = moment
+
+    def unassign(self, *, now: datetime) -> None:
+        """Take the task back off its assignee and stamp the change.
+
+        Clearing an already-clear assignee still moves `updated_at`; see
+        `assign` for why the entity carries no no-op of its own.
+        """
+        moment = require_utc(now, field="now")
+        self.assignee_id = None
         self.updated_at = moment
 
     def reschedule(self, due_date: datetime | None, *, now: datetime) -> None:

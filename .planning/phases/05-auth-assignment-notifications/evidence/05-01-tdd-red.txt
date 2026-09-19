@@ -29,3 +29,31 @@ tests/unit/domain/test_validation.py:8: error: Module "taskmanager.domain.valida
 tests/unit/domain/test_validation.py:8: error: Module "taskmanager.domain.validation" has no attribute "PASSWORD_MIN_LENGTH"  [attr-defined]
 tests/unit/domain/test_validation.py:8: error: Module "taskmanager.domain.validation" has no attribute "require_password"  [attr-defined]
 Found 3 errors in 1 file (checked 141 source files)
+
+================================================================
+# 05-01 Task 2 TDD RED - Task.assign / Task.unassign do not exist yet
+# Captured 2026-09-19T14:32:30Z on the developer host.
+
+$ .venv/bin/pytest tests/unit/domain/test_task.py -q --no-cov
+        ^^^^^^^^^^^
+E       AttributeError: 'Task' object has no attribute 'assign'
+
+tests/unit/domain/test_task.py:681: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/domain/test_task.py::test_task_assign_sets_the_assignee_and_stamps_the_change
+FAILED tests/unit/domain/test_task.py::test_task_assign_replaces_an_existing_assignee
+FAILED tests/unit/domain/test_task.py::test_task_unassign_clears_the_assignee_and_stamps_the_change
+FAILED tests/unit/domain/test_task.py::test_task_unassign_on_an_unassigned_task_still_moves_the_timestamp
+FAILED tests/unit/domain/test_task.py::test_task_assign_with_a_naive_now_changes_nothing
+FAILED tests/unit/domain/test_task.py::test_task_unassign_with_a_naive_now_changes_nothing
+6 failed, 46 passed in 0.06s
+
+$ .venv/bin/mypy src tests
+tests/unit/domain/test_task.py:632: error: "Task" has no attribute "assign"  [attr-defined]
+tests/unit/domain/test_task.py:641: error: "Task" has no attribute "assign"  [attr-defined]
+tests/unit/domain/test_task.py:643: error: "Task" has no attribute "unassign"  [attr-defined]
+tests/unit/domain/test_task.py:660: error: "Task" has no attribute "unassign"  [attr-defined]
+tests/unit/domain/test_task.py:672: error: "Task" has no attribute "assign"  [attr-defined]
+tests/unit/domain/test_task.py:681: error: "Task" has no attribute "assign"  [attr-defined]
+tests/unit/domain/test_task.py:685: error: "Task" has no attribute "unassign"  [attr-defined]
+Found 9 errors in 1 file (checked 141 source files)
