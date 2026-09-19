@@ -85,17 +85,31 @@ warnings; re-verification passed 6/6. Four info-level review items remain open (
       the `EmailNotifier` port after the commit as one JSON log line; a failing notifier never
       undoes the assignment
 
+Validated in Phase 6: Test Hardening & Coverage (2026-09-19) — TEST-01..05 verified, 1101 tests,
+100% over 1659 statements on the host, `make break-check` reddens all five deliberate breaks.
+Code review found that an unanchored coverage exclusion had been hiding four function bodies
+from the denominator (fixed, ADR-092) and that the break check accepted any non-zero exit as
+red (fixed, ADR-093). The first verification found a gap (the permission matrix's mutations
+went through `client.request` and sat outside the re-read gate); plan 06-05 closed it
+(ADR-096) and re-verification passed 5/5. Seven review warnings remain open as recorded
+follow-ups (see 06-REVIEW.md).
+- [x] Tests with pytest — 777 unit tests against in-memory fakes, 324 integration tests over
+      HTTP against real PostgreSQL, partitioned by marker (`make test-unit` needs no database)
+- [x] Unit and integration testing with pytest — totality gates make "every use case, every
+      endpoint, every error code, every invalid transition" a build failure rather than a
+      claim; an assertion-quality gate requires a body assertion and a re-read after a mutation
+- [x] Coverage >= 75%, enforced — `--cov-fail-under=75` in `pytest.ini`, the configuration
+      pinned by a test, no pragma and no omit
+
 ### Active
 
 **Mandatory — stack (PDF "Requisitos")**
 - [ ] Python + FastAPI
-- [ ] Tests with pytest
 - [ ] flake8 as linter, black as formatter
 
 **Mandatory — project structure (PDF 2)**
 - [ ] Clean layered structure: Domain, Application/UseCases, Infrastructure
 - [ ] Business validations
-- [ ] Unit and integration testing with pytest
 - [ ] Complete README + DECISION_LOG.md explaining technical decisions
 
 **Mandatory — tooling files (PDF 3-6)**
@@ -192,4 +206,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-19 after Phase 5 (Auth, Assignment & Notifications) completion*
+*Last updated: 2026-09-19 after Phase 6 (Test Hardening & Coverage) completion*

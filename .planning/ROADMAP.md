@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Persistence & Runnable Stack** - PostgreSQL, Alembic, UnitOfWork and a one-command `docker compose up`
 - [x] **Phase 4: Task Lists & Tasks** - The full brief 1.a vertical slice: CRUD, status changes, filters, completion percentage
 - [x] **Phase 5: Auth, Assignment & Notifications** - JWT login, ownership rules, task assignment and the simulated invitation email (completed 2026-09-19)
-- [ ] **Phase 6: Test Hardening & Coverage** - Tests that actually prove behaviour, with the ≥75% gate genuinely met
+- [x] **Phase 6: Test Hardening & Coverage** - Tests that actually prove behaviour, with the ≥75% gate genuinely met (completed 2026-09-19)
 - [ ] **Phase 7: Documentation & Delivery** - README, DECISION_LOG, AI_WORKFLOW, clean-clone rehearsal and a public repo
 
 ## Phase Details
@@ -361,7 +361,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
-| 6. Test Hardening & Coverage | 4/4 | In progress | - |
+| 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
 
 ## Standing Rules

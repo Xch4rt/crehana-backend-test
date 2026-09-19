@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 6 executing (5 plans, 5 sequential waves) — the 06-VERIFICATION gap on SC-3 is closed by 06-05, awaiting phase re-verification
-last_updated: 2026-09-20T00:40:00.000Z
-last_activity: 2026-09-19 -- 06-05 complete (gap closure): the assertion-quality gate now resolves client.request(<verb>, ...) and treats a verb it cannot read as a mutation, so the 76-cell permission matrix is inside half (b) instead of invisible to it; every successful cell asserts the document its status promises and each of the ten mutating rows re-reads its change through the API, guarded both ways by ROWS_THAT_CONFIRM; ADR-096, one CLAUDE.md bullet, one incident entry; 1101 passed, 100.00% over 1659 statements, no src/ change
+status: ready_to_plan
+stopped_at: Phase 6 complete (5/5 plans, verification passed 5/5 after gap closure 06-05) — ready to plan Phase 7
+last_updated: 2026-09-20T01:10:00.000Z
+last_activity: 2026-09-19 -- Phase 06 complete: 5/5 plans, code review criticals CR-01/CR-02 fixed, re-verification passed 5/5; 1101 passed, 100% over 1659 statements
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 60
   completed_plans: 60
   percent: 100
@@ -22,29 +22,17 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 6 — test hardening & coverage
+**Current focus:** Phase 7 — documentation & delivery
 
 ## Current Position
 
-Phase: 6
-Plan: 5 of 5 complete (06-01, 06-02, 06-03, 06-04, 06-05)
-Status: Executing Phase 06 -- gap closed, awaiting re-verification
-Last activity: 2026-09-19 -- 06-05 complete, the gap closure 06-VERIFICATION.md asked for: the
-assertion-quality gate matched the attribute name, so the permission matrix's seventy-six
-mutations - all issued through client.request(cell.row.method, ...) - sat outside half (b) while
-the gate reported zero offenders, and the matrix's successful mutating cells asserted only that a
-challenge header was absent. The verb is now resolved from the call's first argument or its
-method= keyword and an unreadable verb counts as a mutation; every 2xx cell asserts the document
-its status promises; each of the ten mutating rows re-reads its change through the API, with
-ROWS_THAT_CONFIRM / ROWS_THAT_MUTATE_NOTHING compared both ways. Proved by removal: with the
-re-reads gone the widened gate names test_permission_matrix.py:704, where the same tree was green
-before. No src/ change - the gap was in what the suite proved, not in what the product did
+Phase: 7
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-19 -- Phase 06 complete (5/5 plans) after gap closure 06-05 and a passing re-verification (5/5); code review criticals CR-01 (unanchored coverage exclusion) and CR-02 (break-check verdict) fixed, seven review warnings recorded as follow-ups in ADR-096
 
 Progress: [██████████] 100%
 
-The ROADMAP phase checkbox for Phase 6, its Progress-table status cell and its completion
-date are deliberately untouched: they belong to the orchestrator after RE-verification, which
-this plan does not perform and does not pre-empt.
 `total_plans` counts planned plans only - phase 7 is not yet planned, so 60/60 means
 "every plan written so far has been executed", not a finished milestone.
 
