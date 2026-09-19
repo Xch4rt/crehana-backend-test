@@ -16,6 +16,11 @@ alembic==1.20.0
 # Authentication and hashing
 PyJWT==2.14.0
 pwdlib[argon2]==0.3.1
+# anyio is imported directly by infrastructure/security/passwords.py, which runs
+# Argon2 off the event loop, and is deliberately NOT given its own exact pin: it
+# is a hard transitive dependency of Starlette, which the FastAPI pin above
+# already fixes, so a second pin here could only ever contradict it. Same
+# convention requirements-dev.txt records for coverage and grimp.
 
 # Form parsing and email validation used by the API boundary
 python-multipart==0.0.32
