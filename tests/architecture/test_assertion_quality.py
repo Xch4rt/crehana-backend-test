@@ -28,9 +28,33 @@ contain at least one assertion that is not about the status code, where
   body is genuinely not the behaviour under test.
 
 There is no per-test opt-out for this half, which is D-07's rule and is only
-affordable because the rule above is stated correctly. Half (b), the re-read
-rule, has one - a registered marker, gated three ways - because a handful of
-tests provably have nothing to read back.
+affordable because the rule above is stated correctly.
+
+Half (b) is the second standard: a test that issues POST, PUT, PATCH or DELETE
+through a client must read the resource back with a `client.get(...)` **after**
+its last mutation. The "after" carries the rule - the rejected-mutation leg
+captures `before` with a read above the mutation and asserts `after == before`
+below it, and a check that accepted any read anywhere would count the `before`
+and let the half that actually says "unchanged" go missing.
+
+Half (b) has an escape hatch, because ten tests provably have nothing a `GET`
+can observe: `POST /auth/login` mutates no resource, and the five notification
+tests assert on a log record no route publishes. It is `@pytest.mark.no_reread`
+and it is gated three ways so it cannot become a blanket skip: the reason must
+be a non-empty string literal; the test's node id must appear in
+`REQUIRED_NO_REREAD` below, so granting an exemption means editing this file in
+the same commit; and a companion test fails if a listed id disappears, loses its
+marker, loses its reason, *or stops needing the exemption at all* - if someone
+adds a re-read to an exempted test, the entry becomes a hole with no reason left
+and the gate says so.
+
+Deliberately NOT used: a blanket `skip`, a file-level opt-out, or a
+`# type: ignore`-style inline comment. All three are exemptions that never have
+to justify themselves again, and an exemption nobody has to re-earn is a hole
+rather than a rule (D-07). The precedent is `EXEMPT_MODULES` in
+`test_routers_raise_no_http_exception.py`, whose companion test fails when its
+one exemption outlives its reason; this marker copies that shape and adds the
+fourth assertion, that the exemption is still *needed*.
 
 Deliberately NOT used: the naive scan - "a test mentioning `.status_code` with no
 literal `.json()` inside an `assert`". It was prototyped in 06-RESEARCH.md and
@@ -67,6 +91,7 @@ and 06-01.
 """
 
 import ast
+import copy
 from pathlib import Path
 from typing import Final
 
@@ -124,6 +149,52 @@ BODY_MEMBERS: Final[frozenset[str]] = frozenset({"json", "headers", "text", "con
 # `test_assignment.py`'s notification tests and `test_statements.py`'s recorder.
 # Named, and each name earns its place by being a real fixture some test takes.
 RECORDER_FIXTURES: Final[frozenset[str]] = frozenset({"caplog", "statements"})
+
+# The marker that exempts a test from half (b), registered in `pytest.ini`
+# because `--strict-markers` is on. Half (a) has no marker and never will.
+MARKER_NAME: Final[str] = "no_reread"
+
+# The whole of half (b)'s escape hatch, named. A marker on a test absent from
+# this set fails the gate, so granting an exemption means editing this file in
+# the same commit - exactly as `EXPECTED_CONTRACT_NAMES` and
+# `REQUIRED_SCANNED_MODULES` already work. Each entry carries the reason no
+# `GET` can observe it, and `test_every_registered_exemption_still_needs_it`
+# fails the moment one of them stops being true.
+REQUIRED_NO_REREAD: Final[frozenset[str]] = frozenset(
+    {
+        # POST /auth/login mutates nothing at all: there is no resource a GET
+        # could read back. Three of the five register an account first, and that
+        # register is setup rather than the subject - its persistence is proved
+        # by `test_register_then_login_then_get_me_reads_back_the_same_profile`,
+        # and in two of the three the successful login *is* the read, which this
+        # gate cannot see because a login is spelled as a POST.
+        "tests/integration/api/test_auth.py"
+        "::test_login_answers_a_bearer_token_and_the_configured_lifetime",
+        "tests/integration/api/test_auth.py"
+        "::test_login_without_a_password_is_422_and_does_not_echo_the_username",
+        "tests/integration/api/test_auth.py"
+        "::test_login_with_an_unknown_address_and_with_a_wrong_password_"
+        "are_indistinguishable",
+        "tests/integration/api/test_auth.py"
+        "::test_login_with_an_unstorable_username_is_the_same_401",
+        "tests/integration/api/test_permission_matrix.py"
+        "::test_login_refuses_a_bad_credential_from_an_anonymous_caller",
+        # The five notification tests. Their subject is the log record the
+        # adapter emits, which no route publishes; the assignment's persistence
+        # is proved next door by
+        # `test_a_notifier_failure_leaves_the_assignment_committed` and by the
+        # four assign/unassign tests that do re-read.
+        "tests/integration/api/test_assignment.py"
+        "::test_assigning_notifies_the_new_assignee_with_one_structured_record",
+        "tests/integration/api/test_assignment.py"
+        "::test_the_notification_renders_as_one_parseable_json_line",
+        "tests/integration/api/test_assignment.py"
+        "::test_a_title_carrying_a_newline_still_notifies_on_a_single_line",
+        "tests/integration/api/test_assignment.py"
+        "::test_assigning_the_same_user_again_notifies_nobody",
+        "tests/integration/api/test_assignment.py::test_unassigning_notifies_nobody",
+    }
+)
 
 # The HTTP verbs a client is asked for. `get` is separated out because half (b)
 # needs it by itself: it is the only one that proves an end state.
@@ -436,6 +507,96 @@ def status_only_offenders(
     ]
 
 
+def _node_id(path: Path, node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """`file::test`, the address a reader can paste straight into `pytest`.
+
+    The parametrized form (`...[case]`) is deliberately not used: this gate reads
+    source rather than collected items, and an exemption is about the test
+    function, never about one of its cases. A marker on a parametrized test
+    exempts every case, which is the honest reading of the marker anyway.
+    """
+    return f"{_relative(path)}::{node.name}"
+
+
+def _no_reread_decorators(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[ast.expr]:
+    """Every decorator on this test that is the exemption marker.
+
+    Matched on the last dotted segment, so `@pytest.mark.no_reread` and a
+    `from pytest import mark` spelling both resolve, and a bare
+    `@pytest.mark.no_reread` with no call is *found* rather than ignored - which
+    is what lets the reason check below report it instead of a marker with no
+    reason quietly passing as no marker at all.
+    """
+    return [
+        decorator
+        for decorator in node.decorator_list
+        if ast.unparse(decorator).split("(")[0].split(".")[-1] == MARKER_NAME
+    ]
+
+
+def _reason(decorator: ast.expr) -> str | None:
+    """The marker's reason, if it is a non-empty string literal."""
+    if not isinstance(decorator, ast.Call) or not decorator.args:
+        return None
+    first = decorator.args[0]
+    if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+        return None
+    return first.value or None
+
+
+def marked_tests(
+    path: Path, tree: ast.Module
+) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Every test in this tree carrying the exemption marker, by node id."""
+    return {
+        _node_id(path, node): node
+        for node in _functions(tree)
+        if node.name.startswith("test_") and _no_reread_decorators(node)
+    }
+
+
+def reason_offenders(path: Path, tree: ast.Module) -> list[str]:
+    """`file:line` for every marker whose reason is missing or empty.
+
+    The first of the three gates on the escape hatch. A marker applied bare, or
+    with `""`, or with a name instead of a literal, is a blanket skip wearing a
+    justification's clothes.
+    """
+    return [
+        _location(path, node)
+        for node in _functions(tree)
+        for decorator in _no_reread_decorators(node)
+        if _reason(decorator) is None
+    ]
+
+
+def no_reread_offenders(path: Path, tree: ast.Module) -> list[str]:
+    """`file:line` for every mutating test that never reads its change back.
+
+    A test is an offender when it issues POST, PUT, PATCH or DELETE through a
+    client and no `client.get(...)` appears *after* its last mutation. The
+    "after" is the whole point: the rejected-mutation leg captures `before` with
+    a read above the mutation, and a gate that accepted any read anywhere would
+    count that one and let the `after == before` half go missing - which is the
+    only half that says the resource is unchanged.
+    """
+    offenders = []
+    for node in http_tests(tree):
+        if _no_reread_decorators(node):
+            continue
+        requests = requests_made(node)
+        mutations = [line for verb, line in requests if verb in MUTATING_VERBS]
+        if not mutations:
+            continue
+        reads = [line for verb, line in requests if verb == READ_VERB]
+        if reads and max(reads) > max(mutations):
+            continue
+        offenders.append(_location(path, node))
+    return offenders
+
+
 def test_the_http_suite_is_actually_scanned() -> None:
     """A glob that matches nothing passes vacuously; assert it matched the tree.
 
@@ -490,7 +651,128 @@ def test_no_http_test_asserts_only_a_status_code() -> None:
     )
 
 
+def test_no_mutating_test_leaves_its_change_unread() -> None:
+    """Half (b) of D-06: "it was written" is a fact about the database."""
+    offenders = [
+        offender
+        for path in _test_modules()
+        for offender in no_reread_offenders(path, _parsed(path))
+    ]
+
+    assert offenders == [], (
+        "Every test that mutates through the API must read the resource back "
+        "with a GET after its last mutation, so that the change is a fact about "
+        "the database rather than about the return value of the handler that "
+        "claimed to make it. A rejected mutation proves the resource is "
+        "unchanged; a successful one proves the end state; a DELETE proves the "
+        "404. If no GET can observe it, mark the test "
+        f"@pytest.mark.{MARKER_NAME}(...) and register it in "
+        f"REQUIRED_NO_REREAD (D-06, D-07). Offending tests: {offenders}"
+    )
+
+
+def test_every_exemption_marker_carries_a_non_empty_reason() -> None:
+    """Gate one of three on the escape hatch: a reason, in English, per test."""
+    offenders = [
+        offender
+        for path in _test_modules()
+        for offender in reason_offenders(path, _parsed(path))
+    ]
+
+    assert offenders == [], (
+        f"@pytest.mark.{MARKER_NAME} takes one argument: a non-empty string "
+        "literal saying why no GET can observe this test's mutation. A bare "
+        "marker, an empty string or a name instead of a literal is a blanket "
+        f"skip wearing a justification's clothes (D-07). Offenders: {offenders}"
+    )
+
+
+def test_every_exemption_marker_is_registered_in_this_module() -> None:
+    """Gate two of three: the marker and the frozenset move in one commit.
+
+    Compared as an equality in both directions. A marker added to a test that is
+    not listed here is an exemption granted without anyone editing the gate; an
+    id listed here whose test no longer carries the marker is a stale entry, and
+    no weaker comparison catches the second.
+    """
+    marked = {
+        node_id
+        for path in _test_modules()
+        for node_id in marked_tests(path, _parsed(path))
+    }
+
+    assert marked == REQUIRED_NO_REREAD
+
+
+def test_every_registered_exemption_still_needs_it() -> None:
+    """Gate three of three: an exemption cannot outlive its reason.
+
+    Four things are asserted about every entry, and the fourth is the one the
+    analog in `test_routers_raise_no_http_exception.py` does not have: the test
+    must still be an offender *without* its marker. If a re-read is ever added to
+    an exempted test - which would be an improvement - the entry becomes a hole
+    with no reason left, and this fails until it is removed.
+    """
+    assert REQUIRED_NO_REREAD
+
+    found: dict[str, str] = {}
+    for path in _test_modules():
+        tree = _parsed(path)
+        unmarked = no_reread_offenders(path, _strip_markers(tree))
+        for node_id, node in marked_tests(path, tree).items():
+            reasons = [_reason(one) for one in _no_reread_decorators(node)]
+            assert reasons and all(reasons), f"{node_id} has no usable reason"
+            assert _location(path, node) in unmarked, (
+                f"{node_id} reads its mutation back and no longer needs its "
+                f"{MARKER_NAME} marker; remove both"
+            )
+            found[node_id] = node_id
+
+    assert REQUIRED_NO_REREAD <= set(found), (
+        "these node ids are registered as exempt and no longer exist: "
+        f"{sorted(REQUIRED_NO_REREAD - set(found))}"
+    )
+
+
+def test_the_marker_is_registered_with_pytest() -> None:
+    """`--strict-markers` is on, so an unregistered marker errors at collection.
+
+    Read out of `pytest.ini` rather than trusted, because the failure it
+    prevents is not a red test but a whole module that cannot be collected.
+    """
+    registered = {
+        line.strip().split("(")[0].split(":")[0]
+        for line in (TESTS.parent / "pytest.ini")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.startswith("    ") and ":" in line
+    }
+
+    assert MARKER_NAME in registered, f"registered markers found: {sorted(registered)}"
+
+
 _TASK_LISTS = HTTP_TESTS / "test_task_lists.py"
+
+
+def _strip_markers(tree: ast.Module) -> ast.Module:
+    """The same tree with every exemption marker removed.
+
+    Used by the companion test above to ask what the gate would say about an
+    exempted test if it were not exempt - which is the only way to check that the
+    exemption is still needed rather than merely still present.
+
+    A deep copy rather than a re-parse of `ast.unparse(tree)`: unparsing
+    renumbers every line, and the answer is compared against `file:line` taken
+    from the original tree.
+    """
+    stripped = copy.deepcopy(tree)
+    for node in _functions(stripped):
+        node.decorator_list = [
+            decorator
+            for decorator in node.decorator_list
+            if ast.unparse(decorator).split("(")[0].split(".")[-1] != MARKER_NAME
+        ]
+    return stripped
 
 
 def _status_only_in(source: str, *, cross_module: bool = True) -> list[str]:
@@ -640,3 +922,103 @@ def test_the_real_helpers_are_found_where_the_suite_defines_them() -> None:
     helpers = response_helpers(_parsed(_TASK_LISTS))
 
     assert {"anonymised", "assert_not_found"} <= helpers
+
+
+def _no_reread_in(source: str) -> list[str]:
+    """The half (b) offenders in a planted snippet, as `file:line`."""
+    return no_reread_offenders(HTTP_TESTS / "planted.py", ast.parse(source))
+
+
+def _reasons_in(source: str) -> list[str]:
+    """The reason offenders in a planted snippet, as `file:line`."""
+    return reason_offenders(HTTP_TESTS / "planted.py", ast.parse(source))
+
+
+_A_MUTATION = (
+    "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+    "    client, _ = api_client\n"
+    "    response = await client.patch('/x', json={'name': 'Weekly'})\n"
+    "    assert response.json()['name'] == 'Weekly'\n"
+)
+
+
+def test_a_mutation_with_no_read_is_an_offender() -> None:
+    """The shape the sweep removed twenty-nine of."""
+    assert _no_reread_in(_A_MUTATION) == ["tests/integration/api/planted.py:1"]
+
+
+def test_a_mutation_followed_by_a_read_is_not_an_offender() -> None:
+    """The shape the sweep left behind."""
+    assert (
+        _no_reread_in(
+            _A_MUTATION + "    after = (await client.get('/x')).json()\n"
+            "    assert after['name'] == 'Weekly'\n"
+        )
+        == []
+    )
+
+
+def test_a_read_before_the_mutation_and_none_after_is_still_an_offender() -> None:
+    """The `before` half of the rejected-mutation leg is not the re-read.
+
+    This is the assertion that makes the gate worth having on the rejected leg: a
+    check that accepted any `client.get` anywhere would count the `before` and
+    let the `after == before` that actually says "unchanged" go missing.
+    """
+    assert _no_reread_in(
+        "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+        "    client, _ = api_client\n"
+        "    before = (await client.get('/x')).json()\n"
+        "    response = await client.patch('/x', json={})\n"
+        "    assert response.json()['code'] == 'validation_error'\n"
+    ) == ["tests/integration/api/planted.py:1"]
+
+
+def test_a_read_only_test_is_not_an_offender() -> None:
+    """Half (b) is about mutations; a GET has nothing to read back."""
+    assert (
+        _no_reread_in(
+            "async def test_planted(api_client: tuple[AsyncClient, FastAPI]) -> None:\n"
+            "    client, _ = api_client\n"
+            "    response = await client.get('/x')\n"
+            "    assert response.json() == []\n"
+        )
+        == []
+    )
+
+
+def test_a_marked_test_is_not_an_offender() -> None:
+    """The escape hatch works - and the next three tests are why it is not a hole."""
+    marked = f'@pytest.mark.{MARKER_NAME}("login mutates nothing")\n' + _A_MUTATION
+
+    assert _no_reread_in(marked) == []
+    assert _reasons_in(marked) == []
+
+
+def test_a_marker_with_an_empty_reason_is_a_reason_offender() -> None:
+    """Gate one, on a snippet: `""` is not a justification."""
+    assert _reasons_in(f'@pytest.mark.{MARKER_NAME}("")\n' + _A_MUTATION) == [
+        "tests/integration/api/planted.py:2"
+    ]
+
+
+def test_a_bare_marker_with_no_reason_is_a_reason_offender() -> None:
+    """A marker applied without a call is found and reported, never ignored."""
+    assert _reasons_in(f"@pytest.mark.{MARKER_NAME}\n" + _A_MUTATION) == [
+        "tests/integration/api/planted.py:2"
+    ]
+
+
+def test_a_reason_that_is_a_name_rather_than_a_literal_is_a_reason_offender() -> None:
+    """A literal, so that the reason is readable in the file it exempts."""
+    assert _reasons_in(f"@pytest.mark.{MARKER_NAME}(REASON)\n" + _A_MUTATION) == [
+        "tests/integration/api/planted.py:2"
+    ]
+
+
+def test_the_marker_is_matched_through_an_aliased_mark_import() -> None:
+    """`from pytest import mark` binds the same marker under a shorter name."""
+    assert (
+        _no_reread_in(f"@mark.{MARKER_NAME}('login mutates nothing')\n" + _A_MUTATION)
+        == []
+    )

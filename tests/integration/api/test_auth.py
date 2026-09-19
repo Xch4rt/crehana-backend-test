@@ -349,6 +349,13 @@ async def test_register_with_an_unknown_key_is_one_extra_forbidden_error(
     assert NEW_EMAIL not in after.text
 
 
+@pytest.mark.no_reread(
+    "POST /auth/login mutates no resource, so there is nothing to read back. The\n"
+    "register above is setup; its persistence is proved by\n"
+    "test_register_then_login_then_get_me_reads_back_the_same_profile, and the\n"
+    "successful login below is itself that re-read - spelled as a POST, which is\n"
+    "why the gate cannot see it."
+)
 async def test_login_answers_a_bearer_token_and_the_configured_lifetime(
     authenticated_client: tuple[AsyncClient, FastAPI],
 ) -> None:
@@ -379,6 +386,11 @@ async def test_login_answers_a_bearer_token_and_the_configured_lifetime(
     assert PASSWORD not in response.text
 
 
+@pytest.mark.no_reread(
+    "POST /auth/login mutates no resource, and this leg never reaches the use\n"
+    "case at all: the form is refused at the boundary, so there is no state for a\n"
+    "GET to be about."
+)
 async def test_login_without_a_password_is_422_and_does_not_echo_the_username(
     authenticated_client: tuple[AsyncClient, FastAPI],
 ) -> None:
@@ -405,6 +417,11 @@ async def test_login_without_a_password_is_422_and_does_not_echo_the_username(
     assert ghost not in response.text
 
 
+@pytest.mark.no_reread(
+    "POST /auth/login mutates no resource. The register above is setup, proved by\n"
+    "test_register_then_login_then_get_me_reads_back_the_same_profile; what this\n"
+    "test asserts is that two refusals are one document, which no GET can show."
+)
 async def test_login_with_an_unknown_address_and_with_a_wrong_password_are_indistinguishable(  # noqa: E501
     authenticated_client: tuple[AsyncClient, FastAPI],
 ) -> None:
@@ -448,6 +465,11 @@ async def test_login_with_an_unknown_address_and_with_a_wrong_password_are_indis
     assert PASSWORD not in wrong_password.text
 
 
+@pytest.mark.no_reread(
+    "POST /auth/login mutates no resource, and the point of this test is that the\n"
+    "NUL never reached a statement. The register above is setup, proved by\n"
+    "test_register_then_login_then_get_me_reads_back_the_same_profile."
+)
 async def test_login_with_an_unstorable_username_is_the_same_401(
     authenticated_client: tuple[AsyncClient, FastAPI],
 ) -> None:

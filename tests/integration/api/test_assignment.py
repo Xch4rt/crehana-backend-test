@@ -953,6 +953,12 @@ def extras(record: logging.LogRecord) -> dict[str, Any]:
     return vars(record)
 
 
+@pytest.mark.no_reread(
+    "The subject is the log record the notifier emits, which no route publishes.\n"
+    "The assignment's persistence is proved by\n"
+    "test_a_notifier_failure_leaves_the_assignment_committed and by the four\n"
+    "assign/unassign tests above, each of which re-reads the task."
+)
 async def test_assigning_notifies_the_new_assignee_with_one_structured_record(
     authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
@@ -997,6 +1003,10 @@ async def test_assigning_notifies_the_new_assignee_with_one_structured_record(
     assert "Buy milk" in fields["body"]
 
 
+@pytest.mark.no_reread(
+    "The subject is the rendered log line, which no route publishes. Persistence\n"
+    "is proved by test_a_notifier_failure_leaves_the_assignment_committed."
+)
 async def test_the_notification_renders_as_one_parseable_json_line(
     authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
@@ -1032,6 +1042,10 @@ async def test_the_notification_renders_as_one_parseable_json_line(
     assert "exception" not in payload
 
 
+@pytest.mark.no_reread(
+    "The subject is the rendered log line, which no route publishes. Persistence\n"
+    "is proved by test_a_notifier_failure_leaves_the_assignment_committed."
+)
 async def test_a_title_carrying_a_newline_still_notifies_on_a_single_line(
     authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
@@ -1079,6 +1093,11 @@ async def test_a_title_carrying_a_newline_still_notifies_on_a_single_line(
     assert payload["event"] == "task_assigned_email"
 
 
+@pytest.mark.no_reread(
+    "The subject is the ABSENCE of a log record, which no route publishes. The\n"
+    "no-op's effect on the row is proved by\n"
+    "test_assigning_the_same_user_again_is_a_no_op_that_does_not_move_updated_at."
+)
 async def test_assigning_the_same_user_again_notifies_nobody(
     authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,
@@ -1112,6 +1131,12 @@ async def test_assigning_the_same_user_again_notifies_nobody(
     assert notifications(caplog) == []
 
 
+@pytest.mark.no_reread(
+    "The subject is the ABSENCE of a log record, which no route publishes.\n"
+    "Unassignment itself is proved by\n"
+    "test_the_owner_unassigns_and_the_assignee_id_goes_back_to_null, which\n"
+    "re-reads the task."
+)
 async def test_unassigning_notifies_nobody(
     authenticated_client: tuple[AsyncClient, FastAPI],
     session_factory: SessionFactory,

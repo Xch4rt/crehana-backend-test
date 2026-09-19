@@ -522,6 +522,10 @@ async def test_the_permission_matrix_answers_what_the_table_promises(
     assert_the_body_the_status_promises(cell, response)
 
 
+@pytest.mark.no_reread(
+    "POST /auth/login mutates no resource, so there is no resource to read back -\n"
+    "and this caller is anonymous, so it could not read one if there were."
+)
 async def test_login_refuses_a_bad_credential_from_an_anonymous_caller(
     matrix_client: tuple[AsyncClient, FastAPI],
 ) -> None:
