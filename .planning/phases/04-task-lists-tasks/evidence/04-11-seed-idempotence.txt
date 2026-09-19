@@ -1,0 +1,94 @@
+Plan 04-11 Task 1 - the demo-user seed is idempotent, and the untargeted
+conflict clause is what makes it so
+=======================================================================
+
+Captured 2026-09-19 on macOS 15, against the running compose database
+(PostgreSQL 18-alpine, published on localhost:5432), database `taskmanager_test`
+rather than `taskmanager`: the third execution deliberately attempts a second
+row, so the run had to be pointed at the disposable database rather than the one
+`docker compose up` serves. Every row this capture created was deleted again at
+the end of each run, and the database was left exactly as it was found.
+
+What this transcript proves:
+
+  1. The seed body exactly as it appears in `docker/entrypoint.sh` step 2b -
+     the same statement text, the same four bound parameters - executed three
+     times produces rowcounts 1, 0 and 0. The container can therefore start any
+     number of times and the demo user is written once.
+  2. Run 2 (the counterfactual) shows the SAME three executions against a
+     conflict clause that names the primary-key column as its target. The third
+     execution raises `IntegrityError` on `uq_users_email_lower`. Under the
+     entrypoint's `set -eu` that is an aborted container on restart, which is
+     precisely the outcome the untargeted form exists to prevent (T-4-66).
+
+So the absence of a conflict target is a decision with an observed cost on the
+other side, not a shortcut. The entrypoint's comment banner says the same thing
+in prose and describes the targeted form rather than spelling it, so that
+grepping the file for it stays a meaningful gate (the 01-03 convention).
+
+------------------------------------------------------------------------------
+Run 1 - the shipped form: the conflict clause names no target
+------------------------------------------------------------------------------
+
+$ SEED_PROOF_URL='postgresql+psycopg://taskmanager:taskmanager@localhost:5432/taskmanager_test' \
+    PYTHONPATH=src .venv/bin/python scratch/seed_proof.py
+
+  # The executed statement, identical to docker/entrypoint.sh step 2b:
+  #
+  #     INSERT INTO users (id, email, password_hash, created_at, updated_at)
+  #     VALUES (:id, :email, :password_hash, :now, :now)
+  #     ON CONFLICT DO NOTHING
+  #
+  # bound with id=DEMO_USER_ID (imported from
+  # taskmanager.presentation.api.actor, never pasted),
+  # email="demo@taskmanager.local", password_hash="!", now=datetime.now(UTC).
+
+rows with this email before the first execution: 0
+execution 1 (fresh, DEMO_USER_ID)          : result.rowcount = 1
+execution 2 (again, same DEMO_USER_ID)     : result.rowcount = 0
+execution 3 (different id, SAME email)     : result.rowcount = 0
+rows with this email after three executions: 1 -> ['00000000-0000-4000-8000-00000000de00']
+cleanup: deleted 1 row(s); the database is as it was found
+
+Reading the three lines:
+
+  * execution 1 inserts the row.
+  * execution 2 repeats the identical statement. The primary key collides and
+    the clause absorbs it: rowcount 0, no exception, no second row.
+  * execution 3 uses a DIFFERENT id (…de99) with the SAME email. The primary
+    key does not collide at all here - the unique index `uq_users_email_lower`
+    over `lower(email)` does, and the untargeted clause absorbs that too.
+  * the count afterwards is 1, and the surviving id is DEMO_USER_ID: the third
+    execution inserted nothing, so the actor seam still points at a row that
+    exists.
+
+------------------------------------------------------------------------------
+Run 2 - the counterfactual: the same three executions, conflict target named
+------------------------------------------------------------------------------
+
+$ SEED_PROOF_URL='postgresql+psycopg://taskmanager:taskmanager@localhost:5432/taskmanager_test' \
+    PYTHONPATH=src .venv/bin/python scratch/seed_falsify.py
+
+  # Identical to run 1 except that the conflict clause names the primary-key
+  # column as its target. Nothing else changed.
+
+execution 1 (fresh, DEMO_USER_ID)          : result.rowcount = 1
+execution 2 (again, same DEMO_USER_ID)     : result.rowcount = 0
+execution 3 (different id, SAME email)     : RAISED IntegrityError: (psycopg.errors.UniqueViolation) duplicate key value violates unique constraint "uq_users_email_lower"
+cleanup: deleted 1 row(s)
+
+Executions 1 and 2 are indistinguishable from run 1 - which is the point: a test
+that only restarted the container with the same id would have passed against the
+targeted form too, and the defect would have waited for the day someone changed
+the constant. Execution 3 is where the two forms part company, and under
+`set -eu` that `IntegrityError` is a container that does not come back up.
+
+------------------------------------------------------------------------------
+State left behind
+------------------------------------------------------------------------------
+
+`taskmanager_test` holds no row with the email `demo@taskmanager.local`; both
+runs deleted what they created. The compose stack was left running and healthy.
+The two throwaway scripts were not committed - they are reproduced above in full
+in the form that matters (the statement and the bindings), and the real seed
+lives in `docker/entrypoint.sh`.
