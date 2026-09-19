@@ -93,7 +93,7 @@ verification (AUTH-08), roles beyond owner/assignee, real email delivery, pagina
 
 ### Auth surface & account rules
 - **D-09:** `POST /api/v1/auth/register` returns **201 with the profile and no token** —
-  `{id, email, full_name, created_at}`, never the hash — plus a `Location` header. Logging in is
+  `{id, email, full_name, created_at}`, never the hash — plus a `Location` header (see D-19). Logging in is
   a separate step through `POST /api/v1/auth/login` (the OAuth2 form, which is what Swagger's
   Authorize button drives, AUTH-02). `GET /api/v1/auth/me` returns the same profile shape.
 - **D-10:** Password policy is **length only: 8 to 128 characters**, no composition rules
@@ -167,6 +167,34 @@ verification (AUTH-08), roles beyond owner/assignee, real email delivery, pagina
     helpers.
   - `CLAUDE.md` § Project Rules still describes the AST gate as `routers/` only and has no rule
     for write-path locking; this phase's closing plan updates both, each naming its gate.
+
+### Reconciliations after research (2026-09-19, per ADR-053 the context wins — these make it precise)
+- **D-19:** D-09's `Location` header on register is **`/api/v1/auth/me`** — that is what the chosen
+  discussion option said; there is no `GET /users/{id}` in this phase and none is added.
+- **D-20:** D-11's consequence is made concrete: the HTTP harness keeps its actor override for
+  the existing route tests, and gains an `authenticated_client` path that goes through the
+  **real** `get_current_actor` with a real token. The 401 legs, the anonymous column of the
+  D-04 matrix **and `test_statements.py`** use that real path, so the measured counts become
+  2 and 4 (one user lookup each) and the test says why. A statement-count test that still reads
+  1 and 3 because the dependency was overridden would hide D-11 and is not acceptable.
+- **D-21:** D-12 needs one addition to the `PasswordHasher` port (a dummy-verify so the
+  unknown-email path costs the same Argon2 work without `application` importing `pwdlib`).
+  This is the "research proves a need" case the carried-forward note allowed. The fake hasher
+  and the port-binding tests follow.
+- **D-22:** `access.py`'s module docstring currently claims `AuthorizationError` is named nowhere
+  in the file; the commit that adds the 403 leg rewrites that claim in the same change.
+- **D-23:** Register's 409 on a duplicate email is an account-enumeration oracle that AUTH-01
+  requires. It is documented honestly (ADR + threat model: accepted, bounded — login stays
+  indistinguishable), never described as mitigated.
+- **D-24:** The runtime notifier's log line is invisible today because uvicorn configures only its
+  own loggers and root stays at WARNING. The app owns an idempotent logging setup that attaches
+  a JSON handler to the `taskmanager` logger with `propagate` left true (existing `caplog`
+  assertions depend on it). The D-14 cold-start evidence must show the line in
+  `docker compose logs api`.
+- **D-25:** `tasks.assignee_id` has no index; the `0002` revision that adds `users.full_name`
+  also adds it (name in `constraints.py`, literal in the revision per ADR-025).
+  `FakeUserRepository.list_all` is brought into line with the adapter's `created_at, id` order,
+  falsified the way 04-06 did for the task fake.
 
 ### Claude's Discretion
 - JWT claims beyond `sub` and `exp` (for example `iat`), clock-skew leeway, and the exact token
