@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-09-19T05:13:26.635Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-09-19T05:21:16.854Z"
 last_activity: 2026-09-19
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 38
-  completed_plans: 28
+  completed_plans: 29
   percent: 43
 ---
 
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 04 (task-lists-tasks) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-09-19
 
-Progress: [███████░░░] 74%
+Progress: [████████░░] 76%
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Progress: [███████░░░] 74%
 | Phase 03 P11 | 22min | 3 tasks | 5 files |
 | Phase 04 P01 | 10min | 3 tasks | 8 files |
 | Phase 04 P02 | 18min | 3 tasks | 10 files |
+| Phase 04 P03 | 12min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -247,6 +248,12 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 04-02]: FakeTaskListRepository takes the sibling FakeTaskRepository through its constructor and FakeUnitOfWork hands over the one it already builds, so the fake counts what a use case stored and can disagree with a wrong implementation
 - [Phase ?]: [Phase 04-02]: The compiled-SQL test asserts count(*) ABSENT as well as count(tasks.id) present - the two render almost identically and differ only on the null-extended row an empty list produces
 - [Phase ?]: [Phase 04-02]: Requirement tick LIST-03 deliberately NOT taken - 04-12 is the last claimant and this plan ships the repository capability with no endpoint above it
+- [Phase 04-03]: the assignee clause of _may_change_status is DROPPED and the ASGN-02 test inverted to assert the Phase 4 scope - no Phase 4 endpoint sets assignee_id, so keeping it would ship a branch no request can reach and the no-pragma coverage rule could not excuse it; the test and the use-case docstring both name Phase 5 as the phase that restores it, in access.py
+- [Phase 04-03]: the plan's 'grep -c TaskListNotFoundError access.py prints 1' is met in substance, not literally - the import line plus the one raise line are 2, and grep -c 'raise TaskListNotFoundError' is 1; collapsing them by importing the exceptions module would game a counter by abandoning the project's import-by-name convention. 'grep -c AuthorizationError prints 0' IS met literally, prose included, and the module docstring says it avoids the name deliberately
+- [Phase 04-03]: visible_task compares the task's parent BEFORE loading the addressed list, so a wrong-list request (D-14) cannot reveal whether that list exists; all four refusal legs raise the task-shaped not-found error carrying only the identifier the caller already supplied
+- [Phase 04-03]: indistinguishability is tested by producing BOTH refusals and comparing type, code and details - three comparative tests across the two modules - because a single-error assertion passes just as happily against an implementation that leaks existence through a different code
+- [Phase 04-03]: the shared guard is a module of functions, never a GuardedUseCase mixin: an override is invisible at the call site while a missing 'await visible_task(...)' is an absent line in a diff; a ninth test asserts both guards leave commits and rollbacks at zero, so the transaction boundary stays with the use case (D-17, ARC-08)
+- [Phase 04-03]: requirement ticks TASK-02/TASK-05 deliberately NOT taken - 04-12 is the last claimant and this plan ships the application-layer rule with no endpoint above it
 
 ### Pending Todos
 
@@ -280,6 +287,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T05:12:57.897Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-09-19T05:21:16.848Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None

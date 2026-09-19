@@ -198,7 +198,7 @@ Plans:
 
 - [x] 04-01-PLAN.md — Hermetic settings test, the four domain mutators and the typed Unset sentinel
 - [x] 04-02-PLAN.md — list_for_owner_with_stats across port/fake/adapter, the grouped LIST-03 statement, and D-15's import-linter contract
-- [ ] 04-03-PLAN.md — ChangeTaskStatusCommand gains task_list_id (D-14) and the shared access.py guard
+- [x] 04-03-PLAN.md — ChangeTaskStatusCommand gains task_list_id (D-14) and the shared access.py guard
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -283,7 +283,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation & Quality Gates | 8/8 | Complete   | 2026-09-18 |
 | 2. Domain & Error Contract | 7/7 | Complete | 2026-09-18 |
 | 3. Persistence & Runnable Stack | 11/11 | Complete | 2026-09-19 |
-| 4. Task Lists & Tasks | 2/12 | In Progress|  |
+| 4. Task Lists & Tasks | 3/12 | In Progress|  |
 | 5. Auth, Assignment & Notifications | 0/TBD | Not started | - |
 | 6. Test Hardening & Coverage | 0/TBD | Not started | - |
 | 7. Documentation & Delivery | 0/TBD | Not started | - |
