@@ -26,14 +26,21 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from taskmanager.application.dto.results import (
+    AccessTokenResult,
     TaskCollectionResult,
     TaskListResult,
     TaskResult,
+    UserResult,
 )
 from taskmanager.application.dto.unset import UNSET
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.value_objects.task_priority import TaskPriority
 from taskmanager.domain.value_objects.task_status import TaskStatus
+from taskmanager.presentation.api.schemas.auth import (
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from taskmanager.presentation.api.schemas.task_lists import (
     TaskListCreateRequest,
     TaskListPatchRequest,
@@ -59,9 +66,19 @@ UPDATED_AT = datetime(2026, 1, 2, 12, 0, tzinfo=UTC)
 DUE_AT = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
 COMPLETED_AT = datetime(2026, 1, 3, 12, 0, tzinfo=UTC)
 
+USER_ID = UUID("00000000-0000-4000-8000-0000000000e1")
+
 NAME = "Groceries"
 DESCRIPTION = "Everything for the week"
 TITLE = "Buy oat milk"
+
+EMAIL = "ada@example.com"
+FULL_NAME = "Ada Lovelace"
+PASSWORD = "a-perfectly-ordinary-passphrase"
+# Seven characters: one short of the domain's minimum, which is exactly why the
+# boundary must still accept it (CONTEXT D-10, Phase 2 D-04).
+SHORT_PASSWORD = "sevench"
+ACCESS_TOKEN = "header.payload.signature"
 
 # D-10's nine members, in the order the wire contract promises.
 TASK_LIST_RESPONSE_MEMBERS = [
@@ -98,6 +115,14 @@ TASK_COLLECTION_MEMBERS = [
     "completed_tasks",
     "completion_percentage",
 ]
+
+# AUTH-01 and AUTH-05's profile, in `UserResult`'s order. The list is the whole
+# assertion: a fifth member - the stored hash above all - fails it, and so does
+# a rename, which a per-key absence check would let through (T-5-08).
+USER_RESPONSE_MEMBERS = ["id", "email", "full_name", "created_at"]
+
+# AUTH-02's answer to a login, in `AccessTokenResult`'s order.
+TOKEN_RESPONSE_MEMBERS = ["access_token", "token_type", "expires_in"]
 
 
 def _patch(**body: object) -> TaskListPatchRequest:
@@ -692,3 +717,141 @@ def test_an_empty_collection_serialises_an_empty_array_and_zero_percent() -> Non
 def test_the_collection_declares_d_09_s_four_members_in_order() -> None:
     """Exactly four, and no echoed identifier, page count or filter."""
     assert list(TaskCollectionResponse.model_fields) == TASK_COLLECTION_MEMBERS
+
+
+# ---------------------------------------------------------------------------
+# RegisterRequest
+# ---------------------------------------------------------------------------
+
+
+def _register(**body: object) -> RegisterRequest:
+    """Validate a register body the way FastAPI will (see `_patch` above)."""
+    return RegisterRequest.model_validate(body)
+
+
+def _user_result() -> UserResult:
+    """One profile, with every field distinct from every other."""
+    return UserResult(
+        id=USER_ID,
+        email=EMAIL,
+        full_name=FULL_NAME,
+        created_at=CREATED_AT,
+    )
+
+
+def test_the_register_request_hands_the_application_layer_a_plain_string() -> None:
+    """Pitfall 7: the secret wrapper stops at the boundary, by one call.
+
+    `RegisterUserCommand.password` is typed `str`, and the type checker cannot
+    see the difference at runtime - so the assertion is about the object, not
+    about the annotation: a schema that forwarded `self.password` would hand
+    the application layer a Pydantic type and nothing would fail but this.
+    """
+    command = _register(
+        email=EMAIL, full_name=FULL_NAME, password=PASSWORD
+    ).to_command()
+
+    assert command.email == EMAIL
+    assert command.full_name == FULL_NAME
+    assert command.password == PASSWORD
+    assert type(command.password) is str
+
+
+def test_the_register_request_refuses_an_unknown_key() -> None:
+    """T-5-09: the register body is the whole surface an attacker can reach.
+
+    Exactly one error, at the offending key: a model that declared a role and
+    then refused it would fail this assertion too, which a bare "it raised"
+    check would not.
+    """
+    with pytest.raises(ValidationError) as caught:
+        _register(email=EMAIL, full_name=FULL_NAME, password=PASSWORD, is_admin=True)
+
+    errors = caught.value.errors()
+
+    assert len(errors) == 1
+    assert errors[0]["type"] == "extra_forbidden"
+    assert errors[0]["loc"] == ("is_admin",)
+
+
+def test_a_malformed_email_is_refused_at_the_email_key() -> None:
+    """Format is the boundary's rule, and the entity deliberately re-checks none."""
+    with pytest.raises(ValidationError) as caught:
+        _register(email="not-an-address", full_name=FULL_NAME, password=PASSWORD)
+
+    error = caught.value.errors()[0]
+
+    assert error["type"] == "value_error"
+    assert error["loc"] == ("email",)
+
+
+def test_a_seven_character_password_is_accepted_by_the_boundary() -> None:
+    """D-10 lives in the domain, so the schema declares no minimum at all.
+
+    The password is short enough that `require_password` refuses it, and the
+    point of the test is that it gets that far: a `min_length` here would be
+    the second copy of the rule, answering with the request-validation error
+    shape instead of the domain's (Phase 2 D-04).
+    """
+    request = _register(email=EMAIL, full_name=FULL_NAME, password=SHORT_PASSWORD)
+
+    assert request.to_command().password == SHORT_PASSWORD
+
+
+def test_the_register_request_masks_the_password_wherever_pydantic_prints_it() -> None:
+    """T-5-04: `repr` and a serialised body are two separate ways out.
+
+    A router that logged the model, or a traceback that rendered it, is the
+    accident this type exists for - the value is only ever unwrapped by the one
+    call in `to_command`.
+    """
+    request = _register(email=EMAIL, full_name=FULL_NAME, password=PASSWORD)
+
+    assert PASSWORD not in repr(request)
+    assert PASSWORD not in str(request)
+    assert PASSWORD not in request.model_dump_json()
+    assert PASSWORD not in str(request.model_dump())
+
+
+def test_no_auth_request_repeats_a_business_limit() -> None:
+    """Phase 2 D-04 once more, for the one request model this module adds."""
+    assert _declares_no_length_limit(RegisterRequest)
+
+
+# ---------------------------------------------------------------------------
+# UserResponse and TokenResponse
+# ---------------------------------------------------------------------------
+
+
+def test_the_user_response_copies_every_field_of_its_result() -> None:
+    """Field by field, so a forgotten member fails here rather than on the wire."""
+    result = _user_result()
+
+    response = UserResponse.from_result(result)
+
+    assert response.id == result.id
+    assert response.email == result.email
+    assert response.full_name == result.full_name
+    assert response.created_at == result.created_at
+
+
+def test_the_user_response_publishes_the_profile_s_four_members_in_order() -> None:
+    """The serialised body is the contract, and the hash is not in it (T-5-08)."""
+    body = UserResponse.from_result(_user_result()).model_dump()
+
+    assert list(body) == USER_RESPONSE_MEMBERS
+    assert list(UserResponse.model_fields) == USER_RESPONSE_MEMBERS
+
+
+def test_the_token_response_copies_the_three_members_of_its_result() -> None:
+    """AUTH-02: the token, the lowercase scheme and the lifetime in seconds."""
+    result = AccessTokenResult(
+        access_token=ACCESS_TOKEN, token_type="bearer", expires_in=1800
+    )
+
+    response = TokenResponse.from_result(result)
+
+    assert response.access_token == ACCESS_TOKEN
+    assert response.token_type == "bearer"
+    assert response.expires_in == 1800
+    assert list(response.model_dump()) == TOKEN_RESPONSE_MEMBERS

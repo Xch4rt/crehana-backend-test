@@ -120,6 +120,7 @@ REQUIRED_SCANNED_MODULES: Final[frozenset[str]] = frozenset(
         "health.py",
         "routers/task_lists.py",
         "routers/tasks.py",
+        "schemas/auth.py",
         "schemas/task_lists.py",
         "schemas/tasks.py",
     }
