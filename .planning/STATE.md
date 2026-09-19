@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-09-19T15:06:23.212Z"
-last_activity: 2026-09-19 -- Phase 05 plan 04 complete
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-09-19T15:22:34.443Z"
+last_activity: 2026-09-19 -- Phase 05 plan 03 complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 54
-  completed_plans: 41
-  percent: 76
+  completed_plans: 42
+  percent: 78
 ---
 
 # Project State
@@ -27,11 +27,11 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 05 (auth-assignment-notifications) — EXECUTING
-Plan: 3 of 16
-Status: Executing Phase 05 (plan 04 complete; plan 03 still outstanding)
-Last activity: 2026-09-19 -- Phase 05 plan 04 complete
+Plan: 5 of 16
+Status: Executing Phase 05 (plans 01-04 complete; plan 05 next)
+Last activity: 2026-09-19 -- Phase 05 plan 03 complete
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Progress: [████████░░] 76%
 | Phase 05 P01 | 6min | 3 tasks | 8 files |
 | Phase 05 P02 | 10min | 3 tasks | 9 files |
 | Phase 05 P04 | 12min | 3 tasks | 9 files |
+| Phase 05 P03 | 12min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -328,7 +329,6 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 05-01]: jwt_secret's floor moved 16 to 32 as an isolated commit, justified by RFC 7518 section 3.2 and by the pytest.ini filterwarnings interaction rather than by taste; all three existing secrets were COUNTED first (conftest 32, .env.example 34, ci.yml 36), which is the finding that made D-26 a one-line change
 - [Phase ?]: [Phase 05-01]: requirement ticks AUTH-04 and ASGN-02 deliberately NOT taken despite this plan's frontmatter naming both - 05-16 is the last claimant, and this plan ships a validator and two mutators with no use case and no route above them
 - [Phase ?]: [Phase 05-01]: the TDD RED step is captured in evidence/05-01-tdd-red.txt rather than committed - pre-commit's mypy (strict) hook rejects a test importing a name no module exports and --no-verify is forbidden (the 02-01 and 04-02 precedent)
-
 - [Phase 05-04]: the assignee short-circuit in visible_task sits AFTER the parent-list comparison
   and before uow.task_lists.get - ADR-050 outranks D-01, so an assignee addressing their task under
   the wrong list gets 404 and never learns where it really lives; a test pins that ordering on each
@@ -361,6 +361,43 @@ Recent decisions affecting current work:
 - [Phase 05-04]: requirement ticks AUTH-06/ASGN-01/ASGN-02 deliberately NOT taken - 05-16 is the
   last claimant, and this plan ships an application-layer rule with no route above it: nothing can
   set an assignee_id until 05-08, so no HTTP request yet produces this 403
+
+- [Phase 05-03]: full_name is trimmed but NOT lower-cased, the deliberate opposite of email - an
+  address is an identity key uq_users_email_lower defends, while a display name keys nothing, is
+  never looked up by, and its capitals belong to the person who typed them; no CHECK constraint on
+  the length either, because this schema enforces a text limit with VARCHAR(n) bound to the entity
+  ClassVar and its three CHECKs guard invariants a width cannot express
+- [Phase 05-03]: the construction blast radius was EIGHTEEN files, not the plan's fourteen - three
+  User.create sites in test_fakes.py written after the plan's grep was taken, and a second class the
+  plan did not consider at all: code that builds a users row WITHOUT the entity (three UserRow
+  literals plus raw INSERT INTO users in test_constraints.py and test_schema.py), which bypasses
+  User on purpose and is therefore obliged to name the new NOT NULL column itself
+- [Phase 05-03]: the populated-table claim CANNOT be proven by the suite - migrated_database runs
+  downgrade base first, so taskmanager_test is always empty when 0002 runs and the transient
+  server_default is never exercised; proven instead by upgrading the live compose database
+  0001 -> 0002 through the container's own entrypoint, with alembic check reporting no drift after
+  (evidence/05-03-live-upgrade.txt)
+- [Phase 05-03]: that live run found a real bug - docker/entrypoint.sh step 2b names its columns by
+  hand and omitted full_name, so the seed INSERT became a NotNullViolation and the container aborted
+  under set -eu, breaking docker compose up; ON CONFLICT DO NOTHING could not absorb it because
+  PostgreSQL checks NOT NULL while building the candidate row, before the arbiter index is
+  consulted. No test could have caught it: the entrypoint is a heredoc rather than a module
+  (ADR-037), so nothing imports that INSERT - which is ADR-037's own cold-start argument paying out
+- [Phase 05-03]: test_the_migration_directory_holds_exactly_one_revision is retired OUT LOUD, named
+  in the docstring of the chain test replacing it - a count says nothing about whether the revisions
+  can be walked, and a second head or a wrong down_revision would satisfy it while breaking upgrade
+  head; the replacement reads Alembic's own ScriptDirectory against a deliberately unusable DSN
+- [Phase 05-03]: splitting one revision file across two commits left taskmanager_test stamped 0002
+  by an upgrade() that never created the index, so Task 2's downgrade() could not run; repaired with
+  one CREATE INDEX IF NOT EXISTS against the test database only. A development artifact of the
+  commit split, not a defect in the shipped chain - a deployment only ever walks 0001 -> 0002 forward
+- [Phase 05-03]: the plan's grep for op.create_index(op.f("ix_tasks_assignee_id") on one line prints
+  0, not 1 - the call is 89 characters and black wraps it, exactly as it already wraps the identical
+  ix_tasks_task_list_id call in 0001; met in substance with grep -c on op.f("ix_tasks_assignee_id")
+  printing 2 (the 01-03 prose-not-literal precedent applied to a counter the plan itself wrote)
+- [Phase 05-03]: requirement ticks AUTH-01/ASGN-02/ASGN-03 deliberately NOT taken - 05-16 is the
+  last claimant, the sixth consecutive plan in this phase to make the same call, and this plan ships
+  a column and an index with no use case and no route above them
 
 ### Pending Todos
 
@@ -396,6 +433,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T15:05:42.300Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-09-19T15:20:49.136Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
