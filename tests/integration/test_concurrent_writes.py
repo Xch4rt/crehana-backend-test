@@ -51,6 +51,17 @@ of the two commits second silently erases the other's field. The new case pins
 both halves: the owner's rename survives, and it is *visible to B*, which is
 what proves B read the committed state rather than merely happening to write a
 different column.
+
+**The fifth case is Phase 6's, and it closes the last write path with no proof
+behind it.** Dropping `for_update=True` from `use_cases/task_lists/delete.py`
+turned exactly one test red - the fakes-based road pin, which can say which
+method a use case calls and nothing about whether a database made anyone wait.
+The deletion case below is the counterpart of the CR-01 case for that path, and
+the property it pins is the *answer* rather than the end state: the list ends up
+gone either way, because a plain read passes the guard on a stale row and the
+`DELETE` statement blocks on its own, but a deletion that read plainly is told
+204 for a list another caller already removed. Its own docstring argues that in
+full.
 """
 
 import asyncio
@@ -71,6 +82,7 @@ from sqlalchemy.pool import NullPool
 
 from taskmanager.application.dto.commands import (
     ChangeTaskStatusCommand,
+    DeleteTaskListCommand,
     GetTaskCommand,
     UpdateTaskListCommand,
 )
@@ -80,6 +92,7 @@ from taskmanager.application.use_cases.access import (
     visible_task,
     visible_task_list,
 )
+from taskmanager.application.use_cases.task_lists.delete import DeleteTaskList
 from taskmanager.application.use_cases.task_lists.update import UpdateTaskList
 from taskmanager.application.use_cases.tasks.change_task_status import (
     ChangeTaskStatus,
@@ -88,7 +101,10 @@ from taskmanager.application.use_cases.tasks.get import GetTask
 from taskmanager.domain.entities.task import Task
 from taskmanager.domain.entities.task_list import TaskList
 from taskmanager.domain.entities.user import User
-from taskmanager.domain.exceptions import InvalidStatusTransitionError
+from taskmanager.domain.exceptions import (
+    InvalidStatusTransitionError,
+    TaskListNotFoundError,
+)
 from taskmanager.domain.value_objects.task_status import TaskStatus
 from taskmanager.infrastructure.db.mappers import (
     task_list_to_row,
@@ -153,6 +169,19 @@ class _Database:
             )
             status, completed_at, title = row.one()
         return status, completed_at, title
+
+    async def the_list_still_exists(self) -> bool:
+        """Whether the list row is there at all, read from outside both writers.
+
+        `list_columns` cannot answer this: it reads one row and would raise on an
+        empty result, which is the state the deletion case ends in.
+        """
+        async with self.engine.connect() as outside:
+            count = await outside.scalar(
+                text("SELECT count(*) FROM task_lists WHERE id = :id"),
+                {"id": LIST_ID},
+            )
+        return bool(count)
 
     async def list_columns(self) -> tuple[str, str | None]:
         async with self.engine.connect() as outside:
@@ -366,6 +395,65 @@ async def test_two_list_patches_are_serialised_and_neither_edit_is_lost(
     assert outcome.name == "Renamed by A"
     assert outcome.description == "From B."
     assert await database.list_columns() == ("Renamed by A", "From B.")
+
+
+async def test_a_list_deletion_waits_and_then_sees_that_it_has_nothing_to_delete(
+    database: _Database,
+) -> None:
+    """Phase 6's D-14 finding: `DeleteTaskList`'s own lock, against real connections.
+
+    Until this case, dropping `for_update=True` from
+    `use_cases/task_lists/delete.py` turned exactly **one** test red - the
+    fakes-based road pin in `test_write_paths_hold_what_they_change.py`, which
+    proves which method the use case calls and can say nothing at all about
+    whether a database made anyone wait. The lock the deletion takes was the one
+    write path in the project with no proof behind it.
+
+    A is a deletion driven by hand, so it can be paused between its locking read
+    and its commit; B is the real use case, started while A holds the row. B has
+    to wait, and then - because its read is a *locking* read, which re-reads the
+    latest committed state after the wait - it has to see that the list is gone
+    and answer exactly as it answers a list that never existed.
+
+    **Why that is the observable difference, and not the end state.** Both
+    versions of the use case end with the list deleted: a plain read passes the
+    guard on the stale row, and the `DELETE` statement then blocks on A's lock by
+    itself and removes nothing. So a test that asserted only "the list is gone"
+    would pass either way. What the plain read loses is the *answer*: B would be
+    told 204 - "your delete succeeded" - for a list that another caller had
+    already removed, which is the same class of lie about durability that CR-01
+    was. With the locking read, B is refused with the 404 the guard exists to
+    give.
+
+    The `waited` assertion is last, for the reason
+    `_until_it_waits_or_finishes` gives, and it is load-bearing: without it the
+    refusal above could be a lucky ordering rather than a lock.
+    """
+    first = database.unit_of_work()
+    async with first:
+        # A's half of `DeleteTaskList`, one statement at a time: the same locking
+        # read the use case performs, then the same delete, with the commit held
+        # back until B is queued behind it.
+        await visible_task_list(first, LIST_ID, OWNER_ID, for_update=True)
+        second: asyncio.Task[None] = asyncio.create_task(
+            DeleteTaskList(database.unit_of_work()).execute(
+                DeleteTaskListCommand(actor_id=OWNER_ID, task_list_id=LIST_ID)
+            )
+        )
+        try:
+            waited = await _until_it_waits_or_finishes(database, second)
+            await first.task_lists.delete(LIST_ID)
+            await first.commit()
+        finally:
+            outcome = await _settle(second)
+
+    assert isinstance(outcome, TaskListNotFoundError), (
+        "the second deletion must be refused: the list it addressed was removed "
+        f"by the first one, and it was answered with {outcome!r}"
+    )
+    assert outcome.details == {"task_list_id": str(LIST_ID)}
+    assert not await database.the_list_still_exists()
+    assert waited, "the second deletion never waited, so the refusal above was luck"
 
 
 async def test_a_read_never_waits_on_a_writer(database: _Database) -> None:

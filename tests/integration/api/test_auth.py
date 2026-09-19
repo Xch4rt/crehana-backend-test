@@ -554,9 +554,12 @@ async def a_token_for_an_unknown_subject(app: FastAPI) -> str | None:
 
     This is the one case that a signature check alone cannot refuse, and the
     only case that exercises what D-11 bought: the extra confirmation read
-    `AuthenticateActor` performs on every request. Nothing in this module
-    seeds the subject, and a freshly generated identifier cannot collide with
-    a row a sibling test left behind, because the harness leaves none.
+    `AuthenticateActor` performs on every request. The subject is therefore a
+    freshly generated identifier, and it has to stay one: the test below now
+    seeds the *caller's* row precisely so the other six cases stop collapsing
+    into this one, and a token minted for `OWNER_ID` here would turn this case
+    into a test of nothing at all. A generated identifier cannot collide with a
+    row a sibling test left behind, because the harness leaves none.
     """
     return await bearer_header(app, uuid.uuid4())
 
@@ -579,6 +582,7 @@ UNAUTHENTICATED_CASES: tuple[tuple[str, HeaderBuilder], ...] = (
 )
 async def test_unauthenticated_requests_are_refused_with_the_one_shared_body(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
     build_header: HeaderBuilder,
 ) -> None:
     """AUTH-03, T-5-01, T-5-04, T-5-15: one shape for every failure mode.
@@ -586,7 +590,24 @@ async def test_unauthenticated_requests_are_refused_with_the_one_shared_body(
     The route driven is `GET /auth/me`, so `instance` is the same path in all
     seven answers and the documents are comparable without tokenising anything
     - which the companion test below relies on.
+
+    **The caller's row is seeded, and that line is the whole of Phase 6's D-14
+    finding here.** `AuthenticateActor` confirms the subject on *every* request
+    (D-11), so with no `users` row for `OWNER_ID` six of these seven cases were
+    refused for the unknown-subject reason no matter what credential they
+    carried - the expired token, the foreign signature and the garbage were all
+    decided by a read that came after the mechanism each case names. Measured,
+    not inferred: with `verify_exp: False` planted in
+    `infrastructure/security/tokens.py` every test in this selection stayed
+    green, which is a suite reporting that token expiry is enforced while
+    nothing checked it. Seeding the caller sends each case down its own branch,
+    and the same plant now turns `an_expired_token` red.
+
+    `a_token_for_an_unknown_subject` is the one case that must *not* be reached
+    by a seeded subject, and it signs for a fresh identifier so it still is not;
+    its docstring says so.
     """
+    await seed(session_factory, users=[a_user()])
     client, app = authenticated_client
     header = await build_header(app)
     headers = {} if header is None else {"Authorization": header}
@@ -619,6 +640,7 @@ async def test_unauthenticated_requests_are_refused_with_the_one_shared_body(
 
 async def test_every_unauthenticated_refusal_carries_the_same_body_as_the_others(
     authenticated_client: tuple[AsyncClient, FastAPI],
+    session_factory: SessionFactory,
 ) -> None:
     """D-11: seven failures, one answer - asserted across the cases, not within.
 
@@ -632,7 +654,14 @@ async def test_every_unauthenticated_refusal_carries_the_same_body_as_the_others
     bodies has exactly one member. The failure message names the cases, so a
     regression says which two answers diverged rather than that a set was too
     large.
+
+    The caller is seeded here for the reason given above: unseeded, this test
+    compared six answers that were all the unknown-subject answer, so "they are
+    identical" was true by construction rather than by design. Seeded, the six
+    reach their own branches and the bodies still have to come out byte-identical
+    - which is now a claim about the handler instead of about the fixture.
     """
+    await seed(session_factory, users=[a_user()])
     client, app = authenticated_client
     bodies: dict[str, str] = {}
 
