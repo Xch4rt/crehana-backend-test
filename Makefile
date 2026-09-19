@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install env lint format typecheck arch test docker-test up down run
+.PHONY: install env lint format typecheck arch test break-check docker-test up down run
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -70,6 +70,21 @@ arch:
 # and a bare `pytest` are gated by the same bytes.
 test:
 	$(VENV)/bin/pytest
+
+# The answer to "your tests are green, but do they check anything?" - roadmap
+# SC-4. The script breaks src/ on purpose five times, runs the tests that should
+# care, asserts each break turns them RED, restores the file and reports; it
+# exits non-zero if any break survives. It refuses to start on a dirty src/,
+# because it restores with git.
+#
+# Deliberately in neither `test` above, nor .pre-commit-config.yaml, nor
+# .github/workflows/ci.yml (D-09): it runs a large selection five times over,
+# which costs about a minute, and the whole value of the ten-second commit loop
+# is that nobody is tempted to skip it. This is a spot check run on demand, not
+# a gate. It needs PostgreSQL up, since four of the five breaks reach the
+# integration tests.
+break-check:
+	sh scripts/break-check.sh
 
 # Runs the suite on Python 3.13 with no host Python and no host PostgreSQL
 # involved. The target name is unchanged, exactly as Phase 1 promised when it was
