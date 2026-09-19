@@ -77,7 +77,14 @@ class FakeTaskRepository:
             tasks = [task for task in tasks if task.status is status]
         if priority is not None:
             tasks = [task for task in tasks if task.priority is priority]
-        return tasks
+        # Ordered by `(created_at, id)`, exactly as the SQLAlchemy adapter's
+        # `ORDER BY` is, and for the reason `list_for_owner` below gives at
+        # length: the fake used to return insertion order, which is a divergence
+        # with teeth - a D-13 assertion about the first element would pass here
+        # and fail over HTTP, where PostgreSQL is free to answer in whatever
+        # order the plan produced. `created_at` alone is not a total order
+        # either, since the clock is read once per request.
+        return sorted(tasks, key=lambda entry: (entry.created_at, entry.id))
 
     async def completion_stats(self, task_list_id: UUID) -> CompletionStats:
         # Counted from what is stored, not canned: the aggregate Phase 3 will
