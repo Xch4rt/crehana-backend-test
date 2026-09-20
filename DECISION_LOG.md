@@ -4225,3 +4225,125 @@ compared both ways by a guard test, with a published-path check and a non-vacuit
   gap was in what the suite *proved*, not in what the product *did*.
 
 ---
+
+## ADR-097: three task statuses, and `completed → pending` is the single forbidden move (2026-09-19, extending ADR-048)
+
+**Context**
+The brief names the allowed status values and the moves between them as one of the five
+ambiguities the candidate must resolve *and record*. It was resolved in Phase 2 (D-01) and has
+been implemented since — but the resolution lives in the docstring of
+`src/taskmanager/domain/value_objects/task_status.py`, and the brief tells its reader to look in
+this file. ADR-048 decided only *where the door into the state machine is* (a dedicated
+`PATCH /api/v1/task-lists/{list_id}/tasks/{task_id}/status`) and mentions the matrix in passing
+as "Phase 2 D-01". Nothing here ever decided the vocabulary itself.
+
+**Options**
+
+- **A free-text `status` string**, whatever the client sends. Rejected: two clients then spell the
+  same state differently (`in progress`, `InProgress`, `doing`), the completion percentage of
+  ADR-009 has nothing to count, and the `CHECK` constraint has nothing to check.
+- **A two-state `done` / `not done` flag.** Rejected: it is the smallest thing that satisfies "a
+  task has a status" and it deletes the question the brief is asking. `in_progress` is the state
+  the status filter is most useful over, and a boolean cannot carry a transition rule at all.
+- **The three states with a *permissive* default** — list only the forbidden moves and allow the
+  rest. Rejected for its failure mode: a fourth status added later inherits "every move is legal"
+  from a table that never mentions it, and no test goes red.
+- **The three states with an *exhaustive* matrix**, every member present as a key.
+
+**Decision**
+`TaskStatus` is a `StrEnum` with exactly `pending`, `in_progress` and `completed`, declared in
+lifecycle order, and `ALLOWED_TRANSITIONS` is exhaustive over its members:
+
+| from \ to | `pending` | `in_progress` | `completed` |
+|-----------|-----------|---------------|-------------|
+| `pending` | no-op | allowed | allowed |
+| `in_progress` | allowed | no-op | allowed |
+| `completed` | **forbidden** | allowed | no-op |
+
+`completed → pending` is the single forbidden move: work resumes before it is un-started, so
+reopening a completed task lands in `in_progress`. The refusal is `InvalidStatusTransitionError`,
+published as a 409 whose `code` is `invalid_status_transition` and whose `errors` object names
+`from` and `to`.
+
+**Consequences**
+
+- **A fourth status is a `KeyError` at the guard, not a permission granted by silence.** The
+  exhaustiveness is the point of the table: `ALLOWED_TRANSITIONS[current]` on a member with no
+  row raises rather than falling through, so adding `cancelled` without deciding its moves fails
+  loudly at the first status change instead of allowing all of them.
+- **The same-state move is an idempotent no-op** (Phase 2 D-02): `pending → pending` returns 200
+  with the entity unchanged, including `updated_at`. That is an invariant of `Task.change_status`
+  rather than a use-case branch, so it holds for every caller.
+- **`StrEnum`, not `class TaskStatus(str, Enum)`.** Since Python 3.11 the latter formats as
+  `TaskStatus.PENDING`, so the member *name* rather than the value reaches a log line, a cache
+  key or a SQL literal — a defect that surfaces where it is most expensive to find. `StrEnum`
+  renders as the plain value everywhere, with no custom JSON encoder.
+- **The rule lives on the entity**, so no router, use case or repository can bypass it. ADR-048's
+  dedicated endpoint is the only door; this matrix is the lock on it.
+- **Entering `completed` stamps `completed_at` and leaving it clears the stamp** (Phase 2 D-03), so
+  a reopened task is never reported as finished and ADR-009's percentage cannot count it twice.
+- **The matrix is pinned, and its complement is derived rather than listed.**
+  `tests/unit/domain/test_task_status.py` asserts the table is exhaustive over `TaskStatus`, that
+  each row is exactly the set above, and that no status allows a move to itself;
+  `tests/integration/api/test_tasks.py` builds `FORBIDDEN_TRANSITIONS` as every pair *not* in the
+  table and drives all of them over HTTP — the three self-pairs expecting the 200 no-op and
+  `completed → pending` expecting the 409, so a fourth status adds its cases with no edit. Break 2
+  of `scripts/break-check.sh` adds `TaskStatus.PENDING` to the `completed` row and requires the
+  suite to go red against a measured baseline (ADR-091, ADR-093).
+- **`cancelled` is out of scope and recorded as such** in REQUIREMENTS.md. It would reopen ADR-009's
+  percentage definition — is a cancelled task still in the denominator? — which is a decision this
+  deliverable does not need to take.
+
+---
+
+## ADR-098: three priority values, and the default lives on the entity, not on the enum (2026-09-19)
+
+**Context**
+The brief leaves the priority vocabulary open — it asks for a priority and for filtering by it,
+and says nothing about what the values are. Like the status matrix, the answer has been decided
+since Phase 2 and recorded only in a docstring,
+`src/taskmanager/domain/value_objects/task_priority.py`, which is not where the brief tells its
+reader to look. The second half of the question is subtler and was decided separately: *where* the
+"no priority supplied means medium" rule (TASK-01) is applied.
+
+**Options**
+
+- **Integers, `1..5`** — the shape Jira and Todoist expose. Rejected: an integer has no shared
+  meaning across clients (is 1 the most urgent or the least?), it invites an off-by-one at every
+  boundary, and it is a known source of client bugs. Recorded in REQUIREMENTS.md §Out of Scope
+  together with `cancelled`.
+- **An open string.** Rejected for the same reason the free-text status was (ADR-097): the filter
+  becomes a string match over a vocabulary nobody owns.
+- **A `low | medium | high` enum, with the default applied by the enum** — a `DEFAULT` member or a
+  `classmethod`. Rejected: it buries a policy in the vocabulary every layer shares. The domain,
+  the application DTOs, the ORM model and the HTTP schemas all import this enum; only one of them
+  is entitled to decide what an absent value means.
+- **The same enum, with the default applied by the `Task` entity.**
+
+**Decision**
+`TaskPriority` is a `StrEnum` with `low`, `medium` and `high`, declared in ascending urgency, and
+carrying no default. `Task.DEFAULT_PRIORITY` is a `ClassVar` bound to `TaskPriority.MEDIUM` and is
+the default of `Task.create`'s `priority` parameter; the HTTP schema reads that same ClassVar
+(`priority: TaskPriority = Task.DEFAULT_PRIORITY` in `presentation/api/schemas/tasks.py`) rather
+than restating `"medium"`. `CreateTaskCommand.priority` is required and has no default, so the
+application layer never has to decide.
+
+**Consequences**
+
+- **The default can change in one place.** `Task.DEFAULT_PRIORITY = TaskPriority.HIGH` would move
+  the entity, the request schema and the OpenAPI document together, because the other two read it
+  rather than copying it. `tests/unit/domain/test_task.py` asserts both halves — the ClassVar's
+  value *and* that a `Task.create` with no priority gets it — so a default that stopped being
+  applied would not pass on the ClassVar alone.
+- **`reprioritise` carries no value guard, deliberately.** The parameter is typed `TaskPriority`
+  and the boundary field is enum-typed, so a non-member is refused as a 422 before a command is
+  ever built. A defensive check would be a branch no test could reach, and the no-`pragma`
+  coverage rule has no way to excuse an unreachable line (ADR-089).
+- **Priority is a vocabulary, not an ordering.** Nothing sorts by it today: the ascending
+  declaration order documents intent for a reader, but `StrEnum` compares as a string, so `"high"
+  < "low" < "medium"` alphabetically. Sorting by urgency would need an explicit key, and is named
+  here as not supported rather than left to be discovered.
+- **`StrEnum` for the reason ADR-097 gives**: `(str, Enum)` would leak `TaskPriority.LOW` into
+  logs and query strings on Python 3.11+.
+
+---
