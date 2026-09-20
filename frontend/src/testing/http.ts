@@ -61,14 +61,57 @@ function bodyOf(init: unknown): string | null {
   return null;
 }
 
+function recordOf(url: unknown, init: unknown): RecordedRequest {
+  if (typeof url !== "string") {
+    throw new Error("fetch was not called with a string URL");
+  }
+  return { url, method: methodOf(init), body: bodyOf(init) };
+}
+
 export function requests(mock: CallRecorder): RecordedRequest[] {
-  return mock.mock.calls.map((call) => {
-    const [url, init] = call;
-    if (typeof url !== "string") {
-      throw new Error("fetch was not called with a string URL");
+  return mock.mock.calls.map((call) => recordOf(call[0], call[1]));
+}
+
+export interface Handler {
+  method?: string;
+  // A substring of the URL, so `?priority=high` is a different route from the
+  // unfiltered one without writing a matcher language.
+  path: string;
+  times?: number;
+  respond: () => Response;
+}
+
+// A `fetch` implementation that answers by ROUTE instead of by call order.
+//
+// A screen that reads two things on mount (its tasks and the user directory)
+// has no guaranteed order between them, and a queue of `mockResolvedValueOnce`
+// silently hands the wrong body to whichever effect ran first. Routing also
+// means each handler builds a FRESH Response: a `Response` body can only be
+// read once, so a reused one fails the second time in a way that looks like a
+// parsing bug in the client.
+export function serving(
+  handlers: Handler[],
+): (url: unknown, init: unknown) => Promise<Response> {
+  const remaining = handlers.map((handler) => ({
+    handler,
+    left: handler.times ?? Number.POSITIVE_INFINITY,
+  }));
+  return (url: unknown, init: unknown) => {
+    const request = recordOf(url, init);
+    for (const entry of remaining) {
+      if (
+        entry.left > 0 &&
+        (entry.handler.method ?? "GET") === request.method &&
+        request.url.includes(entry.handler.path)
+      ) {
+        entry.left -= 1;
+        return Promise.resolve(entry.handler.respond());
+      }
     }
-    return { url, method: methodOf(init), body: bodyOf(init) };
-  });
+    return Promise.reject(
+      new Error(`no stub for ${request.method} ${request.url}`),
+    );
+  };
 }
 
 export function lastRequest(mock: CallRecorder): RecordedRequest {

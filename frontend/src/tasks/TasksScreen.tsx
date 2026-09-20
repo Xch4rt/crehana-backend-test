@@ -6,6 +6,7 @@ import {
   createTask,
   deleteTask,
   listTasks,
+  listUsers,
   updateTask,
 } from "../api/client";
 import type {
@@ -15,10 +16,12 @@ import type {
   TaskResponse,
   TaskStatus,
   TaskUpdateRequest,
+  UserSummaryResponse,
 } from "../api/types";
 import CompletionBar from "../components/CompletionBar";
 import ErrorBanner from "../components/ErrorBanner";
 import Field from "../components/Field";
+import AssigneePicker from "./AssigneePicker";
 import { STATUSES, STATUS_LABELS, allowedMovesFrom } from "./transitions";
 
 // UI-03: one list, its tasks, the filters, and the status control.
@@ -68,6 +71,7 @@ export default function TasksScreen({
   const [priority, setPriority] = useState<TaskPriority | "">("");
   const [error, setError] = useState<ApiError | null>(null);
   const [inFlight, setInFlight] = useState(false);
+  const [users, setUsers] = useState<UserSummaryResponse[]>([]);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -103,6 +107,44 @@ export default function TasksScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // ONCE for the screen, not once per row: the directory has no pagination and
+  // answers every account there is, so a fetch inside AssigneePicker would
+  // multiply it by the number of tasks.
+  useEffect(() => {
+    let live = true;
+    listUsers()
+      .then((loaded) => {
+        if (live) {
+          setUsers(loaded);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (live && failure instanceof ApiError) {
+          setError(failure);
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // An assignment changes ONE task and cannot change completion, so the row is
+  // replaced from the response body and the three counters are left exactly as
+  // the last collection read gave them. Re-reading the collection here would be
+  // a request that can only return the same numbers.
+  function replace(updated: TaskResponse): void {
+    setCollection((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            items: current.items.map((one) =>
+              one.id === updated.id ? updated : one,
+            ),
+          },
+    );
+  }
 
   function fail(failure: unknown): void {
     if (failure instanceof ApiError) {
@@ -346,6 +388,12 @@ export default function TasksScreen({
                   ))}
                 </select>
               </div>
+
+              <AssigneePicker
+                task={task}
+                users={users}
+                onChanged={replace}
+              />
 
               {editing?.id === task.id && (
                 <form

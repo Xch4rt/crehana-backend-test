@@ -233,8 +233,13 @@ button.title {
 }
 
 .inline-field {
-  max-width: 14rem;
+  max-width: 18rem;
   margin: 0.5rem 0 0;
+}
+
+.inline-field .problem {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
 }
 
 .inline-field > label {

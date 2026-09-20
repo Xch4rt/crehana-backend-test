@@ -4,6 +4,7 @@ import { setUnauthorizedHandler } from "./api/client";
 import type { TaskListResponse } from "./api/types";
 import LoginScreen from "./auth/LoginScreen";
 import { clearToken, getToken, setToken } from "./auth/session";
+import AssignedScreen from "./assigned/AssignedScreen";
 import ListsScreen from "./lists/ListsScreen";
 import TasksScreen from "./tasks/TasksScreen";
 
@@ -95,7 +96,11 @@ export default function App() {
             }}
           />
         ) : (
-          <p>Assigned to me</p>
+          <AssignedScreen
+            onBack={() => {
+              setView({ name: "lists" });
+            }}
+          />
         )}
       </main>
     </div>
