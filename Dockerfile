@@ -133,6 +133,16 @@ COPY pytest.ini .flake8 .importlinter .env.example ./
 # documentation, no Makefile and no test suite.
 COPY README.md DECISION_LOG.md AI_WORKFLOW.md Makefile ./
 
+# The three frontend configuration files `tests/architecture/test_frontend_
+# gates.py` reads: it asserts that every dependency is an exact pin, that the
+# committed lockfile agrees with the manifest, and that TypeScript is strict.
+# Same rule as the line above (ADR-102) - a gate that reads a repository file
+# owes this stage a COPY, or it is green on the host and a collection error
+# here. The stage still gets no Node and no frontend source: this gate reads
+# configuration, and the frontend's own three gates are `make ui-*` and the CI
+# `frontend` job (ADR-108).
+COPY frontend/package.json frontend/package-lock.json frontend/tsconfig.json ./frontend/
+
 COPY tests ./tests
 
 # The migration files, because the `migrated_database` fixture builds its Alembic

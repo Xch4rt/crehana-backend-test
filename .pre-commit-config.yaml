@@ -72,3 +72,20 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # The frontend's three gates, and the one hook here that may decline to
+      # run - scripts/ui-gates.sh exits 0 with an explanation when
+      # frontend/node_modules is absent, because a fresh clone has none and a
+      # hook that failed there would make every Python commit fail on a machine
+      # that never touched the frontend. The hard gate is the CI `frontend`
+      # job; ADR-108 records the trade.
+      #
+      # `files: ^frontend/` is load-bearing and not a filter for tidiness: it is
+      # what keeps a commit that touches only src/ or tests/ from paying for
+      # Node at all. `pass_filenames: false` because eslint, tsc and vitest are
+      # whole-program tools here, exactly as mypy and import-linter are above.
+      - id: ui-gates
+        name: frontend gates (eslint, tsc, vitest)
+        entry: sh scripts/ui-gates.sh
+        language: system
+        files: ^frontend/
+        pass_filenames: false

@@ -4813,3 +4813,217 @@ This entry. ADR-010, ADR-018, ADR-066 and ADR-097 stay byte-identical and are re
 - `git diff DECISION_LOG.md | grep -c '^-'` is 1 for this change, as ADR-099 requires.
 
 ---
+## ADR-105: the web UI ships inside the deliverable, reversing two recorded positions (2026-09-19)
+
+**Context**
+The challenge brief asks for a REST API and no user interface. Two places in this project say so
+and act on it:
+
+- `.planning/PROJECT.md` and `.planning/REQUIREMENTS.md` both carry a struck-through **Out of
+  Scope** row reading `~~Frontend / UI~~` — "the challenge is backend only" / "Backend-only
+  challenge";
+- `AI_WORKFLOW.md` explains that the three Mermaid diagrams are never rendered locally because
+  "adding a Node toolchain to a Python deliverable was judged the wrong trade".
+
+After Phase 7's pre-push audit the user asked for a small web UI **inside this repository**, so
+that an evaluator who runs `docker compose up` can drive every brief use case in a browser rather
+than through fifteen `curl` invocations.
+
+**Options**
+
+- **Keep the UI out of the deliverable** — a second repository, or a side branch merged never.
+  **This is what the AI recommended.** The argument was the one both reversed sentences already
+  make: the brief asks for no UI, a Node toolchain in a Python deliverable is a second dependency
+  surface, a second lockfile, a second lint/type/test triple and a second CI job, and none of it
+  earns a single point against the brief's criteria.
+- **Ship it inside the deliverable.** **Chosen by the human, knowingly, against that
+  recommendation.** The reasoning recorded at the time: an evaluator has five minutes and a
+  browser, and a working UI is the difference between reading that the status transition matrix is
+  enforced and watching a refused move come back as a 409 with its own sentence. A smaller
+  dependency surface is worth less than that.
+
+**Decision**
+The UI ships in `frontend/`, inside this repository, as Phase 8. Both positions above are
+reversed, by id, here.
+
+**Consequences**
+
+- **The brief still asks for no UI, and every document must keep saying so.** The
+  requirement-to-evidence map in `README.md` is not inflated with UI rows presented as brief
+  items; the `UI-*` requirements are tagged as this project's own, exactly as `[R]` and `[NL]`
+  requirements already are.
+- **A Node toolchain now exists in a Python deliverable**, and it is gated like everything else:
+  exact pins with a committed lockfile, eslint, `tsc --strict`, vitest, three `make` targets, a CI
+  job and a pre-commit hook (ADR-108).
+- **`AI_WORKFLOW.md`'s sentence is amended in place** rather than left standing false. That file
+  is editable outside its append-only Incident Log, so ADR-060's rule applies to it; this log is
+  not, which is why the reversal is this entry rather than a deletion above.
+- **The recommendation and the override are both recorded**, because that is the honest shape of
+  this project's AI story: the AI argued a position, the human heard it and decided otherwise, and
+  the decision is the human's. A log that only recorded the decisions the AI agreed with would be
+  a worse document than one with this paragraph in it.
+
+---
+
+## ADR-106: React + Vite + TypeScript, a static SPA — not Next.js, and no component, state or routing library (2026-09-19)
+
+**Context**
+Phase 8 needs four screens — auth, task lists, one list's tasks, and assigned-to-me — against an
+API that already exists and already speaks JSON. The decision is what to build them with, and how
+much framework a four-screen UI justifies.
+
+**Options**
+
+- **Next.js.** Rejected. Server-side rendering buys nothing over an existing JSON API whose every
+  endpoint requires a bearer token, and it would put a **Node runtime into the running stack** —
+  a second long-running process to keep healthy, configure and explain, where a static bundle
+  needs a web server that is already there.
+- **A component library (MUI, Chakra) and a state library (Redux, Zustand).** Rejected, D-05. The
+  UI is plain and small; a component library is megabytes of dependency to avoid writing 150 lines
+  of CSS, and there is no shared client state beyond one token and the response currently on
+  screen.
+- **`react-router`.** Rejected. Four screens, and a hand-rolled view switch — one `useState` over
+  a discriminated union — is smaller than the dependency and its configuration. The accepted cost
+  is real and is named in the README's Pending list: **no deep links and no browser Back between
+  screens.**
+- **React + Vite + TypeScript, built to static files and served by nginx.** Chosen.
+
+**Decision**
+React 19 with Vite 8 and TypeScript 6, `strict`, bundled to static assets in a build stage and
+served by `nginx:1.30-alpine`. Plain CSS. No router, no component library, no state library.
+
+**TypeScript is pinned to 6.0.3 and not to the registry's `latest`, 7.0.2.** That is a hard
+constraint rather than conservatism: `typescript-eslint@8.70.0` declares
+`peerDependencies.typescript: ">=4.8.4 <6.1.0"`, so TypeScript 7 — the native port — would either
+fail `npm ci` or silently disable every type-aware lint rule. 6.0.3 is a stable release, not a
+beta or a release candidate. It is recorded here because a reviewer who checks the registry will
+otherwise read the pin as stale.
+
+**Consequences**
+
+- **The delivered UI image contains no Node**, no source and no lockfile: a build stage produces
+  `dist/`, and the runtime stage is nginx plus a few hundred kilobytes of HTML, CSS and JavaScript.
+- **`npm run build` is `tsc --noEmit && vite build`, in that order**, so a type error fails the
+  image build rather than producing a shipped image. Vite strips types without checking them.
+- **Both base images are pinned to a major version**, `node:24-alpine` and `nginx:1.30-alpine`,
+  which is this repository's convention (ADR-013, `postgres:18-alpine`, `python:3.13-slim-trixie`).
+  24 is Node's active LTS line and 1.30 is nginx's stable branch; Node 26 is `current` and nginx
+  1.31 is `mainline`, and neither belongs in a graded deliverable.
+- **No deep links.** A reload always lands on the list of task lists. Named in the README's
+  Pending section rather than left for a reviewer to discover.
+
+---
+
+## ADR-107: same-origin through the UI container's reverse proxy, not CORS on the backend (2026-09-19)
+
+**Context**
+A browser served from `http://localhost:8080` calling an API on `http://localhost:8000` is a
+cross-origin request. Something has to give: either the backend publishes
+`Access-Control-Allow-*` headers, or the two are made to share an origin.
+
+**Options**
+
+- **`CORSMiddleware` in `src/taskmanager`, driven by a setting** (no wildcard, default empty,
+  documented in `.env.example`, tested). This was the recorded fallback, to be taken only if the
+  proxy proved unworkable. Rejected: it modifies the backend for the benefit of one client, and it
+  adds a security surface that has to stay configured correctly forever — a permissive origin list
+  is one careless `.env` away, and the failure is silent.
+- **A reverse proxy in front of both.** Chosen. The UI container's nginx serves the SPA and
+  forwards `/api/` to the `api` service on the compose network; the Vite dev server forwards the
+  same prefix to `localhost:8000` in development. The browser only ever talks to one origin, so
+  there is no preflight and nothing to allow.
+
+**Decision**
+`location /api/ { proxy_pass http://api:8000; }` in `frontend/nginx.conf`, with **no trailing
+slash on the upstream** so the full URI including the `/api/` prefix and the query string passes
+through unmodified. The client ships one relative base path, `/api/v1`, and no absolute URL exists
+anywhere under `frontend/src`.
+
+**Consequences**
+
+- **`src/taskmanager` is untouched by this entire phase.** `git diff -- src/taskmanager` is empty
+  across Phase 8's first plan, and no `Access-Control-Allow-*` header exists anywhere in this
+  repository.
+- **The SPA fallback cannot swallow the API.** nginx selects the longest matching prefix location,
+  so `/api/v1/task-lists` is served by the proxy block and never reaches
+  `location / { try_files ... /index.html; }`. Without that rule an unauthenticated API call would
+  come back as `200 text/html` — the index page — and the client would report a parse error
+  instead of the 401 the API actually sent. Asserted by a `curl` that requires `401` and
+  `application/problem+json` through `:8080`.
+- **`/docs`, `/redoc`, `/openapi.json` and `/health` are deliberately NOT proxied.** Swagger keeps
+  exactly one URL, `http://localhost:8000/docs`, which is the one the README already publishes. A
+  second URL for the same page is a second thing that has to keep being true.
+- **The accepted cost:** nginx resolves a literal upstream hostname once, at start-up, and caches
+  the address. Recreating the `api` container therefore needs the `ui` container restarted. The
+  `depends_on: api: condition: service_healthy` in `docker-compose.yml` is what guarantees the
+  name resolves at start-up in the first place — nginx refuses to start when it does not.
+
+---
+
+## ADR-108: the frontend's gates, and the one hook in this repository that may decline to run (2026-09-19)
+
+**Context**
+D-04 asks the frontend to carry the backend's kind of rigor, sized to a small UI. The backend's
+rigor is not "we run linters"; it is that every gate exists in both places CLAUDE.md's two-places
+rule names — the local hook set and the CI workflow — and that the properties the gates rest on
+are themselves asserted by tests. The frontend needs the same, and it introduces a new command,
+so the rule applies in full.
+
+**Options**
+
+- **A pre-commit hook that always runs the frontend gates.** Rejected. A fresh clone has no
+  `frontend/node_modules`, nothing installs it but `make ui-install`, and a hook that failed in
+  that state would make **every** commit fail on a machine that has never touched the frontend —
+  including a commit that changes only `src/taskmanager`.
+- **No pre-commit hook at all, CI only.** Rejected: it is the two-places rule's exact opposite,
+  and the local loop is where a lint error is cheap to fix.
+- **A hook scoped to `^frontend/` that exits 0, with an explanation, when `node_modules` is
+  absent.** Chosen.
+- **Node in the Docker `test` stage**, so `make docker-test` would run eslint, tsc and vitest too.
+  Rejected. `make docker-test` means "the Python suite on 3.13 against the compose database" and
+  has since Phase 1; adding a Node toolchain would change what one of this project's two headline
+  commands means, to duplicate a check CI already performs on every push.
+
+**Decision**
+Four mechanisms, and each one's limit stated:
+
+1. **Exact pins and a committed lockfile**, installed with `npm ci` everywhere — the same policy
+   `requirements.txt` follows. Gated by `tests/architecture/test_frontend_gates.py`, which reads
+   `frontend/package.json`, `frontend/package-lock.json` and `frontend/tsconfig.json` and fails on
+   a range specifier, a lock that disagrees with the manifest, a lock that belongs to a different
+   package, or `strict` / `noEmit` turned off. Because it is a pytest module it rides inside
+   `make test`, `make docker-test` and CI with no new command anywhere — which is also why the
+   `Dockerfile` `test` stage gained a `COPY` of those three files **in the same commit** as the
+   gate (ADR-102).
+2. **Three `make` targets** — `make ui-lint`, `make ui-typecheck`, `make ui-test` — plus
+   `ui-install` and `ui-dev`. They are the one group in the Makefile that needs Node and not
+   `.venv`, which is why they are named `ui-*` rather than folded into `lint`, `typecheck` and
+   `test`: a contributor with a Python environment and no Node must still be able to run every
+   backend gate.
+3. **A CI `frontend` job**, independent of `quality-gates`: `npm ci` then the same three scripts,
+   on Node 24. Two jobs rather than four more steps, so a broken Python gate and a broken frontend
+   gate are two red steps in two jobs that both ran.
+4. **A pre-commit hook scoped `files: ^frontend/`** running `scripts/ui-gates.sh`, which prints
+   two lines to stderr and exits 0 when `frontend/node_modules` is absent.
+
+**Consequences**
+
+- **This is the only hook in the repository that may decline to run**, and the script says so in
+  its own header. The escape is acceptable because the hard gate is the CI job, which has nothing
+  to opt out of — the same shape `.pre-commit-config.yaml`'s header already describes for its
+  `.venv/bin/`-qualified entries, which only work where a developer `.venv` exists.
+- **`files: ^frontend/` is load-bearing**, not tidiness: it is what keeps a commit touching only
+  `src/` from paying for Node at all.
+- **`make docker-test` keeps its meaning.** The container runs the Python suite on 3.13 and the
+  frontend gate it carries reads three configuration files — it cannot tell whether the frontend
+  lints, type-checks or passes its tests, and the gate's module docstring says so rather than
+  letting a reader assume otherwise.
+- **The pins gate does not assert which versions are pinned**, only that the specifiers are exact
+  and that the lock agrees. A test that pinned `react` to `19.3.0` would go red on an honest
+  upgrade and could only be made green by editing the test in the same commit, which is ceremony
+  rather than a gate.
+- Every new gate here was driven red once before it was trusted: a range specifier, a false
+  `strict`, and a renamed lockfile each made the module fail, and the eslint token-storage rule was
+  falsified with a planted `window.localStorage.setItem`.
+
+---

@@ -243,6 +243,11 @@ The gates, each one word:
 | `make break-check` | breaks `src/` five times on purpose and asserts the suite notices. A spot check run on demand, deliberately outside every gate path |
 | `make rehearse` | clones the committed tree, builds with `--no-cache` and runs this README's own commands in the clone. Stops the stack and leaves it down. The same kind of spot check |
 | `make down` | stops the stack, keeps the data volume |
+| `make ui-install` | installs the frontend's dependencies from its committed lockfile (`npm ci`) |
+| `make ui-dev` | the Vite dev server on `http://localhost:5173`, proxying `/api` to the API on `:8000` |
+| `make ui-lint` | eslint over the frontend |
+| `make ui-typecheck` | `tsc --noEmit`, strict, over the frontend |
+| `make ui-test` | the frontend's vitest suite. Needs neither Docker nor a database |
 
 `make install` also installs the pre-commit hooks, which run the formatters, flake8, mypy and
 import-linter on every commit. They do **not** run pytest — `make test` before a commit is a rule
@@ -272,7 +277,7 @@ been softened, and that this README still agrees with the API.
 
 ## Decisions and AI workflow
 
-[**`DECISION_LOG.md`**](DECISION_LOG.md) — 104 ADRs, each with context, the options that were
+[**`DECISION_LOG.md`**](DECISION_LOG.md) — 108 ADRs, each with context, the options that were
 really on the table, the decision and its consequences. It is append-only: a later reversal is a
 new entry naming the old one by id, never an edit. Its first screen is the shortcut — the brief's
 five genuine ambiguities and where each is resolved (the completion percentage's scope, ADR-009;

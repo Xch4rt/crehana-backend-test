@@ -94,3 +94,45 @@ jobs:
       # The 75% coverage threshold rides along through pytest.ini addopts.
       - name: Tests with coverage gate
         run: pytest
+
+  # Deliberately a SECOND job rather than four more steps in the one above. A
+  # broken Python gate and a broken frontend gate should be two red steps in two
+  # jobs that both ran, not one job that stopped at step five and never reached
+  # the frontend at all. It needs no `services:` and no `env:`: every API call
+  # is stubbed at the fetch boundary, so nothing here touches a database or a
+  # network.
+  #
+  # The step names mirror the `make ui-*` targets exactly as the steps above
+  # mirror the pre-commit hook ids, so the two files read side by side.
+  frontend:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # 24, not 26: 24 is the active LTS line, which is the same reasoning
+          # that pins node:24-alpine in frontend/Dockerfile. 26 is `current`.
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `ci`, never `install`: it installs the committed lockfile verbatim and
+      # fails if package.json and the lock disagree, which is the property
+      # tests/architecture/test_frontend_gates.py asserts from the other side.
+      - name: Install dependencies (make ui-install)
+        run: npm ci
+
+      - name: Lint (make ui-lint)
+        run: npm run lint
+
+      - name: Type check (make ui-typecheck)
+        run: npm run typecheck
+
+      - name: Tests (make ui-test)
+        run: npm test
