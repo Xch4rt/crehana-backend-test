@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -82,30 +82,68 @@ export default function TasksScreen({
   const [editDescription, setEditDescription] = useState("");
   const [editPriority, setEditPriority] = useState<TaskPriority>("medium");
 
+  // A monotonically increasing request token, and NOT a `let live = true` flag
+  // like the sibling effect below uses. The two differ exactly where it
+  // matters: a boolean says "the effect run that issued you is gone", which is
+  // enough for an unmount and not enough for a race. Three collection reads can
+  // be in flight at once here - the filter effect issues one, a mutation
+  // handler's trailing `load()` issues another - and `fetch` guarantees nothing
+  // about the order their responses come back in. A counter answers the
+  // question that actually decides whether a body may be rendered: "are you
+  // still the NEWEST read?". Anything else is dropped, so an older, narrower
+  // answer can never overwrite the rows AND the three whole-list counters that
+  // a later one already put on screen.
+  const latestRead = useRef(0);
+
+  // Deliberately a second ref rather than a second meaning for the first.
+  // `latestRead` orders reads; this one says whether there is still a component
+  // to tell. It guards the post-await setState calls in the mutation handlers -
+  // `setInFlight`, `setError`, the form resets - which have no ordering
+  // question but must not fire after "Back to lists" unmounted the screen.
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    // Assigned on every run, not just declared true: under StrictMode React
+    // mounts, unmounts and remounts, and a flag only ever set to false would
+    // leave the second mount permanently deaf.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   // A promise chain rather than `async`/`await` on purpose: every setState here
   // has to sit inside a callback, because `react-hooks/set-state-in-effect`
   // reads an awaited setState in a function the effect calls as a synchronous
   // one and refuses it. The chain is also what the rule documents as correct -
   // React is being told about the answer when it arrives, not during the effect.
-  const load = useCallback(
-    (): Promise<void> =>
-      listTasks(list.id, {
-        ...(status === "" ? {} : { status }),
-        ...(priority === "" ? {} : { priority }),
-      })
-        .then((loaded) => {
+  const load = useCallback((): Promise<void> => {
+    const token = latestRead.current + 1;
+    latestRead.current = token;
+    return listTasks(list.id, {
+      ...(status === "" ? {} : { status }),
+      ...(priority === "" ? {} : { priority }),
+    })
+      .then((loaded) => {
+        if (token === latestRead.current) {
           setCollection(loaded);
-        })
-        .catch((failure: unknown) => {
-          if (failure instanceof ApiError) {
-            setError(failure);
-          }
-        }),
-    [list.id, status, priority],
-  );
+        }
+      })
+      .catch((failure: unknown) => {
+        if (token === latestRead.current && failure instanceof ApiError) {
+          setError(failure);
+        }
+      });
+  }, [list.id, status, priority]);
 
   useEffect(() => {
     void load();
+    return () => {
+      // Superseded, or unmounted. Bumping the counter past every token handed
+      // out so far is what makes both cases one case: no read that is already
+      // in flight can match it again, so none of them may render.
+      latestRead.current += 1;
+    };
   }, [load]);
 
   // ONCE for the screen, not once per row: the directory has no pagination and
@@ -134,6 +172,11 @@ export default function TasksScreen({
   // the last collection read gave them. Re-reading the collection here would be
   // a request that can only return the same numbers.
   function replace(updated: TaskResponse): void {
+    // Guarded like the mutation handlers below: the picker that calls this
+    // awaits the API, so the answer can arrive after this screen is gone.
+    if (!mounted.current) {
+      return;
+    }
     setCollection((current) =>
       current === null
         ? current
@@ -146,9 +189,21 @@ export default function TasksScreen({
     );
   }
 
+  // Every setState that happens AFTER an `await` goes through here. A mutation
+  // that resolves once "Back to lists" has already unmounted this screen has
+  // nothing left to tell, and saying it anyway is a React warning today and a
+  // leak in whatever this screen grows into.
+  function ifMounted(update: () => void): void {
+    if (mounted.current) {
+      update();
+    }
+  }
+
   function fail(failure: unknown): void {
     if (failure instanceof ApiError) {
-      setError(failure);
+      ifMounted(() => {
+        setError(failure);
+      });
       return;
     }
     throw failure;
@@ -164,16 +219,20 @@ export default function TasksScreen({
         ...(description === "" ? {} : { description }),
         priority: newPriority,
       });
-      setTitle("");
-      setDescription("");
-      setNewPriority("medium");
+      ifMounted(() => {
+        setTitle("");
+        setDescription("");
+        setNewPriority("medium");
+      });
       // A new task moves `total_tasks`, so the counters are re-read rather
       // than adjusted here. The API owns them.
       await load();
     } catch (failure: unknown) {
       fail(failure);
     } finally {
-      setInFlight(false);
+      ifMounted(() => {
+        setInFlight(false);
+      });
     }
   }
 
@@ -213,14 +272,18 @@ export default function TasksScreen({
     setInFlight(true);
     try {
       await updateTask(list.id, task.id, changes);
-      setEditing(null);
+      ifMounted(() => {
+        setEditing(null);
+      });
       // A priority change can move a task in or out of the current filter, so
       // the collection is re-read rather than patched in place.
       await load();
     } catch (failure: unknown) {
       fail(failure);
     } finally {
-      setInFlight(false);
+      ifMounted(() => {
+        setInFlight(false);
+      });
     }
   }
 
@@ -234,7 +297,9 @@ export default function TasksScreen({
     } catch (failure: unknown) {
       fail(failure);
     } finally {
-      setInFlight(false);
+      ifMounted(() => {
+        setInFlight(false);
+      });
     }
   }
 
@@ -250,7 +315,9 @@ export default function TasksScreen({
     } catch (failure: unknown) {
       fail(failure);
     } finally {
-      setInFlight(false);
+      ifMounted(() => {
+        setInFlight(false);
+      });
     }
   }
 

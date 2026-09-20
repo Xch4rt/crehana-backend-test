@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -217,6 +217,86 @@ describe("filtering", () => {
     expect(lastRequest(fetchMock).url).toBe(
       "/api/v1/task-lists/list-1/tasks?priority=high",
     );
+  });
+
+  it("drops a filtered answer that arrives after the unfiltered one that superseded it", async () => {
+    const user = userEvent.setup();
+
+    // The whole point of this test is an order `serving()` cannot produce: it
+    // answers every handler synchronously, in call order, so the race below is
+    // invisible to it. The filtered read is held open by hand and released only
+    // AFTER the unfiltered read that superseded it has already rendered, which
+    // is the real network's freedom - two requests, no guaranteed order between
+    // their responses.
+    let releaseTheFilteredRead = (): void => undefined;
+    const filteredReadReleased = new Promise<void>((resolve) => {
+      releaseTheFilteredRead = resolve;
+    });
+
+    const STALE = "STALE: the superseded filtered row";
+    let unfilteredReads = 0;
+
+    fetchMock.mockImplementation((url: unknown) => {
+      const target = String(url);
+      if (target.includes("/api/v1/users")) {
+        return Promise.resolve(jsonResponse(200, USERS));
+      }
+      if (target.includes("status=in_progress")) {
+        return filteredReadReleased.then(() =>
+          jsonResponse(
+            200,
+            aCollection({
+              items: [aTask({ id: "task-9", title: STALE })],
+              total_tasks: 9,
+              completed_tasks: 9,
+              completion_percentage: 99,
+            }),
+          ),
+        );
+      }
+      unfilteredReads += 1;
+      return Promise.resolve(
+        jsonResponse(
+          200,
+          aCollection({
+            items:
+              unfilteredReads === 1
+                ? [aTask()]
+                : [aTask(), aTask({ id: "task-2", title: "Buy bread" })],
+          }),
+        ),
+      );
+    });
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await screen.findByText("Buy milk");
+
+    // Request one: filtered. It is now in flight and will not answer yet.
+    await user.selectOptions(screen.getByLabelText("Status"), "in_progress");
+    await waitFor(() => {
+      expect(tasksRequests()).toContain(
+        "/api/v1/task-lists/list-1/tasks?status=in_progress",
+      );
+    });
+
+    // Request two: unfiltered, sent later and answered first.
+    await user.selectOptions(screen.getByLabelText("Status"), "");
+    expect(await screen.findByText("Buy bread")).toBeInTheDocument();
+
+    // And only now does the OLDER request come back.
+    await act(async () => {
+      releaseTheFilteredRead();
+      await filteredReadReleased;
+    });
+
+    // The second response's rows...
+    expect(screen.getByText("Buy bread")).toBeInTheDocument();
+    expect(screen.queryByText(STALE)).not.toBeInTheDocument();
+    // ...and the second response's whole-list counters. These travel with every
+    // response, so a stale body overwrites the bar as well as the rows.
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.queryByText("99%")).not.toBeInTheDocument();
   });
 
   it("sends the status filter and drops the parameter entirely when it is cleared", async () => {
