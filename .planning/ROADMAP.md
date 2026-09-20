@@ -357,7 +357,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md — The two missing ambiguity ADRs, the superseding entry for two stale claims, 07-01's ADRs and the curated five-ambiguity block
+- [x] 07-02-PLAN.md — The two missing ambiguity ADRs, the superseding entry for two stale claims, 07-01's ADRs and the curated five-ambiguity block
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -384,7 +384,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
-| 7. Documentation & Delivery | 0/5 | Not started | - |
+| 7. Documentation & Delivery | 2/5 | In progress | - |
 
 ## Standing Rules
 

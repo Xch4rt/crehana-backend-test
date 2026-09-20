@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-01-PLAN.md — the published error body (DOC-04, roadmap SC-3)
-last_updated: 2026-09-20T03:00:00.000Z
-last_activity: 2026-09-19 -- 07-01 complete: Problem component published, 69 error legs on application/problem+json, six described tags, DOC-04 totality gate; 1115 passed, 100% coverage
+stopped_at: Completed 07-02-PLAN.md — the decision log closes DOC-03 (roadmap SC-2)
+last_updated: 2026-09-20T04:15:00.000Z
+last_activity: 2026-09-19 -- 07-02 complete: ADR-097..ADR-101 appended, all five brief ambiguities now resolve to a numbered ADR, ADR-019/072 corrected by id, start-here block in the header; 1115 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 65
-  completed_plans: 61
-  percent: 94
+  completed_plans: 62
+  percent: 95
 ---
 
 # Project State
@@ -27,19 +27,19 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 7
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing Phase 07
-Last activity: 2026-09-19 -- 07-01 complete: `/docs` now publishes the RFC 9457 body on every one of the 69 refusal legs, the `Problem` component resolves, the six tags are described and ordered, and `tests/architecture/test_openapi_completeness.py` makes a bare leg, an undescribed tag or a dangling `$ref` a red test
+Last activity: 2026-09-19 -- 07-02 complete: `DECISION_LOG.md` now answers all five of the brief's named ambiguities with a numbered ADR (statuses/transitions → ADR-097, priorities → ADR-098), corrects ADR-019's runner claim and ADR-072's moved test path by id rather than by edit, records 07-01's two decisions as ADR-100/101, and opens with a start-here block; the log grew by 332 lines and lost none
 
-Progress: [█████████░] 94%
+Progress: [█████████░] 95%
 
-`total_plans` now includes Phase 7's five plans: 61 of 65 executed.
+`total_plans` now includes Phase 7's five plans: 62 of 65 executed.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 61
+- Total plans completed: 62
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -54,7 +54,7 @@ Progress: [█████████░] 94%
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
-| 07 | 1 | - | - |
+| 07 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -123,6 +123,7 @@ Progress: [█████████░] 94%
 | Phase 06 P04 | 48min | 4 tasks | 12 files |
 | Phase 06 P05 | 25min | 3 tasks | 7 files |
 | Phase 07 P01 | 35min | 3 tasks | 9 files |
+| Phase 07 P02 | 30min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -858,9 +859,12 @@ None yet.
   consequence being conditional on the harness). The same flag on Phase 3 (async session
   lifecycle, transactional test fixtures, Alembic `env.py`) was discharged in that phase.
 
-- `DECISION_LOG.md` ADR-019 still claims "the workflow has never run on a real runner", which
-  has been false since plan 01-08 (CI run 35301518310 concluded success on the first attempt).
-  The log is append-only, so Phase 7 owns the superseding entry.
+- ~~`DECISION_LOG.md` ADR-019 still claims "the workflow has never run on a real runner".~~
+  **Discharged by plan 07-02**: ADR-099 corrects it, and ADR-072's stale
+  `tests/api/test_error_contract.py` path with it, by naming both by id. Both old entries are
+  byte-identical. What ADR-019 actually worried about is still open and is 07-05's: the Phase 7
+  push is the first time Phases 2-6 run on a runner, and ADR-019's one budgeted fix-up commit is
+  spent there if anywhere.
 
 - `AI_WORKFLOW.md` must be appended to at the end of every phase; reconstructing it in Phase 7
   would undermine the project's own thesis.
@@ -869,6 +873,11 @@ None yet.
 
 - [Phase 07-01]: Error legs are declared with `content=` and no `model=` key. Three of the four obvious spellings publish `application/json`, a media type this API never serves for an error; the correct one registers no component, so `ProblemAwareFastAPI` (a subclass, because `app.openapi = fn` is a mypy --strict `method-assign`) injects it once
 - [Phase 07-01]: `GET /health` 503 is the single documented exemption from DOC-04's totality rule — `HealthResponse` on `application/json` by D-08 — and `EXEMPT_LEGS` is guarded by a test that fails if the leg is renamed or removed
+- [Phase 07-02]: the five brief ambiguities are now fixed to ADR-009, ADR-097, ADR-098, ADR-069, ADR-070, and that mapping is published in `DECISION_LOG.md` §Start here — plan 07-04's gate reads exactly these ids, so a renumber is a red test
+- [Phase 07-02]: a stale sentence in an append-only log is corrected by a new entry naming the old one by id (ADR-099, in ADR-041's shape), never in place; `git diff DECISION_LOG.md | grep -c '^-'` printing 1 is the mechanical proof and it held across all three tasks
+- [Phase 07-02]: the `users` OpenAPI tag description shipped false in 07-01 ("no email address of another account is published here", which `UserSummaryResponse` and ADR-068 both contradict) and was corrected — tag prose is read by no gate, so CLAUDE.md now holds it to the ADR standard by hand
+- [Phase 07-02]: no 96-row table of contents and no generator for the log — a curated 28-line start-here block instead, per 07-RESEARCH Gap 2; the next free ADR number is 102
+- [Phase 07-02]: STATE.md and ROADMAP.md edited by hand again, the sixth consecutive plan to record the same gsd-sdk handler regressions
 
 ## Deferred Items
 
@@ -880,6 +889,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T03:40:00.000Z
-Stopped at: Completed 07-01-PLAN.md (the published error body)
-Resume file: None - next is 07-02-PLAN.md (DECISION_LOG)
+Last session: 2026-09-20T04:15:00.000Z
+Stopped at: Completed 07-02-PLAN.md (the decision log closes DOC-03)
+Resume file: None - next is 07-03-PLAN.md (AI_WORKFLOW.md)

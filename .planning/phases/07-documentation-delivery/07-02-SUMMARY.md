@@ -121,7 +121,7 @@ folded into the existing `REQUIRED_SCANNED_MODULES` bullet.
 | `make lint`, `make typecheck`, `make arch`, `make test` | green; 1115 passed, 100% over 1690 statements, 4 contracts kept |
 | `git diff 3a3e5fd HEAD -- DECISION_LOG.md \| grep -c '^-'` | **1** — the diff's own header, across all three tasks |
 | Diff hunks in `DECISION_LOG.md` | two: the header insert and the tail append. Neither touches ADR-019 or ADR-072 |
-| `grep -c '^## ADR-0'` | 96 → **101**, contiguous, no duplicate |
+| `grep -c '^## ADR-'` | 96 → **101**, contiguous, no duplicate (the `ADR-0` spelling the plan used stops matching at ADR-100) |
 | The five ambiguity headings resolve | 5/5 |
 | Every ADR id the start-here block cites | all 13 resolve to a `## ADR-NNN:` heading |
 | Four-part shape in each new entry | 4/4 in all five |
@@ -139,7 +139,7 @@ false sentence in the published OpenAPI document that review had passed.
   §Start here: **ADR-009, ADR-097, ADR-098, ADR-069, ADR-070**. The block also cites ADR-049,
   ADR-054, ADR-068, ADR-001, ADR-008, ADR-062, ADR-063 and ADR-010 — a gate that checks "every id
   cited resolves to a heading" should read all thirteen.
-- The log is now **4,560 lines**, ADR-001..**ADR-101**; the next free number is **ADR-102**.
+- The log is now **4,559 lines**, ADR-001..**ADR-101**; the next free number is **ADR-102**.
 - 07-04 still owns the `Dockerfile` `COPY` line that gate needs. Nothing in `tests/`, `scripts/`,
   `.pre-commit-config.yaml` or `.github/` reads `DECISION_LOG.md` yet, so 07-04 adds the first
   reader — and with it the host/container divergence risk 07-RESEARCH Pitfall 1 describes.

@@ -103,7 +103,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 - [ ] **DOC-01**: `README.md` includes project description, local environment setup, running in Docker, and running the tests [PDF 6]
 - [ ] **DOC-02**: README also includes an endpoint overview, a 2-minute quickstart walkthrough, a requirement-to-evidence map for the PDF, and a "pending / what I'd do next" section [PDF intro, NL]
-- [ ] **DOC-03**: `DECISION_LOG.md` records each technical decision as context / options / decision / consequences, including every brief ambiguity resolved [PDF 2.h]
+- [x] **DOC-03**: `DECISION_LOG.md` records each technical decision as context / options / decision / consequences, including every brief ambiguity resolved [PDF 2.h]
 - [x] **DOC-04**: OpenAPI docs are complete: tags, summaries, response models and documented error responses for every route [NL]
 
 ### AI Workflow Transparency (AIW)
@@ -215,7 +215,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | DOCK-05 | Phase 7 | Pending |
 | DOC-01 | Phase 7 | Pending |
 | DOC-02 | Phase 7 | Pending |
-| DOC-03 | Phase 7 | Pending |
+| DOC-03 | Phase 7 | Complete (07-02) |
 | DOC-04 | Phase 7 | Complete (07-01) |
 | AIW-01 | Phase 7 | Pending |
 | AIW-02 | Phase 7 | Pending |
