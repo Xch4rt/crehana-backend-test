@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-04-PLAN.md — README.md exists and is gated (roadmap SC-1, DOC-01, DOC-02)
-last_updated: 2026-09-20T06:00:00.000Z
-last_activity: 2026-09-20 -- 07-04 complete: README.md in ten sections with every command executed against a stack rebuilt from an empty volume, the thirteen-test documentation-honesty gate, the Dockerfile COPY that gate needs, and ADR-102; 1128 passed, 100% coverage on the host and in the container
+stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail
+last_updated: 2026-09-20T01:45:00.000Z
+last_activity: 2026-09-19 -- 07-05 tasks 1-3 done: make rehearse clones the committed tree, builds --no-cache and executes README.md's own fenced blocks in the clone (green twice, 161s then 115s), ADR-103 and the CLAUDE.md rule, the dated Phase 7 incident entry, DOCK-05 ticked; stopped at the task 4 push checkpoint
 progress:
   total_phases: 7
   completed_phases: 6
@@ -29,11 +29,16 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 Phase: 7
 Plan: 5 of 5
 Status: Executing Phase 07
-Last activity: 2026-09-20 -- 07-04 complete: `README.md` is the file it needed to be — ten sections, the CI badge, a 2-minute quickstart whose every command was extracted from the file and executed against a stack rebuilt from an empty volume (ending on a one-item filtered listing reporting `total_tasks: 2` and `completion_percentage: 50.0`), the 19-operation endpoint table, a requirement-to-evidence map over all 23 `[PDF x.y]` keys, and an honest pending list; kept true by `tests/architecture/test_documentation_claims.py` (13 tests, all driven red first) and by the Dockerfile `COPY` line ADR-102 records; DOC-01 and DOC-02 ticked, 67/69
+Last activity: 2026-09-19 -- 07-05 tasks 1-3: `make rehearse` (`scripts/clean-clone-rehearsal.sh`) clones the committed tree, builds `--no-cache` and executes README.md's own fenced blocks inside the clone — green twice, 161s then 115s, with the API healthy in the `crehana-rehearsal` project and 1135 passed at 100% in the clone's container; it found four package-relative paths in the evidence map and one false line in its own report, both fixed; ADR-103, the CLAUDE.md rule, the dated Phase 7 incident entry (52 entries) and DOCK-05 ticked, 68/69. Stopped at the task 4 push checkpoint.
 
 Progress: [█████████░] 98%
 
 `total_plans` now includes Phase 7's five plans: 64 of 65 executed.
+
+**In progress: 07-05.** Tasks 1-3 are committed; task 4 is a blocking human checkpoint — approve
+publishing the whole unpushed history and the `.planning/` trail to a repository that is already
+public. Tasks 5-7 (the push, the observed-green CI run, the delivery hand-over) are not started,
+so `completed_plans` stays 64 and the bar stays 98%.
 
 ## Performance Metrics
 

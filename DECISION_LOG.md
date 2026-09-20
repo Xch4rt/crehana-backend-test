@@ -4643,3 +4643,96 @@ Makefile ./`.
   than skipping it.
 
 ---
+
+## ADR-103: the clean-clone rehearsal executes the README rather than a transcript of it (2026-09-20, extending ADR-102)
+
+**Context**
+Roadmap SC-4 is blocking: before delivery, a fresh clone into an empty directory, a
+`docker compose down -v`, a `--no-cache` build and the README followed verbatim must reach a
+working API and a green test run with no undocumented step. ADR-102 put the README's *checkable*
+claims behind a pytest gate — the endpoint table, the `make` targets, the ADR ids, the counts —
+and named what that gate cannot see: whether any of the commands actually work. `curl -s
+$API/health` could be nonsense and all thirteen tests would stay green.
+
+The obvious way to answer SC-4 is to do the run by hand once and paste the transcript into a
+summary. That is also the way this project has repeatedly found to be worth nothing: a transcript
+proves one moment, and mostly it proves the transcript.
+
+**Options**
+
+- **A pasted transcript.** Rejected. It is unrepeatable, unverifiable by the next reader, and
+  goes stale the first time a command changes — silently, because nothing compares it with
+  anything.
+- **A checklist a human ticks.** Rejected on this project's own evidence: "every endpoint is
+  covered" and "every test asserts something" were house style for five phases and each was partly
+  untrue the first time anything checked mechanically (ADR-086, ADR-088).
+- **A script that re-types the README's commands.** Rejected, and this is the interesting
+  rejection: the script then proves *the script*. The two copies drift, the run stays green, and
+  the failure mode is exactly the one the rehearsal exists to catch.
+- **A script that EXTRACTS the README's own fenced blocks and executes them.**
+
+**Decision**
+`scripts/clean-clone-rehearsal.sh` behind `make rehearse`. It refuses to start on a dirty working
+tree or an untracked `README.md`, stops the developer's stack with a plain `down`, clones the
+committed tree into a `mktemp -d` directory, exports `COMPOSE_PROJECT_NAME=crehana-rehearsal`,
+runs `docker compose down -v` and `docker compose build --no-cache` inside the clone, checks every
+path the README cites and every `[PDF …]` key `.planning/REQUIREMENTS.md` carries, and then
+extracts the lines of the fenced `bash` blocks between `<!-- rehearsal:begin -->` and
+`<!-- rehearsal:end -->` from the **clone's** README, concatenates them in order into one script
+and runs it. `--extract-only` is the dry run: the same extraction function, no Docker and no git.
+
+**Consequences**
+
+- **The README is the source and the run is the proof, with nothing to keep in sync.** The one
+  line transformed rather than executed verbatim is `make up`, because the README itself says it
+  runs in the foreground and tells the reader to open a second terminal; the script backgrounds
+  it, tees the output to a log and polls `docker compose ps` for `api healthy`. That is the
+  mechanical form of a sentence the document already contains.
+- **The blocks are concatenated into one script**, not run block by block, because they share
+  `$API`, `$TOKEN`, `$AUTH`, `$LIST` and `$TASK` exactly as a reader typing them into one terminal
+  would. Only fenced blocks count — an inline span inside the region is prose, and §Run the tests
+  mentions `make install` and `make test` in backticks there.
+- **The marker pair is load-bearing**, which is why ADR-102's gate asserts *exactly* one of each
+  and this script re-asserts it: a second `begin` moves the region, and the rehearsal would then
+  execute a set of commands nobody reviewed.
+- **It stops the developer's stack and leaves it down, on purpose.** The ports are hard-coded and
+  this repository ships no override file (D-16), so a rehearsal cannot share a machine with a
+  running dev stack. Restoring it automatically would make the outcome depend on whether it
+  happened to be up when the run started, so the script prints `make up` and stops. Every
+  `down -v` runs inside the clone, after `COMPOSE_PROJECT_NAME` is exported — the dev project is
+  `test` with volume `test_pgdata`, and the isolation is stated rather than inherited.
+- **A pass cannot be a collision with the dev stack.** After the poll, the script asserts that the
+  container publishing `:8000` is the rehearsal project's own `api` — by container id, not by a
+  reply on the port — and reads `/health`. The `--no-cache` build makes a suspiciously fast pass
+  detectable as well.
+- **The static checks run BEFORE the build, not after it.** They take zero seconds and the build
+  takes half a minute or more; the loop this script serves is find-a-gap, fix-the-document,
+  re-run, and waiting for a build to be told a path is misspelled is the difference between a tool
+  somebody uses and a tool somebody runs once. They live here rather than in the pytest gate
+  because `.planning/`, `.github/` and `docker/` are deliberately absent from the test image
+  (ADR-102), so the same checks could only ever skip in the container.
+- **`.env` is the one exempt path, and the exemption is paid for.** It is the only path the README
+  names in backticks that must *not* exist in a fresh clone. The script asserts it is absent before
+  the region runs and that afterwards it exists with a `JWT_SECRET` that does not begin
+  `replace-me` (ADR-084).
+- **It found four real defects on its first two runs.** Four cells of the requirement-to-evidence
+  map cited package-relative paths — `application/use_cases/access.py` and three like it — which
+  read as continuations of the `src/taskmanager/` path beside them and are not paths a reader can
+  open. And the script's own report line claimed three of thirty-six extracted commands were
+  generated, when the truth is that one of the thirty-six is replaced by three.
+- **`timeout(1)` is not used anywhere**, and not by preference: it does not exist on this macOS
+  host. Every bounded wait is a POSIX polling loop with a counter and `sleep`, the idiom
+  `docker/entrypoint.sh` already uses.
+- **It is a spot check in no gate path** (D-09, the `make break-check` precedent): not in
+  `make test`, not in `.pre-commit-config.yaml`, not in `.github/workflows/ci.yml`. A `--no-cache`
+  build plus a full containerised suite is minutes, and CLAUDE.md's two-places rule is satisfied
+  by saying so rather than by adding two entries.
+- **Its guards are proved without a daemon.** `tests/unit/test_clean_clone_rehearsal.py` drives
+  the script as a program: `--extract-only` against a planted README, five malformed regions
+  (no markers, a missing end, two begins, reversed, an empty block), and a dirty tree — that last
+  one with a `docker` stub on `PATH` and a `TMPDIR` of its own, so "it refused before doing
+  anything" is asserted rather than assumed. No flag was needed to stop the run after step 0; the
+  ordering is the mechanism. Each of the three was driven red first: dropping the comment filter,
+  weakening `begins != 1` to `begins < 1`, and disabling the dirty-tree check.
+
+---

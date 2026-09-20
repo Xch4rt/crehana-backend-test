@@ -187,6 +187,7 @@ follow-ups (see 06-REVIEW.md).
 | Completion % computed over the whole list via one SQL aggregate | A filter-scoped percentage is degenerate (`?status=completed` is always 100) | — Pending |
 | Everything in English | User decision; standard for code and open repos | — Pending |
 | Own git repo inside `crehana/test` | Directory was nested in an unrelated parent repo; challenge needs its own history | ✓ Good |
+| The README is executed, not transcribed (`make rehearse`) | A pasted transcript proves one moment; a script that re-types the commands proves the script. Extracting the README's own fenced blocks and running them in a fresh clone can only pass if the document is right | ✓ Good (Phase 7: ADR-103; green twice, 161s then 115s) |
 
 ## Evolution
 
@@ -206,4 +207,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-19 after Phase 6 (Test Hardening & Coverage) completion*
+*Last updated: 2026-09-19 during Phase 7 (Documentation & Delivery), plan 07-05*

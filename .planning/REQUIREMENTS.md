@@ -97,7 +97,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **DOCK-02**: `docker-compose.yml` starts API + PostgreSQL with one command; the API waits for a healthy database (`pg_isready -h 127.0.0.1`) and applies migrations [PDF 5.a, 2.g]
 - [x] **DOCK-03**: `/health` reports liveness and database readiness and backs the container healthcheck [R]
 - [x] **DOCK-04**: The test suite can be run with one documented command without a local Python setup [R]
-- [ ] **DOCK-05**: A clean-clone rehearsal (fresh clone, `down -v`, `--no-cache` build, follow README verbatim) passes before delivery [NL]
+- [x] **DOCK-05**: A clean-clone rehearsal (fresh clone, `down -v`, `--no-cache` build, follow README verbatim) passes before delivery [NL]
 
 ### Documentation (DOC)
 
@@ -212,14 +212,14 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | DOCK-02 | Phase 3 | Complete |
 | DOCK-03 | Phase 3 | Complete |
 | DOCK-04 | Phase 1 | Complete |
-| DOCK-05 | Phase 7 | Pending |
-| DOC-01 | Phase 7 | Complete (07-04) |
-| DOC-02 | Phase 7 | Complete (07-04) |
-| DOC-03 | Phase 7 | Complete (07-02) |
-| DOC-04 | Phase 7 | Complete (07-01) |
-| AIW-01 | Phase 7 | Complete (07-03) |
-| AIW-02 | Phase 7 | Complete (07-03) |
-| AIW-03 | Phase 1 | Complete |
+| DOCK-05 | Phase 7 | Complete (07-05) — `make rehearse` green twice, 161s then 115s, README executed from the clone |
+| DOC-01 | Phase 7 | Complete (07-04) — `tests/architecture/test_documentation_claims.py`; `make rehearse` |
+| DOC-02 | Phase 7 | Complete (07-04) — `tests/architecture/test_documentation_claims.py`; `make rehearse` |
+| DOC-03 | Phase 7 | Complete (07-02) — ADR-009/097/098/069/070, pinned by `AMBIGUITY_ADRS` |
+| DOC-04 | Phase 7 | Complete (07-01) — `tests/architecture/test_openapi_completeness.py` |
+| AIW-01 | Phase 7 | Complete (07-03) — the mermaid-block floor in `test_documentation_claims.py` |
+| AIW-02 | Phase 7 | Complete (07-03) — the phase-coverage check in `test_documentation_claims.py` |
+| AIW-03 | Phase 1 | Complete — 52 dated entries; the "What I Did Not Do" body written in 07-03 |
 | AIW-04 | Phase 1 | Complete |
 | AIW-05 | Phase 7 | Pending |
 
@@ -347,8 +347,7 @@ proving the runtime adapter imports no mail library at all.
 
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-20 after plan 07-04: DOC-01 and DOC-02 ticked — `README.md` exists in ten
-sections, every command in it executed against a stack rebuilt from an empty volume, and its
-endpoint table, `make` targets, ADR citations, quoted counts and rehearsal markers are held true by
-`tests/architecture/test_documentation_claims.py`; 67/69 complete, the two open being DOCK-05 and
-AIW-05 (07-05)*
+*Last updated: 2026-09-19 after plan 07-05 task 3: DOCK-05 ticked — `make rehearse` clones the
+committed tree, builds with `--no-cache` and executes the README's own fenced blocks in the clone,
+green twice (ADR-103). 68/69 complete; the one open is AIW-05, which needs the push and an observed
+green CI run*

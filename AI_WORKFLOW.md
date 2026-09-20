@@ -2140,6 +2140,83 @@ grepping for them, not the ones that came to mind while writing the rule.
 
 ---
 
+### 2026-09-19 — Every document this phase touched shipped a claim nothing had checked, and the CI leg of the coverage agreement had been owed since Phase 6
+
+**What happened.** Phase 7 wrote no feature. It wrote a README, a decision log, an AI-workflow
+document and the gates that keep them true — and in the course of doing that it found a defect in
+each of the four things it read, including two handed forward from Phase 6.
+
+*Handed forward.* **`make docker-test` had been broken for two phases and nothing noticed.**
+`tests/unit/test_env_bootstrap.py` and `tests/unit/test_break_check.py` read repository-root files
+the Dockerfile `test` stage was not copying, so the one command an evaluator with nothing but
+Docker is told to run was a collection error, on the interpreter the deliverable actually ships,
+while `make test` stayed green on the host through two whole phases (06-04). The second
+hand-over was a *number*: D-11 asks for coverage to agree three ways — host, container and CI —
+and the CI leg had never been read off a run, because Phases 2 to 6 were never pushed. 06-04
+predicted 1796 statements. That prediction was already stale when it was written; the host now
+reports 1690 and the container 1844.
+
+<!-- CI-COVERAGE-PLACEHOLDER: plan 07-05 task 5 replaces this line with the total CI printed. -->
+
+*Found in this phase.* **07-01: three of the four obvious ways to declare an error response in
+FastAPI publish a media type this API never serves.** `responses={409: {"model": ProblemResponse}}`
+reads like the documented spelling and puts `application/json` in the published document; one of
+the four publishes `application/json` *alongside* `problem+json` with an empty schema, which is the
+worst of the four because it looks right in `/docs`. All four were measured rather than argued
+about, and the one that is correct registers no component — which is why `ProblemAwareFastAPI`
+exists (ADR-100).
+
+**07-01: the plan prescribed a shallow copy where only a deep one works.** It asked for
+`dict(PROBLEM_REF)` per leg "so no two legs share one mutable object". A shallow copy leaves the
+inner `{"$ref": …}` object shared by all sixty-nine legs — the exact hazard the sentence named.
+`deepcopy` was used instead, and `test_two_legs_share_no_mutable_object` is what makes the
+difference visible.
+
+**07-02: the tag description 07-01 had just shipped was false.** The `users` tag said no email
+address of another user is published there. `UserSummaryResponse` publishes one, and ADR-068 is an
+entry whose whole subject is that `GET /api/v1/users` is an email directory readable by any
+authenticated caller. One plan wrote a reassuring sentence; the next plan, whose job was to read
+the log against the code, caught it (`d45c0d2`).
+
+**07-03: `CLAUDE.md` claimed pre-commit enforced a gate it does not run.** "`make lint`,
+`make typecheck`, `make arch` and `make test` must all be green before any commit. pre-commit
+enforces the same set locally on every `git commit`." The hook set is isort, black, flake8, mypy
+and `lint-imports` — **no pytest**. The rule was right; the sentence about who enforces it was
+not, and it had been there since 01-06. Corrected in `fcd8579`.
+
+**07-05: the README cited four paths a reader cannot open, and the rehearsal's own report line was
+untrue.** `application/use_cases/access.py` and three like it sat in the requirement-to-evidence
+map as continuations of the `src/taskmanager/` path beside them; from the repository root they do
+not exist. And the first green rehearsal printed "36 command line(s), 3 of them generated around
+`make up`" — three of thirty-six are not generated; one of the thirty-six is replaced by three.
+
+**The planning tooling regressed `STATE.md` again**, as it did through Phase 6: the `gsd-sdk` state
+handlers reset `percent`, inject blank lines and miscount totals. The file was hand-edited and
+diffed line by line in every plan of this phase. It is recorded here for the second time because a
+recurrence is itself a finding: the workaround has now outlived the phase it was invented in.
+
+**Why it was missed.** All seven have one shape. A document is the one artifact nothing in a test
+run reads, so a sentence in it is true when it is written and true forever afterwards as far as any
+machine is concerned. `make docker-test` is the same shape from the other side: a command nobody
+runs is a gate nobody has. The two numbers — 1796 predicted, 1690 measured — are the shape in its
+purest form, a figure copied forward across three plans because nothing compared it with anything.
+
+**What changed.** The four root documents are read by
+`tests/architecture/test_documentation_claims.py` on every run, in the container as well as on the
+host (ADR-102). The README's commands are no longer described but **executed**: `make rehearse`
+clones the committed tree, builds with `--no-cache` and runs the fenced blocks between the
+rehearsal markers out of the clone's own README, plus every path it cites and every `[PDF …]` key
+it owes (ADR-103). It found the four bad paths on its first run and its own false report line on
+its second. `CLAUDE.md` now says what pre-commit actually runs, and the rule that a gate reading a
+repository-root file owes its `COPY` line in the same commit is written down in both homes.
+
+**The rule:** a document is code that nobody executes, which is why every claim in it has to be
+either checkable by a machine or deliberately not made. And a number that was measured once is a
+claim like any other — "expect 1796 statements" is not evidence, it is a sentence, and the only
+thing that makes it evidence is a run that printed it.
+
+---
+
 ## What I Did Not Do
 
 The scope that was deliberately left out, and the shortcuts that were considered and rejected —

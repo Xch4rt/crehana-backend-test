@@ -480,6 +480,22 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   id are all red tests rather than review comments (ADR-102). What the gate cannot see — whether a
   command *works*, and whether the paths the README cites exist — belongs to the clean-clone
   rehearsal, which runs the README's own commands in a fresh clone.
+- **The README's commands are executed, never transcribed: `make rehearse` →
+  `scripts/clean-clone-rehearsal.sh`.** It refuses to start on a dirty tree, clones the
+  **committed** tree into a `mktemp -d` directory, builds with `--no-cache`, checks every path the
+  README cites and every `[PDF …]` key `.planning/REQUIREMENTS.md` carries, and then extracts the
+  lines of the fenced `bash` blocks between `<!-- rehearsal:begin -->` and `<!-- rehearsal:end -->`
+  from the clone's own README and runs them as one script. The marker pair is therefore part of the
+  contract and not decoration: a command that belongs to the evaluator's path goes **inside** it, a
+  command that needs `.venv` — or `make rehearse` itself — goes **outside**. The one line
+  transformed rather than run verbatim is `make up`, which the README itself describes as
+  foreground. Every `docker compose down -v` runs inside the clone under
+  `COMPOSE_PROJECT_NAME=crehana-rehearsal`; the developer's stack is stopped with a plain `down`
+  and **left down**, with `make up` printed as the way back. `timeout(1)` is absent on this host,
+  so every wait is a POSIX polling loop. Like `make break-check` it is **deliberately not a gate**
+  (D-09, ADR-103): in neither `.pre-commit-config.yaml` nor `.github/workflows/ci.yml`, because a
+  `--no-cache` build plus a full containerised suite is minutes. Run it before delivery, and
+  whenever a command in the README changes.
 
 ### Test quality
 
