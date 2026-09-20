@@ -275,6 +275,83 @@ Out of v1 scope as a performance concern, noted only because it is a one-line, z
 
 ---
 
+## Resolution
+
+All three WARNING findings are fixed, one atomic commit each, every commit green on all seven
+gates (`make lint`, `make typecheck`, `make arch`, `make test` — 1140 — and `make ui-lint`,
+`make ui-typecheck`, `make ui-test`). The UI test count went 66 → 68. `src/taskmanager` was not
+touched; `git diff d48e20b~1..0f3e364 -- src/taskmanager` is empty.
+
+| Finding | Commit | How it was proven |
+|---|---|---|
+| WR-01 | `d48e20b` | A new vitest test drives `fetch` by hand (the shared `serving()` helper answers synchronously in call order and cannot express the race): the filtered read is held open and released only after the later unfiltered read has rendered. **Observed red first** — the stale row appeared, `Buy bread` vanished and the bar read 99%. Green after the fix. |
+| WR-02 | `20b6b44` | A new test pins the PATCH body to exactly `{"description": null}`, and was driven red against the old line (`expected { description: '' } to deeply equal { description: null }`). The backend contract was confirmed first, in source and live through the UI proxy. |
+| WR-03 | `0f3e364` | `docker compose up -d --build ui`, then `curl` on all four served shapes. Plus the README's rehearsal region gained a third command, and `make rehearse` was run on a clean clone of `0f3e364`: exit 0, 152s. |
+
+**WR-01 — the guard is a token, not a boolean.** A `let live = true` flag answers "is the effect
+run that issued you gone?", which covers an unmount and not a race. Up to three collection reads
+can be outstanding on this screen, because every mutation handler ends in `await load()`. A
+monotonic request token in a ref answers the question that decides whether a body may render — "are
+you still the newest read?" — and the effect cleanup bumps it past every token handed out so far,
+which makes *superseded* and *unmounted* one case. A second ref tracks mount state and guards the
+post-await `setState` calls that have no ordering question but must not fire after "Back to lists":
+the form resets, `setInFlight`, `setError`, and the row replacement the assignee picker triggers.
+
+**WR-02 — it went the `null` way, and the review's predicted symptom was not real.** Checked
+before fixing rather than assumed. `TaskPatchRequest.description` is `str | None` and `to_command`
+reads the key out of `model_fields_set`, so an explicit null is "clear" and not "absent"; and
+`Task.describe` runs the value through the domain's `optional_text`, which *folds `""` to `None`*.
+Verified live against the running stack through the UI's own `/api/` proxy with a throwaway user:
+`{"description": null}` answers 200 with `"description":null`, and so does `{"description": ""}`.
+So nothing was ever stored wrong and no stray empty `<p class="muted">` was ever rendered — the
+review's stated consequence does not hold against this backend. The request was still wrong:
+`TaskResponse.description` is `string | null`, so `""` was a third spelling of a two-valued field,
+correct only because of a fold the UI cannot see. `frontend/src/api/types.ts` needed no change —
+`TaskUpdateRequest.description` was already `string | null`.
+
+**WR-03 — the four curl proofs.** `add_header` is replaced, not extended, by any `location` that
+declares one of its own, and two locations set a `Cache-Control`; `= /index.html` also serves every
+deep path, because `try_files ... /index.html` is an internal redirect that re-runs location
+matching. So the three headers are written three times on purpose — server block (inherited by
+`/api/` and `/`), `= /index.html`, and `/assets/`. All four shapes on the rebuilt image:
+
+```
+GET /                      200 text/html                  nosniff + DENY + frame-ancestors 'none'
+GET /assets/index-*.js     200 application/javascript     nosniff + DENY + frame-ancestors 'none'
+GET /lists/deep/path       200 text/html (SPA fallback)   nosniff + DENY + frame-ancestors 'none'
+GET /api/v1/task-lists     401 application/problem+json   nosniff + DENY + frame-ancestors 'none'
+```
+
+The 401 is the `always` proof: without it nginx attaches headers only to 200/201/204/301/302/304,
+and the proxied 401 an unauthenticated SPA call receives is one of the most common responses this
+origin serves. (`curl -I` sends HEAD, which the API answers 405; the row above is a real `GET`.)
+
+**The rehearsal region changed, and `make rehearse` was run.** One line was added inside the
+markers — `curl -sfI $UI | grep -q 'X-Frame-Options: DENY'` — so a fresh clone re-proves the header
+on the entry document, which is the location where the repetition is load-bearing. Both gates that
+read the region count commands as a **floor** (`MINIMUM_REHEARSAL_COMMANDS = 3` in
+`tests/architecture/test_documentation_claims.py`, `MINIMUM_COMMANDS=3` in
+`scripts/clean-clone-rehearsal.sh`), so nothing was pinned to two; the region's other gate only
+restricts `make` targets, and a `curl` line names none. The README prose that said "Two commands"
+was corrected in the same commit. `make docker-test` was run before that commit, per CLAUDE.md.
+
+**`DECISION_LOG.md` is untouched.** ADR-107 is the nginx/proxy entry (id verified) and it states
+what the proxy *does* — the upstream, the missing trailing slash, the longest-prefix argument, the
+DNS-caching cost — not what the server block sets. Nothing in it became false, and three headers do
+not earn an entry in an append-only log. The reasoning is in the commit message and in
+`frontend/nginx.conf`'s own comments.
+
+### Info findings
+
+**IN-03 was checked and deliberately not taken.** Its premise does not hold for the pinned image:
+`nginx:1.30-alpine` (1.30.5) maps `js` to `application/javascript` in its own
+`/etc/nginx/mime.types`, and the served bundle answers `Content-Type: application/javascript` with
+`Content-Encoding: gzip` today. Adding a MIME type this image never emits would be a line nothing
+can verify. **IN-01 and IN-02 are open**, untouched and out of scope for this pass.
+
+---
+
 _Reviewed: 2026-09-19_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Resolved: 2026-09-19 — WR-01 `d48e20b`, WR-02 `20b6b44`, WR-03 `0f3e364`_
