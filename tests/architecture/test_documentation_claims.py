@@ -111,13 +111,13 @@ ADR_HEADING: Final[re.Pattern[str]] = re.compile(r"^## ADR-(\d{3}):", re.MULTILI
 REHEARSAL_BEGIN: Final[str] = "<!-- rehearsal:begin -->"
 REHEARSAL_END: Final[str] = "<!-- rehearsal:end -->"
 
-# The heading the human/AI account lives under, and the seven phases it must
+# The heading the human/AI account lives under, and the eight phases it must
 # cover. Located by heading rather than searched for document-wide: "Phase 3"
 # appears in the incident log too, and a scan over the whole file would be
-# satisfied by seven incidents and an empty section.
+# satisfied by eight incidents and an empty section.
 HUMAN_AI_HEADING: Final[str] = "## Human-Decided vs AI-Delegated"
 
-PHASES: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6, 7)
+PHASES: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6, 7, 8)
 
 # Floors for the non-vacuity test. Each is the count observed when this gate was
 # written, so a parser that silently stops matching fails rather than passing on
@@ -448,9 +448,11 @@ def test_the_ai_workflow_still_draws_the_diagrams_aiw_01_asks_for() -> None:
     """AIW-01 is satisfied by pictures, so the pictures are counted.
 
     A floor rather than an equality, and fenced-block counting rather than
-    rendering: there is no local Mermaid renderer and adding a Node toolchain to
-    a Python deliverable is the wrong trade. Whether they *render* is a human
-    look at the pushed page, which is a checkpoint in plan 07-05.
+    rendering: there is no local Mermaid renderer. Phase 8 put a Node toolchain
+    in this repository after all (ADR-105), and it is the UI's - it carries no
+    Mermaid renderer, and adding one would be a build dependency for a picture.
+    Whether they *render* is a human look at the pushed page, which is a
+    checkpoint in plan 07-05.
     """
     blocks = _text(AI_WORKFLOW).count("```mermaid")
 
@@ -461,7 +463,7 @@ def test_the_ai_workflow_still_draws_the_diagrams_aiw_01_asks_for() -> None:
 
 
 def test_the_human_ai_account_covers_every_phase() -> None:
-    """AIW-02, as a totality over the seven phases that were actually run.
+    """AIW-02, as a totality over the eight phases that were actually run.
 
     Scoped to the section rather than the file: `Phase 3` appears a dozen times
     in the incident log, so a document-wide scan would report this section

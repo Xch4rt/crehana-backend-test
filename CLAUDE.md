@@ -583,6 +583,52 @@ phases and each one turned out to be partly untrue the first time it was checked
   HS256, so `none`, `RS256`, `HS512` and a trailing space fail at boot rather than at the first
   login. Enforced by `tests/unit/test_settings.py::test_the_algorithm_is_a_closed_set`.
 
+### Frontend
+
+Phase 8 put a web UI inside this deliverable by user decision, against the recommendation
+recorded in ADR-105. The brief asks for no UI, so the first rule is the one the README states
+and none of these may contradict: it is beyond the brief, and it is held to the same kind of
+gate as everything else.
+
+- The UI lives in `frontend/` and is a **separate build**. No Python tool reads it: black,
+  isort, flake8 and mypy are invoked with the explicit paths `src tests`, and
+  `[tool.coverage.run] source = ["taskmanager"]`. Widening any of them is a change to a gate,
+  not a convenience — `tests/architecture/test_coverage_configuration.py` pins the coverage
+  `source` by value and goes red on anything else.
+- `src/taskmanager` is **not modified for the UI's benefit**. The UI reaches the API
+  **same-origin** through `frontend/nginx.conf`'s `/api/` proxy, so there is no CORS middleware
+  and no `Access-Control-Allow-*` header anywhere in this repository (ADR-107). An absolute API
+  URL under `frontend/src` is a defect, not a style choice: the client's base is the relative
+  `/api/v1`, and `grep -rnE "https?://" frontend/src` finding a call target is how that shows up.
+- Every frontend dependency is an **exact pin** with a committed lockfile, installed with
+  `npm ci`, and TypeScript runs `strict` with `noEmit`. Enforced by
+  `tests/architecture/test_frontend_gates.py`, which runs inside `pytest` and therefore inside
+  `make docker-test` and CI — which is precisely why the `Dockerfile` `test` stage copies
+  `frontend/package.json`, `frontend/package-lock.json` and `frontend/tsconfig.json`. A gate that
+  reads a file owes its `COPY` line in the same commit (ADR-102's rule, ADR-108); removing that
+  line was falsified and leaves `make test` green on the host while `make docker-test` reports
+  five failures.
+- The access token lives **in memory**, mirrored to `sessionStorage` at most. `localStorage` and
+  `document.cookie` are eslint **errors** under `frontend/src/**` via `no-restricted-globals` and
+  `no-restricted-properties` (D-06), exempted only in the test files that must name them to
+  assert they stayed empty. `make ui-lint` is the gate; it was driven red with a planted
+  `window.localStorage.setItem`.
+- The UI **invents no error text for an API refusal**. It renders the RFC 9457 body's `detail`,
+  falls back to `title`, and keys any special handling on `code`. It may word only a failure the
+  API never answered — a network that never returned. The component tests assert the API's own
+  `detail` verbatim, so a component that invented a friendlier sentence fails them.
+- The completion percentage is rendered from the **response's own counters** and never recomputed
+  from a filtered `items` array (ADR-009). `CompletionBar` takes the numbers as props and derives
+  nothing; the test that passes it deliberately **inconsistent** props is what keeps it that way,
+  and a recomputing version was planted and observed failing exactly that test.
+- The two-places rule applies: `make ui-lint`, `make ui-typecheck` and `make ui-test` are new
+  commands, so they exist in **both** `.pre-commit-config.yaml` and `.github/workflows/ci.yml`.
+  The pre-commit side is scoped to `^frontend/` and exits 0 with an explanation when the
+  frontend's installed dependency directory is absent — the one hook in this repository that may
+  decline to run, because a fresh clone has none and a hook that failed there would break every
+  Python commit on a machine that never touched the UI. The CI `frontend` job is therefore the
+  hard gate (ADR-108).
+
 ### Language and attribution
 
 - Everything is written in English: code, comments, docs, commit messages and planning

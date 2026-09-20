@@ -137,11 +137,14 @@ commits. The caveat is stated in ADR-084 itself and is worth repeating here: the
 **prefix** rule that refuses the one value this repository publishes. It does not stop an
 operator who invents their own weak secret, and it was never claimed to.
 
-None of the three diagrams is rendered anywhere in this repository's toolchain. There is no
-local Mermaid renderer and adding a Node toolchain to a Python deliverable was judged the wrong
-trade, so the syntax is deliberately restricted to what GitHub renders reliably — three diagram
-types, every label quoted, no icons, no styling — and the rendering itself is checked by a human
-on GitHub after the push.
+None of the three diagrams is rendered anywhere in this repository's toolchain. There is still no
+local Mermaid renderer, but the reason is now narrower than the one this paragraph used to give.
+It said that adding a Node toolchain to a Python deliverable was the wrong trade; **the human
+reversed that judgement in Phase 8** and a Node toolchain now exists here — it is the web UI's
+(ADR-105), and it carries no Mermaid renderer. Adding one would be a build dependency taken on for
+a picture. So the syntax stays deliberately restricted to what GitHub renders reliably — three
+diagram types, every label quoted, no icons, no styling — and the rendering itself is checked by a
+human on GitHub after the push.
 
 ---
 
@@ -401,6 +404,76 @@ What is already true of Phase 7:
   correction of two sentences in the log that had gone stale — made by **id**, never by edit, so
   the log stays append-only (ADR-097, ADR-098, ADR-099; commits e53033e and d45c0d2).
 - The three diagrams above, these three phase blocks, and the section below.
+
+What is already true of Phase 8:
+
+**Decided by the human**
+
+- **That there would be a web UI inside the deliverable at all — and the AI's recommendation was
+  the opposite.** The AI recommended keeping the UI out of the delivered repository: the brief asks
+  for no UI, a Node toolchain in a Python deliverable is a second dependency surface, a second
+  lockfile, a second lint/type/test triple and a second CI job, and none of it earns a point
+  against the brief's criteria. A side branch or a second repository was offered. The human heard
+  that and decided to ship it inside, knowingly, because an evaluator has five minutes and a
+  browser, and watching a refused status move come back as a 409 with its own sentence is worth
+  more than reading that the transition matrix is enforced. The decision reverses the "Frontend /
+  UI" Out of Scope row (commit 06e5453) and the sentence in this very document about a Node
+  toolchain, which is amended above. Both reversals are recorded by id in ADR-105, including the
+  recommendation and the override — a log that recorded only the decisions the AI agreed with would
+  be a worse document than one with this paragraph in it.
+- That the UI reaches the API **same-origin** through the UI container's own reverse proxy rather
+  than teaching the backend CORS, so `src/taskmanager` is untouched by the whole phase
+  (`08-CONTEXT.md` D-03, ADR-107). `git diff 1dd5af7 -- src/taskmanager` is empty, and that is the
+  claim the README makes in its UI section.
+- That the UI is plain: no component library, no state library, and no router (D-05, ADR-106). The
+  cost is accepted rather than hidden — no deep links and no browser Back between screens — and it
+  is published in the README's Pending section.
+- That the access token lives in memory with a `sessionStorage` mirror at most, and never in
+  `localStorage` or a cookie the backend does not set (D-06). It is an eslint rule rather than a
+  habit: `no-restricted-globals` and `no-restricted-properties` make both an error across
+  `frontend/src/**` (commit be2e35d).
+- That the frontend gets the backend's kind of gates, and that `make docker-test` keeps its meaning
+  — the Python suite on 3.13 — instead of growing a Node half (D-04, ADR-108).
+
+**Delegated to AI**
+
+- The whole frontend: the pinned package, the nginx configuration, the two-stage image and the `ui`
+  compose service (commits be2e35d and aad376f); one fetch boundary exporting all eighteen API
+  operations, the session and the auth screen (commit 0ce12d9); and the four screens — the list
+  index with its completion bar, one list with its tasks, its legal status moves and its two
+  filters, assignment from the user directory, and the tasks assigned to the caller (commits
+  82e68c5, fbf2482 and ebb6139). **66 vitest tests across 10 files**, all mocking the API at the
+  `fetch` boundary.
+- The pins gate: `tests/architecture/test_frontend_gates.py` asserts exact pins, a lockfile that
+  belongs to this package and agrees with its manifest, and `strict` + `noEmit` — inside `pytest`,
+  so inside `make docker-test` and CI (commit 83fecf9).
+- **Every gate was driven red once before it was trusted**, which is this project's standing rule
+  and the reason the list is worth reading rather than asserting:
+  - the eslint D-06 rule, with a planted `window.localStorage.setItem` — `make ui-lint` exit 2,
+    naming D-06;
+  - the exact-pin gate, with `"react": "^19.3.0"` — failed, reporting the offending spec;
+  - the `strict` gate, with `"strict": false` — failed;
+  - the non-vacuity guard, with the lockfile moved aside — 3 failed, naming the Docker `test` stage;
+  - **the ADR-102 trap itself**, with the `COPY frontend/...` line removed from that stage — the
+    host's `make test` stayed **green** and `make docker-test` reported **5 failed / 1135 passed**,
+    which is the whole point of the rule;
+  - ADR-009, with `CompletionBar` recomputing the percentage from its own two numbers — 1 failed of
+    5, and it was the one test written to catch exactly that;
+  - ADR-097, with `pending` added to the completed row of the transition table — 1 failed of 5;
+  - the 200-vs-204 distinction, with `unassignTask`'s response body ignored in favour of a locally
+    patched object — 1 failed of 6.
+- **A correction the AI made to itself before any plan was written.** Asked how a browser client
+  would reach the API, the AI's first answer was that the backend would need CORS. It corrected
+  that in the same conversation: the UI is served by its own container, so `/api/` can be proxied
+  on the UI's origin and the browser never makes a cross-origin request. The trace is that the
+  first committed artifact of the phase already carries the corrected position — `08-CONTEXT.md`
+  D-03 and the roadmap's success criterion 1 both name the proxy as the decision and CORS only as a
+  fallback (commits 06e5453 and 1dd5af7) — and the fallback was never taken.
+- **A plan that would have committed a red test, caught before it ran.** The first draft of 08-03
+  put the `PHASES` bump in `tests/architecture/test_documentation_claims.py` in task 1 and the
+  Phase 8 block this section holds in task 2, which would have made task 1's commit deliberately
+  red against `CLAUDE.md`'s rule that all gates are green on every commit. The plan checker caught
+  it and the revision moved both into one task; commit 1dd5af7 carries the revised plan.
 
 ---
 
@@ -2217,6 +2290,70 @@ thing that makes it evidence is a run that printed it.
 
 ---
 
+### 2026-09-19 — The pre-push audit, and then a project that had argued against a Node toolchain for seven phases acquired one
+
+**What happened.** Three things, in the order they happened, on the day this repository was
+supposed to be pushed.
+
+*First, the audit that delayed the push.* Before the push checkpoint the challenge PDF was read
+again, line by line, against every sentence in `README.md`, `DECISION_LOG.md` and this file that
+attributes something to the brief. **Four sentences credited the brief with words it does not
+contain.** ADR-010 said the brief "names the linter explicitly: flake8" — the brief says "flake8 or
+pylint" and "Linters (flake8, ruff)", so ruff is *named by the brief as acceptable* and what is
+mandated is narrower: a configured flake8 and a literal `.flake8` file. ADR-018 said the brief
+requires one documented command that runs the suite in Docker with no host Python — the brief asks
+for "instructions to run the tests" and nothing more; the rest is this project's own requirement
+DOCK-04. ADR-066 rejected a 201 on duplicate registration because it "contradicts the brief's
+literal wording" — the brief's whole text on the subject is one bonus line about optional JWT; the
+409 is requirement AUTH-01, this project's elaboration. ADR-097 said the brief "names the allowed
+status values and the moves between them as one of the five ambiguities" — the brief names no
+ambiguities and no status values. No decision was reversed. ADR-104 (commit da125c9) names all
+four by id, leaves them byte-identical because the log is append-only, and restates each on the
+ground it actually stands on; the one sentence in `README.md` was corrected in place in the same
+commit, because that file is editable and ADR-060's rule applies to it.
+
+*Second, the reversal.* Out of that audit the user asked for a small web UI **inside** the
+delivered repository. The AI recommended against it and offered a side branch or a second
+repository: the brief asks for no UI, and a Node toolchain in a Python deliverable is a second
+dependency surface, a second lockfile, a second lint/type/test triple and a second CI job that earn
+nothing against the brief's criteria. The human decided to ship it inside anyway. That reverses two
+written positions in this repository — the "Frontend / UI" Out of Scope row, and the paragraph in
+this document above explaining that a Node toolchain was the wrong trade — and both had to be
+*edited* rather than quietly left standing. ADR-105 records the recommendation and the override
+together.
+
+*Third, a pin that would have disabled a gate without failing anything.* The npm registry answers
+**7.0.2** for TypeScript's `latest`, and every habit says to take the current stable release. But
+typescript-eslint 8.70.0 declares its TypeScript peer range as `>=4.8.4 <6.1.0`. TypeScript 7 is
+the native port; against that range it would either refuse to install or leave every **type-aware**
+lint rule silently inert — a green `make ui-lint` that had checked a fraction of what it claims to.
+The planner read `peerDependencies` instead of trusting `latest`, and the pin is **6.0.3**
+(ADR-106, commit be2e35d).
+
+**Why it was missed — all three.** The audit's four sentences had the shape this log keeps
+recording: a document is the one artifact nothing in a test run reads, and "the brief requires"
+sounds like a citation while being a memory of a requirements file. The reversal is the same shape
+pointed at a *judgement* rather than a fact — a sentence that was true when it was written and that
+nothing would ever revisit. And the TypeScript pin is the shape a *tool* takes: `latest` is a real
+answer to a real question, just not to the question that was being asked.
+
+**What changed.** `AI_WORKFLOW.md`'s Node-toolchain paragraph is amended above, in place, naming
+ADR-105 and saying who reversed it, so a reader who remembers the old sentence learns that rather
+than wondering. The documentation gate's `PHASES` tuple covers eight phases, so this section's
+Phase 8 block cannot be missing without a red test. The README gained a UI section that opens by
+saying the brief asks for no UI, and the requirement-to-evidence map gained **no** row — the
+rehearsal's key check is over `[PDF x.y]` keys, and the UI requirements are tagged `[U]`. And every
+frontend dependency is an exact pin whose lockfile is asserted by
+`tests/architecture/test_frontend_gates.py`, on the same run as everything else.
+
+**The rule:** a document that argues a position owes an edit when the position is reversed, and the
+edit has to say who reversed it. Deleting the old sentence would hide the reversal; leaving it
+would publish a falsehood; the only honest third option is the one taken here. And a version the
+registry calls `latest` is an answer to "what is newest", never to "what does this toolchain
+support" — that question is answered by `peerDependencies`, and only by reading it.
+
+---
+
 ## What I Did Not Do
 
 The scope that was deliberately left out, and the shortcuts that were considered and rejected —
@@ -2238,6 +2375,31 @@ it was decided rather than forgotten.
 - **Integer priorities**, and a `cancelled` status. Priorities are the three-member enum
   `low | medium | high` (ADR-098); integers would re-open the completion-percentage definition and
   are a documented source of client bugs.
+
+**The web UI's deliberate omissions.** The UI is beyond the brief to begin with (ADR-105), so
+every one of these is a place it could have gone further and did not. They match the README's
+Pending section word for word, on purpose — two documents that disagree about what was left out
+are worse than one.
+
+- **No end-to-end browser tests**, in the suite or in CI. The screens are gated by 66 vitest
+  component tests that mock the API at the `fetch` boundary, so nothing automated exercises the
+  real nginx proxy except `make rehearse`. A full browser walkthrough was performed **once**, by
+  hand, over the DevTools Protocol using the runtime's own built-in WebSocket rather than an added
+  test dependency, against a chromium binary that happened to be cached on this host. It is a spot
+  check like `make break-check`, not a gate, and it is not reproducible on a machine without that
+  binary. "Tested in a browser" without that qualifier would overclaim.
+- **No routing**, therefore no deep links and no browser Back between screens (ADR-106). A refresh
+  returns to the list index, still signed in.
+- **No generated TypeScript client.** `frontend/src/api/types.ts` and the status-transition table
+  beside it are hand transcriptions, and nothing in this repository compares either with the Python
+  source. The server stays the authority: an illegal move is refused with the 409 the UI renders,
+  and that path is tested.
+- **No i18n, no pagination** (the API has none — API-01), **no optimistic updates** (every row is
+  replaced from a response body, deliberately), **no dark mode**, and **no due-date editing** — a
+  due date is displayed when the API sends one, but no control edits it.
+- **No UI surface for the simulated invitation.** It is a log line the backend emits after the
+  transaction commits (ADR-070); the API returns nothing about it, so a screen saying "invitation
+  sent" would be asserting something it was never told.
 
 **Security properties conceded on purpose, not overlooked.** Three of them, each with its own
 ADR, because a concession that only appears in the code is indistinguishable from an oversight.

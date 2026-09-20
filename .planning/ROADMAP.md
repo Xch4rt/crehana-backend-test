@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Auth, Assignment & Notifications** - JWT login, ownership rules, task assignment and the simulated invitation email (completed 2026-09-19)
 - [x] **Phase 6: Test Hardening & Coverage** - Tests that actually prove behaviour, with the ≥75% gate genuinely met (completed 2026-09-19)
 - [ ] **Phase 7: Documentation & Delivery** - README, DECISION_LOG, AI_WORKFLOW, clean-clone rehearsal and a public repo
-- [ ] **Phase 8: Web UI** - A small React + Vite SPA in the deliverable, gated like the backend; runs before 07-05's delivery tasks resume
+- [x] **Phase 8: Web UI** - A small React + Vite SPA in the deliverable, gated like the backend; ran before 07-05's delivery tasks resume (completed 2026-09-19)
 
 ## Phase Details
 
@@ -375,7 +375,10 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8, with one
+deliberate exception: **Phase 8 ran before Phase 7 finished.** 07-05 is paused at its task 4
+push checkpoint, and the user decided the UI had to be part of what gets pushed, so Phase 8
+executed in the gap. The complete phases are 1-6 and 8; Phase 7 resumes at 07-05 task 4.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -386,7 +389,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
 | 7. Documentation & Delivery | 4/5 | In progress | - |
-| 8. Web UI | 1/3 | In progress | - |
+| 8. Web UI | 3/3 | Complete | 2026-09-19 |
 
 ## Standing Rules
 
@@ -432,4 +435,13 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-03-PLAN.md — The documents made true again: the README's UI section, the rehearsal's UI check, the Phase 8 human/AI block and incident entry, the frontend Project Rules, and a tree 07-05 can resume against
+- [x] 08-03-PLAN.md — The documents made true again: the README's UI section, the rehearsal's UI check, the Phase 8 human/AI block and incident entry, the frontend Project Rules, and a tree 07-05 can resume against
+
+**Outcome (2026-09-19): all six criteria met.**
+
+  1. Met. `docker compose up` builds and starts db, api and ui; the UI answers on `http://localhost:8080` and reaches the API same-origin through `frontend/nginx.conf`'s `/api/` proxy. The CORS fallback was **not** taken: `git diff 1dd5af7 -- src/taskmanager` is empty (ADR-107).
+  2. Met. All four screens shipped in 08-02 and were driven both by the vitest suite and, once, by hand in a browser: register, log in, log out; create, rename, delete lists; create, edit, delete tasks; the dedicated `/status` endpoint offering only legal moves; both filters with the bar still reading the whole list (ADR-009); assign and unassign from the directory; and assigned-to-me.
+  3. Met. Every refusal renders the RFC 9457 body's `detail`, and the global 401 handler clears the session and returns to the login screen — asserted in the suite and observed in the browser with a forged token.
+  4. Met. TypeScript strict, eslint and vitest behind `make ui-lint` / `make ui-typecheck` / `make ui-test`, a CI `frontend` job, a pre-commit hook and `tests/architecture/test_frontend_gates.py` (ADR-108). `src/taskmanager` is unmodified.
+  5. Met. The README has the UI section, says the brief asks for no UI and gains **no** evidence-map row; `make rehearse` executes two UI commands against the clone's own container; the documentation gate's `PHASES` covers eight phases; the `108 ADRs` count moved in 08-01, the commit that added ADR-105..108.
+  6. Met. ADR-105 (inside the deliverable, and the reversal of both positions by id), ADR-106 (React + Vite, not Next.js, no component/state/routing library), ADR-107 (the proxy, not CORS) and ADR-108 (the gates). `AI_WORKFLOW.md` gained the Phase 8 human/AI block and one dated incident entry, and its own Node-toolchain sentence is amended in place.

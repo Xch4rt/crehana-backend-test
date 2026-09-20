@@ -124,7 +124,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **UI-05**: Every API refusal is rendered from its RFC 9457 body, and a 401 returns the user to the login screen [U]
 - [x] **UI-06**: `docker compose up` serves the UI with no second command; the UI reaches the API same-origin through a reverse proxy, so the backend gains no CORS surface (fallback: settings-driven CORS, no wildcard, with an ADR) [U]
 - [x] **UI-07**: The frontend is gated by TypeScript strict, eslint and vitest, each behind a `make` target and a CI Node job [U]
-- [ ] **UI-08**: README, the clean-clone rehearsal, the documentation gate, DECISION_LOG and AI_WORKFLOW are extended and stay true, including the two reversed positions named by id [U]
+- [x] **UI-08**: README, the clean-clone rehearsal, the documentation gate, DECISION_LOG and AI_WORKFLOW are extended and stay true, including the two reversed positions named by id [U]
 
 ## v2 Requirements
 
@@ -241,10 +241,10 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | UI-05 | Phase 8 | Complete (08-02) — every screen renders refusals through `ErrorBanner` from the problem body's own `detail`; asserted verbatim in the vitest suite (duplicate list name, invalid status transition, unknown user) and observed in a browser, where a forged token's 401 returns to the login screen |
 | UI-06 | Phase 8 | Complete (08-01) — `frontend/nginx.conf` proxies `/api/` to `api:8000`; `docker compose up` serves the SPA on :8080; no CORS header anywhere, `src/taskmanager` unmodified (ADR-107) |
 | UI-07 | Phase 8 | Complete (08-01) — `make ui-lint` / `ui-typecheck` / `ui-test`, the CI `frontend` job, and `tests/architecture/test_frontend_gates.py` (ADR-108) |
-| UI-08 | Phase 8 | Pending |
+| UI-08 | Phase 8 | Complete (08-03) — the README's UI section opens by saying the brief asks for no UI and the evidence map gains no row; `make rehearse` executes two UI commands inside the markers; `PHASES` in `test_documentation_claims.py` covers eight phases; ADR-105 and ADR-106 name the two reversed positions, and `AI_WORKFLOW.md`'s Node-toolchain sentence is amended in place |
 
 **Per-phase totals:** Phase 1 = 17, Phase 2 = 4, Phase 3 = 8, Phase 4 = 15, Phase 5 = 12,
-Phase 6 = 5, Phase 7 = 8.
+Phase 6 = 5, Phase 7 = 8, Phase 8 = 8.
 
 **Notes on cross-phase requirements:**
 - **AIW-03** (incident log) is owned by Phase 1 because the log must open before any code is
