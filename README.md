@@ -39,6 +39,11 @@ thing to do there is `POST /api/v1/auth/register`, then click **Authorize** and 
 email in the `username` field — OAuth2 fixes the field name; this API's usernames are email
 addresses.
 
+The same `docker compose up` also serves a small web UI at **<http://localhost:8080>**. **The
+brief asks for no UI** — that one is beyond the challenge, and it is described at the end of this
+section. It is also why the first `make up` takes noticeably longer than an API-only start: the UI
+image installs its dependencies and runs a production build before nginx serves a single file.
+
 ## Run the tests
 
 One command, no host Python and no host PostgreSQL:
@@ -151,6 +156,45 @@ docker compose logs api | grep task_assigned_email
 #  "event": "task_assigned_email", "to": "grace@example.com",
 #  "subject": "You have been assigned a task: Write the README", "body": "...", "task_id": "b0b95a64-..."}
 ```
+
+## The web UI (beyond the brief)
+
+A React + Vite + TypeScript single-page application lives in `frontend/`, compiled to static files
+and served by nginx in its own container. From a browser on **<http://localhost:8080>** it does
+what the quickstart above does with `curl`: register, log in and log out; create, rename and delete
+task lists; create, edit and delete tasks; move a task's status through the dedicated endpoint, and
+read the 409 when the transition table refuses the move; filter by status and by priority; assign a
+task to a user from the directory; and see what is assigned to you.
+
+**The brief asks for a backend and no user interface.** This UI is outside it, added by decision
+after the API was finished, and it is not offered as evidence for any brief requirement — which is
+why it has no row in the requirement-to-evidence map below. It reaches the API **same-origin**
+through the UI container's own `/api/` reverse proxy (`frontend/nginx.conf`), so the backend gained
+no CORS surface and this phase did not modify `src/taskmanager` at all — `git log` will show that.
+Three entries carry the reasoning: ADR-105 ships it inside the deliverable and records that the
+recommendation was the opposite one, ADR-106 chooses React + Vite over Next.js and no component,
+state or routing library, and ADR-107 chooses the proxy over teaching the backend CORS.
+
+It is held to the standard the rest of this repository is held to: TypeScript `strict`, eslint, and
+66 vitest component tests across 10 files that mock the API at the `fetch` boundary — behind
+`make ui-lint`, `make ui-typecheck` and `make ui-test`, run as their own job in CI. Every
+dependency is an exact pin installed from a committed lockfile with `npm ci`, which
+`tests/architecture/test_frontend_gates.py` re-asserts on every test run (ADR-108).
+
+Two commands are what `make rehearse` runs against the clone's own UI container. The first proves
+the SPA is being served; the second proves the proxy carried a bearer header and a query string
+through to the API and brought back the whole-list completion percentage. `-f` is what turns an
+HTTP error into a non-zero exit, and `grep -q` is what turns a 200 with the wrong body into a
+failure — a bare `curl` would pass against anything:
+
+```bash
+UI=http://localhost:8080
+curl -sf $UI | grep -q 'id="root"'
+curl -sf "$UI/api/v1/task-lists/$LIST/tasks?priority=high" -H "$AUTH" | grep -q '"completion_percentage":50.0'
+```
+
+`$LIST` and `$AUTH` are still set from the quickstart above, because every block between these
+markers runs in one shell — exactly as a reader typing them into one terminal would.
 
 <!-- rehearsal:end -->
 
@@ -298,6 +342,21 @@ forgotten: pagination and sorting on the list endpoints (API-01, ADR-043); multi
 as `?status=pending&status=in_progress` (API-02); an explicit invitation endpoint independent of
 assignment (API-03); refresh tokens and revocation (AUTH-07); password reset and email verification
 (AUTH-08).
+
+**The web UI's own deliberate gaps**, since it is beyond the brief and could have stopped anywhere:
+there is **no routing**, so no deep links and no browser Back between screens — navigation is a
+hand-rolled view switch and a refresh returns to the list index (ADR-106). There are **no
+end-to-end browser tests**, in the suite or in CI: the 66 component tests mock the API at the
+`fetch` boundary, so nothing automated exercises the real nginx proxy except `make rehearse`. A
+browser walkthrough was performed once by hand, over the DevTools Protocol against a chromium
+binary that happened to be cached on this host — a spot check like `make break-check`, not a gate,
+and not reproducible on a machine without that binary. There is **no generated TypeScript client**:
+`frontend/src/api/types.ts` and the status-transition table beside it are hand transcriptions that
+nothing compares with the Python source, which is why the server stays the authority and refuses an
+illegal move with the 409 the UI renders — a generator driven from `/openapi.json` is the first
+thing I would replace. And there is no i18n, no pagination (the API has none, API-01), no
+optimistic updates (every row is replaced from a response body, on purpose) and no due-date
+editing — a due date is displayed when the API sends one, but no control edits it.
 
 **Three security properties conceded on purpose**, each with its own ADR, because a concession that
 appears only in the code is indistinguishable from an oversight:
