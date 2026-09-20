@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 7 planned (5 plans, 5 sequential waves; 07-05 is human-gated) — ready to execute Phase 7
+status: executing
+stopped_at: Completed 07-01-PLAN.md — the published error body (DOC-04, roadmap SC-3)
 last_updated: 2026-09-20T03:00:00.000Z
-last_activity: 2026-09-20 -- Phase 07 planned (07-01..07-05, plan check passed, 8/8 requirements covered); suite baseline 1101 passed, 100% over 1659 statements
+last_activity: 2026-09-19 -- 07-01 complete: Problem component published, 69 error legs on application/problem+json, six described tags, DOC-04 totality gate; 1115 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 65
-  completed_plans: 60
-  percent: 92
+  completed_plans: 61
+  percent: 94
 ---
 
 # Project State
@@ -27,19 +27,19 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 7
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-19 -- Phase 06 complete (5/5 plans) after gap closure 06-05 and a passing re-verification (5/5); code review criticals CR-01 (unanchored coverage exclusion) and CR-02 (break-check verdict) fixed, seven review warnings recorded as follow-ups in ADR-096
+Plan: 2 of 5
+Status: Executing Phase 07
+Last activity: 2026-09-19 -- 07-01 complete: `/docs` now publishes the RFC 9457 body on every one of the 69 refusal legs, the `Problem` component resolves, the six tags are described and ordered, and `tests/architecture/test_openapi_completeness.py` makes a bare leg, an undescribed tag or a dangling `$ref` a red test
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
-`total_plans` now includes Phase 7's five plans: 60 of 65 executed.
+`total_plans` now includes Phase 7's five plans: 61 of 65 executed.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 60
+- Total plans completed: 61
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -54,6 +54,7 @@ Progress: [█████████░] 92%
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
+| 07 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -121,6 +122,7 @@ Progress: [█████████░] 92%
 | Phase 06 P03 | 22min | 4 tasks | 4 files |
 | Phase 06 P04 | 48min | 4 tasks | 12 files |
 | Phase 06 P05 | 25min | 3 tasks | 7 files |
+| Phase 07 P01 | 35min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -865,6 +867,9 @@ None yet.
 
 - Phase 6 (TEST-03): `make test` and `make docker-test` report different coverage for the same suite. **Re-measured by plan 05-16 on the closing gate: the same 998 tests give host 100.00% over 1619 statements and container 99.06% over 1772, with 18 missed.** The Phase 4 figures were host 100.00% over 1155 vs container 99.20% over 1267 with 11 missed, and Phase 3's were 730 vs 772 - so the divergence is pre-existing and has widened with the number of route handlers. The statement-count gap is PEP 649 (Python 3.14 host vs 3.13 image), and the 18 missed lines are again the trailing statements of route handlers - `routers/assignments.py` 147/204/252, `routers/auth.py` 152-153/234, `routers/task_lists.py` 161-164/197/226/260, `routers/tasks.py` 170-173/218/251/292/366, `routers/users.py` 99 - every one of which the integration suite drives over HTTP and the host run reports covered. Both runs are in `.planning/phases/05-auth-assignment-notifications/evidence/05-16-phase-gate.txt`. Phase 6 owns TEST-03 and should pin both runs to one measurement rather than argue the number down; no pragma and no omit.
 
+- [Phase 07-01]: Error legs are declared with `content=` and no `model=` key. Three of the four obvious spellings publish `application/json`, a media type this API never serves for an error; the correct one registers no component, so `ProblemAwareFastAPI` (a subclass, because `app.openapi = fn` is a mypy --strict `method-assign`) injects it once
+- [Phase 07-01]: `GET /health` 503 is the single documented exemption from DOC-04's totality rule — `HealthResponse` on `application/json` by D-08 — and `EXEMPT_LEGS` is guarded by a test that fails if the leg is renamed or removed
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -875,6 +880,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T00:40:00.000Z
-Stopped at: Completed 06-05-PLAN.md (gap closure)
-Resume file: None - Phase 6 awaits RE-verification of SC-3
+Last session: 2026-09-20T03:40:00.000Z
+Stopped at: Completed 07-01-PLAN.md (the published error body)
+Resume file: None - next is 07-02-PLAN.md (DECISION_LOG)

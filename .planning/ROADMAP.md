@@ -353,7 +353,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — The published error body: one `Problem` component, 69 legs on `application/problem+json`, the described tag table and the completeness gate
+- [x] 07-01-PLAN.md — The published error body: one `Problem` component, 69 legs on `application/problem+json`, the described tag table and the completeness gate
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
