@@ -5,13 +5,13 @@ milestone_name: milestone
 status: executing
 stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail
 last_updated: 2026-09-20T01:45:00.000Z
-last_activity: 2026-09-19 -- 07-05 tasks 1-3 done: make rehearse clones the committed tree, builds --no-cache and executes README.md's own fenced blocks in the clone (green twice, 161s then 115s), ADR-103 and the CLAUDE.md rule, the dated Phase 7 incident entry, DOCK-05 ticked; stopped at the task 4 push checkpoint Pre-push audit against the real PDF (da125c9): every brief use case exercised live (30/30), all gates green; ADR-104 corrects four sentences that credited the brief with words it does not contain (ADR-010/018/066/097) and README's 409 sentence; 104 ADRs. Still stopped at the task 4 push checkpoint.
+last_activity: 2026-09-19 -- 07-05 tasks 1-3 done: make rehearse clones the committed tree, builds --no-cache and executes README.md's own fenced blocks in the clone (green twice, 161s then 115s), ADR-103 and the CLAUDE.md rule, the dated Phase 7 incident entry, DOCK-05 ticked; stopped at the task 4 push checkpoint Pre-push audit against the real PDF (da125c9): every brief use case exercised live (30/30), all gates green; ADR-104 corrects four sentences that credited the brief with words it does not contain (ADR-010/018/066/097) and README's 409 sentence; 104 ADRs. Still stopped at the task 4 push checkpoint. Phase 8 (Web UI, user decision) planned: 08-01..08-03, three sequential waves, plan check passed after one revision (no red commit in 08-03; completed_phases wording). 07-05 stays paused at task 4 until Phase 8 is executed.
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 65
+  total_plans: 68
   completed_plans: 64
-  percent: 98
+  percent: 94
 ---
 
 # Project State

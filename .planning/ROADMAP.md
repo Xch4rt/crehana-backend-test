@@ -386,7 +386,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
 | 7. Documentation & Delivery | 4/5 | In progress | - |
-| 8. Web UI | 0/0 | Not planned | - |
+| 8. Web UI | 0/3 | Planned | - |
 
 ## Standing Rules
 
@@ -418,7 +418,18 @@ These apply to every phase and are not repeated in each phase's criteria:
   5. `README.md`, `make rehearse` and `tests/architecture/test_documentation_claims.py` stay true and green: the README says what the UI is, how to open it and that it is beyond the brief; the rehearsal proves the UI answers in the fresh clone; pinned counts are updated in the commit that changes them.
   6. `DECISION_LOG.md` records the stack choice (React + Vite, not Next.js), the same-origin proxy (or CORS), and the reversal of two earlier positions by id — "Frontend / UI" out of scope, and `AI_WORKFLOW.md`'s rejection of a Node toolchain in a Python deliverable. `AI_WORKFLOW.md` gains the Phase 8 human/AI split and a dated incident entry.
 
-**Plans**: 0 plans
+**Plans**: 3 plans (3 waves, sequential)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — The `frontend/` scaffold, the pinned toolchain, the one fetch boundary, the auth screen, the nginx reverse proxy and the `ui` compose service, gated in both places
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02-PLAN.md — The four screens: lists with their completion bars, one list with tasks, status moves and filters, assignment and assigned-to-me
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 08-03-PLAN.md — The documents made true again: the README's UI section, the rehearsal's UI check, the Phase 8 human/AI block and incident entry, the frontend Project Rules, and a tree 07-05 can resume against
