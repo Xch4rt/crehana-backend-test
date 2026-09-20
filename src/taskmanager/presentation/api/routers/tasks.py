@@ -53,6 +53,7 @@ from taskmanager.presentation.api.dependencies import (
     ClockDependency,
     UnitOfWorkDependency,
 )
+from taskmanager.presentation.api.schemas.problem import problem_response
 from taskmanager.presentation.api.schemas.tasks import (
     TaskCollectionResponse,
     TaskCreateRequest,
@@ -134,10 +135,10 @@ PriorityFilter = Annotated[TaskPriority | None, Query()]
         "`pending`, which the entity decides rather than the request (TASK-01)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": LIST_NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(LIST_NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def create_task(
@@ -188,10 +189,10 @@ async def create_task(
         "counters are what the list is."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": LIST_NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(LIST_NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def list_tasks(
@@ -224,10 +225,10 @@ async def list_tasks(
     summary="Read one task",
     response_description="The task, in full.",
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def get_task(
@@ -261,11 +262,11 @@ async def get_task(
         "(D-08, TASK-03), and sending the key in this body is a 422 naming it."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        403: {"description": FORBIDDEN_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        403: problem_response(FORBIDDEN_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def update_task(
@@ -299,11 +300,11 @@ async def update_task(
     summary="Delete a task",
     response_description="No content. The task is gone (TASK-04).",
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        403: {"description": FORBIDDEN_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        403: problem_response(FORBIDDEN_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def delete_task(
@@ -334,11 +335,11 @@ async def delete_task(
         "(D-11, TASK-05)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        409: {"description": TRANSITION_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        409: problem_response(TRANSITION_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def change_task_status(

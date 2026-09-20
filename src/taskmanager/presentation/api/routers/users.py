@@ -36,6 +36,7 @@ from taskmanager.application.dto.commands import ListUsersCommand
 from taskmanager.application.use_cases.users.list import ListUsers
 from taskmanager.presentation.api.actor import CurrentActor
 from taskmanager.presentation.api.dependencies import UnitOfWorkDependency
+from taskmanager.presentation.api.schemas.problem import problem_response
 from taskmanager.presentation.api.schemas.users import UserSummaryResponse
 
 # The prefix is declared once, on the router, exactly as every sibling does.
@@ -71,8 +72,8 @@ UNEXPECTED_DESCRIPTION: Final[str] = (
         "who is logged in, so no client should treat this route as restricted."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def list_users(

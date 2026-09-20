@@ -60,6 +60,7 @@ from taskmanager.presentation.api.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from taskmanager.presentation.api.schemas.problem import problem_response
 
 # The prefix is declared once, on the router, exactly as its two siblings do -
 # which is what lets the `Location` header below survive a change to either
@@ -114,9 +115,9 @@ UNEXPECTED_DESCRIPTION: Final[str] = (
         "the profile route."
     ),
     responses={
-        409: {"description": DUPLICATE_EMAIL_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        409: problem_response(DUPLICATE_EMAIL_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def register_user(
@@ -162,9 +163,9 @@ async def register_user(
         "seconds it is good for."
     ),
     responses={
-        401: {"description": CREDENTIALS_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(CREDENTIALS_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def login(
@@ -211,9 +212,9 @@ async def login(
         "with - and never the stored password hash (AUTH-05)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": PROFILE_GONE_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(PROFILE_GONE_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def read_current_user(

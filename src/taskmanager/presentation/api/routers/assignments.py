@@ -46,6 +46,7 @@ from taskmanager.presentation.api.dependencies import (
     EmailNotifierDependency,
     UnitOfWorkDependency,
 )
+from taskmanager.presentation.api.schemas.problem import problem_response
 from taskmanager.presentation.api.schemas.tasks import TaskAssigneeRequest, TaskResponse
 
 # The two verbs of the door, nested under the list that owns the task - the
@@ -112,11 +113,11 @@ UNEXPECTED_DESCRIPTION: Final[str] = (
         "assignment into an error (NOTF-01, NOTF-03)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        403: {"description": FORBIDDEN_DESCRIPTION},
-        404: {"description": (f"{NOT_FOUND_DESCRIPTION} {USER_NOT_FOUND_DESCRIPTION}")},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        403: problem_response(FORBIDDEN_DESCRIPTION),
+        404: problem_response(f"{NOT_FOUND_DESCRIPTION} {USER_NOT_FOUND_DESCRIPTION}"),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def assign_task(
@@ -164,16 +165,16 @@ async def assign_task(
         "Unassignment notifies no one at all (D-07)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        403: {"description": FORBIDDEN_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        403: problem_response(FORBIDDEN_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
         # This verb takes no body, and it still declares a 422: two path
         # segments are UUID-typed, so a malformed identifier is refused before
         # any use case runs. `routers/tasks.py`'s bodiless DELETE declares the
         # leg for exactly the same reason, and a leg the route can produce is
         # as wrong to omit as an unreachable one is to declare.
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def unassign_task(
@@ -226,8 +227,8 @@ async def unassign_task(
         "`GET /api/v1/task-lists` instead."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def list_assigned_tasks(

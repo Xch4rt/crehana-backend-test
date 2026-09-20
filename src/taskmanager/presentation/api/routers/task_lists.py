@@ -81,6 +81,7 @@ from taskmanager.presentation.api.dependencies import (
     ClockDependency,
     UnitOfWorkDependency,
 )
+from taskmanager.presentation.api.schemas.problem import problem_response
 from taskmanager.presentation.api.schemas.task_lists import (
     TaskListCreateRequest,
     TaskListPatchRequest,
@@ -131,10 +132,10 @@ UNEXPECTED_DESCRIPTION: Final[str] = (
         "header naming its URL."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        409: {"description": DUPLICATE_NAME_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        409: problem_response(DUPLICATE_NAME_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def create_task_list(
@@ -175,8 +176,8 @@ async def create_task_list(
         "and no pagination parameters in v1 (ADR-043)."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def list_task_lists(
@@ -203,10 +204,10 @@ async def list_task_lists(
     summary="Read one task list",
     response_description="The task list, with its completion counters.",
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def get_task_list(
@@ -232,11 +233,11 @@ async def get_task_list(
     summary="Update a task list",
     response_description="The updated task list, in full.",
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        409: {"description": DUPLICATE_NAME_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        409: problem_response(DUPLICATE_NAME_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def update_task_list(
@@ -270,10 +271,10 @@ async def update_task_list(
         "migration declares, every task inside it are gone."
     ),
     responses={
-        401: {"description": UNAUTHENTICATED_DESCRIPTION},
-        404: {"description": NOT_FOUND_DESCRIPTION},
-        422: {"description": VALIDATION_DESCRIPTION},
-        500: {"description": UNEXPECTED_DESCRIPTION},
+        401: problem_response(UNAUTHENTICATED_DESCRIPTION),
+        404: problem_response(NOT_FOUND_DESCRIPTION),
+        422: problem_response(VALIDATION_DESCRIPTION),
+        500: problem_response(UNEXPECTED_DESCRIPTION),
     },
 )
 async def delete_task_list(
