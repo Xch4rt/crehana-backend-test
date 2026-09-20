@@ -19,5 +19,10 @@ src/*.egg-info/
 build/
 dist/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
 # macOS
 .DS_Store

@@ -24,3 +24,15 @@ src/*.egg-info
 # Repository documentation and automation not needed inside the image
 .planning
 .github
+
+# Frontend build inputs and outputs. Only the three generated/installed paths
+# are excluded, never `frontend` wholesale: frontend/package.json,
+# frontend/package-lock.json and frontend/tsconfig.json stay in this context ON
+# PURPOSE, because the Dockerfile `test` stage copies them for
+# tests/architecture/test_frontend_gates.py. A test that reads a file this
+# context does not carry is green on the host and a collection error in the
+# container (ADR-102). The UI image is built from ./frontend with its own
+# .dockerignore and receives none of this tree.
+frontend/node_modules
+frontend/dist
+frontend/coverage

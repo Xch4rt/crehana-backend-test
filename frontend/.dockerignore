@@ -1,0 +1,7 @@
+# Build inputs only. The test files are NOT excluded on purpose: the image build
+# runs `tsc --noEmit` over exactly the file set `make ui-typecheck` does, and
+# excluding them here would let the two disagree about whether the tree
+# type-checks.
+node_modules
+dist
+coverage

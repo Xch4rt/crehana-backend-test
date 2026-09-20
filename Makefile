@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install env lint format typecheck arch test test-unit break-check rehearse docker-test up down run
+.PHONY: install env lint format typecheck arch test test-unit break-check rehearse docker-test up down run ui-install ui-dev ui-lint ui-typecheck ui-test
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -171,3 +171,44 @@ down:
 # nothing here assumes an activated virtualenv.
 run:
 	$(VENV)/bin/uvicorn --factory taskmanager.main:create_app --reload
+
+# ---------------------------------------------------------------------------
+# The web UI (Phase 8, beyond the brief). Five targets, and they are the one
+# group in this file that needs NODE and not $(VENV) - the opposite constraint
+# from everything above. That is exactly why they are named `ui-*` rather than
+# folded into `lint`, `typecheck` and `test`: a developer with a Python
+# environment and no Node must still be able to run every backend gate, and
+# `make test` must never start failing because `npm` is missing.
+#
+# `npm --prefix frontend`, never a `cd frontend && ...`: GNU Make 3.81 runs each
+# recipe line in its own shell and this file already refuses to depend on a `cd`
+# performed on a previous line.
+# ---------------------------------------------------------------------------
+
+# `npm ci` and deliberately not `npm install`: the committed lockfile is the
+# source of truth for versions exactly as requirements.txt is, and `ci` installs
+# from it verbatim, failing if package.json and the lock disagree. `install`
+# would quietly resolve and rewrite the lock instead.
+ui-install:
+	npm --prefix frontend ci
+
+# The Vite dev server on http://localhost:5173, proxying /api to the API on
+# :8000 (vite.config.ts). `make up` must be running first - the proxy has an
+# origin to forward to, not an API of its own.
+ui-dev:
+	npm --prefix frontend run dev
+
+# eslint over the flat config, which carries the D-06 token-storage rules as
+# real errors rather than as a comment nobody enforces.
+ui-lint:
+	npm --prefix frontend run lint
+
+# tsc --noEmit, strict. Nothing is written to the tree.
+ui-typecheck:
+	npm --prefix frontend run typecheck
+
+# vitest, once, non-interactive. jsdom plus Testing Library; every API call is
+# stubbed at the fetch boundary, so this target needs neither Docker nor a
+# database.
+ui-test:
+	npm --prefix frontend test
