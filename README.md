@@ -181,17 +181,25 @@ It is held to the standard the rest of this repository is held to: TypeScript `s
 dependency is an exact pin installed from a committed lockfile with `npm ci`, which
 `tests/architecture/test_frontend_gates.py` re-asserts on every test run (ADR-108).
 
-Two commands are what `make rehearse` runs against the clone's own UI container. The first proves
+Three commands are what `make rehearse` runs against the clone's own UI container. The first proves
 the SPA is being served; the second proves the proxy carried a bearer header and a query string
-through to the API and brought back the whole-list completion percentage. `-f` is what turns an
-HTTP error into a non-zero exit, and `grep -q` is what turns a 200 with the wrong body into a
-failure — a bare `curl` would pass against anything:
+through to the API and brought back the whole-list completion percentage; the third proves the
+clickjacking header is actually on the entry document. `-f` is what turns an HTTP error into a
+non-zero exit, and `grep -q` is what turns a 200 with the wrong body into a failure — a bare `curl`
+would pass against anything:
 
 ```bash
 UI=http://localhost:8080
 curl -sf $UI | grep -q 'id="root"'
 curl -sf "$UI/api/v1/task-lists/$LIST/tasks?priority=high" -H "$AUTH" | grep -q '"completion_percentage":50.0'
+curl -sfI $UI | grep -q 'X-Frame-Options: DENY'
 ```
+
+The third is not the belt-and-braces line it looks like. `add_header` in nginx is replaced, not
+extended, by any `location` that declares one of its own, and `frontend/nginx.conf` sets a
+`Cache-Control` in two locations — so the security headers are written three times on purpose and
+a reader who deletes the repetition leaves this block looking correct while the pages it serves go
+unprotected. This is the command that notices.
 
 `$LIST` and `$AUTH` are still set from the quickstart above, because every block between these
 markers runs in one shell — exactly as a reader typing them into one terminal would.
