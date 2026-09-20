@@ -428,7 +428,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — The four screens: lists with their completion bars, one list with tasks, status moves and filters, assignment and assigned-to-me
+- [x] 08-02-PLAN.md — The four screens: lists with their completion bars, one list with tasks, status moves and filters, assignment and assigned-to-me
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

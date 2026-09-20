@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail (still paused; Phase 8 is executing ahead of it by design)
-last_updated: 2026-09-20T03:30:00.000Z
-last_activity: 2026-09-19 -- 08-01 executed: `frontend/` exists, is exact-pinned with a committed lockfile, and lints, type-checks and tests clean (20 vitest tests). The single fetch boundary (`src/api/client.ts`) carries all eighteen API operations behind a RELATIVE `/api/v1` base path; the login/register screen renders refusals from the RFC 9457 body and a 401 clears the session. `docker compose up` now brings db, api and ui to healthy: nginx serves the SPA on :8080 and proxies `/api/` to `api:8000`, so an authenticated call through :8080 returns byte-identical JSON to the same call on :8000, a `?priority=high` query survives, and an unauthenticated one answers 401 `application/problem+json` rather than the HTML a fallback would produce. No CORS header anywhere and `git diff --stat 1dd5af7 -- src/taskmanager` is empty. Gates in both places: `make ui-lint/ui-typecheck/ui-test`, a CI `frontend` job, a pre-commit hook scoped `^frontend/`, and `tests/architecture/test_frontend_gates.py` over the pins (1140 passed at 100%, host and container). ADR-105..108 appended, README at 108 ADRs. 07-05 remains paused at its task 4 push checkpoint.
+last_updated: 2026-09-20T05:10:00.000Z
+last_activity: 2026-09-19 -- 08-02 executed: the four screens are real. The list index shows every list's completion bar and creates, renames and deletes; one list shows its tasks with the dedicated `/status` endpoint, a control that offers only the moves ADR-097 allows, status and priority filters, and assignment from `GET /api/v1/users` read once per screen; and `assigned-to-me` lists the caller's tasks across lists with no invented counter. The phase's load-bearing property holds in three places: a filtered view renders ONE row while the bar still reads 50% (1 / 2) from the response's whole-list counters (ADR-009) -- in a vitest test, through `curl` on :8080, and in headless Chromium. 66 frontend tests across 10 files (was 20/4); backend untouched at 1140 passed, 100%, host and container; `git diff --stat 1dd5af7 -- src/taskmanager` still empty. Three falsifications were driven red and reverted: a recomputed bar, `completed -> pending` added to the move table, and unassign assuming a 204. The full browser walkthrough (register, create, rename, tasks, complete, filter, assign, edit, delete, assigned-to-me, forged-401 back to login) was driven over CDP with Node's built-in WebSocket -- no new dependency. db, api and ui left healthy on :8080. 07-05 remains paused at its task 4 push checkpoint.
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 68
-  completed_plans: 65
-  percent: 96
+  completed_plans: 66
+  percent: 97
 ---
 
 # Project State
@@ -27,15 +27,15 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 8
-Plan: 1 of 3
+Plan: 2 of 3
 Status: Executing Phase 08 (07-05 paused at its task 4 push checkpoint)
-Last activity: 2026-09-19 -- 08-01: the `frontend/` scaffold and its five `make` targets, the one fetch boundary and the auth screen (tests written first and observed RED), the two-stage UI image with its nginx reverse proxy and the `ui` compose service, and the gates in both places plus ADR-105..108. Four commits, every gate green on each; `make docker-test` 1140 passed at 100%.
+Last activity: 2026-09-19 -- 08-02: the list index and the completion bar, one list with its tasks, legal status moves and filters, and assignment plus assigned-to-me. Three commits, every backend and frontend gate green on each; 66 vitest tests, `make docker-test` 1140 passed at 100%. Proven three ways: the suite, `curl` through the :8080 proxy, and a scripted headless-Chromium walkthrough.
 
-Progress: [█████████░] 96%
+Progress: [█████████░] 97%
 
-`total_plans` now includes Phase 8's three plans: 65 of 68 executed.
+`total_plans` now includes Phase 8's three plans: 66 of 68 executed.
 
-**In progress: 08-01 is done; 08-02 and 08-03 remain.** Phase 8 runs BEFORE 07-05 resumes, by user
+**In progress: 08-01 and 08-02 are done; only 08-03 remains.** Phase 8 runs BEFORE 07-05 resumes, by user
 decision, so that the UI is part of the delivered commit.
 
 **Still paused: 07-05.** Tasks 1-3 are committed; task 4 is a blocking human checkpoint — approve
@@ -47,7 +47,7 @@ Nothing in Phase 8 pushes.
 
 **Velocity:**
 
-- Total plans completed: 65
+- Total plans completed: 66
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -63,7 +63,7 @@ Nothing in Phase 8 pushes.
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
 | 07 | 4 | - | - |
-| 08 | 1 | - | - |
+| 08 | 2 | - | - |
 
 **Recent Trend:**
 
