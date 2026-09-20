@@ -11,6 +11,11 @@ running container before it was written down, and the claims this file makes abo
 [`tests/architecture/test_documentation_claims.py`](tests/architecture/test_documentation_claims.py)
 on every test run.
 
+The commands in the next three sections are not a transcript. `make rehearse` clones this
+repository into an empty directory, builds the image with `--no-cache`, extracts those very blocks
+from the clone's own `README.md` and runs them — so this file is executable, and it goes red the
+day one of its commands stops working.
+
 <!-- rehearsal:begin -->
 
 ## Run it
@@ -210,8 +215,8 @@ Every cell in the last column is a command or a test path — never prose.
 | 4.a | flake8 passes with no errors | `.flake8` | `make lint` |
 | 4.b | black and isort configured | `pyproject.toml`, `.pre-commit-config.yaml` | `make lint` |
 | 4.c | A literal `.flake8` file | `.flake8` | `make lint` |
-| 5.a | A `Dockerfile` and a `docker-compose.yml` | `Dockerfile`, `docker-compose.yml`, `docker/entrypoint.sh` | `make up` |
-| 6 | A README covering setup, Docker and the tests | this file | `tests/architecture/test_documentation_claims.py` |
+| 5.a | A `Dockerfile` and a `docker-compose.yml` | `Dockerfile`, `docker-compose.yml`, `docker/entrypoint.sh` | `make up`; `make rehearse` |
+| 6 | A README covering setup, Docker and the tests | this file | `tests/architecture/test_documentation_claims.py`; `make rehearse` |
 
 ## Local development
 
@@ -236,6 +241,7 @@ The gates, each one word:
 | `make test-unit` | the no-database slice, in about a second and a half. A convenience, not a gate |
 | `make docker-test` | the whole suite in the container. No host Python, no host database |
 | `make break-check` | breaks `src/` five times on purpose and asserts the suite notices. A spot check run on demand, deliberately outside every gate path |
+| `make rehearse` | clones the committed tree, builds with `--no-cache` and runs this README's own commands in the clone. Stops the stack and leaves it down. The same kind of spot check |
 | `make down` | stops the stack, keeps the data volume |
 
 `make install` also installs the pre-commit hooks, which run the formatters, flake8, mypy and

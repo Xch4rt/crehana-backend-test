@@ -10,7 +10,7 @@
 #     an explicit $(VENV)/bin/ path, because an evaluator will clone, run
 #     `make install`, and then type `make test` in the same shell.
 
-.PHONY: install env lint format typecheck arch test test-unit break-check docker-test up down run
+.PHONY: install env lint format typecheck arch test test-unit break-check rehearse docker-test up down run
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -106,6 +106,30 @@ test-unit:
 # integration tests.
 break-check:
 	sh scripts/break-check.sh
+
+# The answer to "your README is green, but is it true?" - roadmap SC-4's other
+# half. The script clones the COMMITTED tree into an empty directory, builds the
+# image with --no-cache, and then extracts the shell lines between README.md's
+# `rehearsal:begin`/`rehearsal:end` markers and runs them. It executes the
+# document rather than a transcript of it, so it goes red the day a command in
+# the README stops working.
+#
+# It needs Docker and a clean working tree, and it has one deliberate side
+# effect: it STOPS the developer's stack (plain `down`, so test_pgdata survives)
+# because the ports are hard-coded, and it leaves it down, printing `make up` as
+# the one command that restores it. Every `down -v` it runs is inside the clone,
+# under COMPOSE_PROJECT_NAME=crehana-rehearsal.
+#
+# Deliberately in neither .pre-commit-config.yaml nor .github/workflows/ci.yml,
+# for the same reason `break-check` is not (D-09): a --no-cache build plus a full
+# containerised suite is minutes, and a ten-second commit loop is only worth
+# having if nobody is tempted to skip it. A spot check run on demand - before
+# delivery, and whenever the README's commands change.
+#
+# `sh scripts/clean-clone-rehearsal.sh --extract-only` is the dry run: it prints
+# the commands it would execute and touches neither Docker nor git.
+rehearse:
+	sh scripts/clean-clone-rehearsal.sh
 
 # Runs the suite on Python 3.13 with no host Python and no host PostgreSQL
 # involved. The target name is unchanged, exactly as Phase 1 promised when it was
