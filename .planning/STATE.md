@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail
-last_updated: 2026-09-20T01:45:00.000Z
-last_activity: 2026-09-19 -- 07-05 tasks 1-3 done: make rehearse clones the committed tree, builds --no-cache and executes README.md's own fenced blocks in the clone (green twice, 161s then 115s), ADR-103 and the CLAUDE.md rule, the dated Phase 7 incident entry, DOCK-05 ticked; stopped at the task 4 push checkpoint Pre-push audit against the real PDF (da125c9): every brief use case exercised live (30/30), all gates green; ADR-104 corrects four sentences that credited the brief with words it does not contain (ADR-010/018/066/097) and README's 409 sentence; 104 ADRs. Still stopped at the task 4 push checkpoint. Phase 8 (Web UI, user decision) planned: 08-01..08-03, three sequential waves, plan check passed after one revision (no red commit in 08-03; completed_phases wording). 07-05 stays paused at task 4 until Phase 8 is executed.
+stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail (still paused; Phase 8 is executing ahead of it by design)
+last_updated: 2026-09-20T03:30:00.000Z
+last_activity: 2026-09-19 -- 08-01 executed: `frontend/` exists, is exact-pinned with a committed lockfile, and lints, type-checks and tests clean (20 vitest tests). The single fetch boundary (`src/api/client.ts`) carries all eighteen API operations behind a RELATIVE `/api/v1` base path; the login/register screen renders refusals from the RFC 9457 body and a 401 clears the session. `docker compose up` now brings db, api and ui to healthy: nginx serves the SPA on :8080 and proxies `/api/` to `api:8000`, so an authenticated call through :8080 returns byte-identical JSON to the same call on :8000, a `?priority=high` query survives, and an unauthenticated one answers 401 `application/problem+json` rather than the HTML a fallback would produce. No CORS header anywhere and `git diff --stat 1dd5af7 -- src/taskmanager` is empty. Gates in both places: `make ui-lint/ui-typecheck/ui-test`, a CI `frontend` job, a pre-commit hook scoped `^frontend/`, and `tests/architecture/test_frontend_gates.py` over the pins (1140 passed at 100%, host and container). ADR-105..108 appended, README at 108 ADRs. 07-05 remains paused at its task 4 push checkpoint.
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 68
-  completed_plans: 64
-  percent: 94
+  completed_plans: 65
+  percent: 96
 ---
 
 # Project State
@@ -26,25 +26,28 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 ## Current Position
 
-Phase: 7
-Plan: 5 of 5
-Status: Executing Phase 07
-Last activity: 2026-09-19 -- 07-05 tasks 1-3: `make rehearse` (`scripts/clean-clone-rehearsal.sh`) clones the committed tree, builds `--no-cache` and executes README.md's own fenced blocks inside the clone — green twice, 161s then 115s, with the API healthy in the `crehana-rehearsal` project and 1135 passed at 100% in the clone's container; it found four package-relative paths in the evidence map and one false line in its own report, both fixed; ADR-103, the CLAUDE.md rule, the dated Phase 7 incident entry (52 entries) and DOCK-05 ticked, 68/69. Stopped at the task 4 push checkpoint.
+Phase: 8
+Plan: 1 of 3
+Status: Executing Phase 08 (07-05 paused at its task 4 push checkpoint)
+Last activity: 2026-09-19 -- 08-01: the `frontend/` scaffold and its five `make` targets, the one fetch boundary and the auth screen (tests written first and observed RED), the two-stage UI image with its nginx reverse proxy and the `ui` compose service, and the gates in both places plus ADR-105..108. Four commits, every gate green on each; `make docker-test` 1140 passed at 100%.
 
-Progress: [█████████░] 98%
+Progress: [█████████░] 96%
 
-`total_plans` now includes Phase 7's five plans: 64 of 65 executed.
+`total_plans` now includes Phase 8's three plans: 65 of 68 executed.
 
-**In progress: 07-05.** Tasks 1-3 are committed; task 4 is a blocking human checkpoint — approve
+**In progress: 08-01 is done; 08-02 and 08-03 remain.** Phase 8 runs BEFORE 07-05 resumes, by user
+decision, so that the UI is part of the delivered commit.
+
+**Still paused: 07-05.** Tasks 1-3 are committed; task 4 is a blocking human checkpoint — approve
 publishing the whole unpushed history and the `.planning/` trail to a repository that is already
-public. Tasks 5-7 (the push, the observed-green CI run, the delivery hand-over) are not started,
-so `completed_plans` stays 64 and the bar stays 98%.
+public. Tasks 5-7 (the push, the observed-green CI run, the delivery hand-over) are not started.
+Nothing in Phase 8 pushes.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 64
+- Total plans completed: 65
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -60,6 +63,7 @@ so `completed_plans` stays 64 and the bar stays 98%.
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
 | 07 | 4 | - | - |
+| 08 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -131,6 +135,7 @@ so `completed_plans` stays 64 and the bar stays 98%.
 | Phase 07 P02 | 30min | 3 tasks | 4 files |
 | Phase 07 P03 | 40min | 3 tasks | 5 files |
 | Phase 07 P04 | 45min | 3 tasks | 6 files |
+| Phase 08 P01 | 35min | 4 tasks | 36 files |
 
 ## Accumulated Context
 
@@ -904,6 +909,16 @@ None yet.
 - [Phase 07-04]: AI_WORKFLOW.md's commit hashes are deliberately NOT re-resolved by the gate: the test stage installs git but receives no .git, so the check would skip in the container — the WR-06 shape
 - [Phase 07-04]: CLAUDE.md's "pre-commit enforces the same set" sentence corrected in place — the hook set runs no pytest, which 07-03 found and this plan owns the file to fix
 - [Phase 07-04]: STATE.md and ROADMAP.md edited by hand again, the eighth consecutive plan to record the same gsd-sdk handler regressions
+- [Phase 08-01]: the UI reaches the API SAME-ORIGIN through the `ui` container's nginx (`location /api/` -> `http://api:8000`, no trailing slash), so `src/taskmanager` gains no CORS surface and is byte-identical to where Phase 7 left it — the settings-driven CORS fallback D-03 allowed was not taken (ADR-107)
+- [Phase 08-01]: the SPA `try_files` fallback cannot swallow `/api/` because nginx matches the LONGEST prefix first; asserted by a curl that requires 401 `application/problem+json` through :8080, not the 200 text/html an HTML fallback would produce
+- [Phase 08-01]: `/docs`, `/redoc`, `/openapi.json` and `/health` are deliberately NOT proxied — Swagger keeps exactly one URL, `http://localhost:8000/docs`, the one the README already publishes
+- [Phase 08-01]: TypeScript is pinned to 6.0.3 and NOT the registry's `latest` 7.0.2, because `typescript-eslint@8.70.0` peers `typescript >=4.8.4 <6.1.0`; taking `latest` would silently disable every type-aware lint rule (ADR-106)
+- [Phase 08-01]: D-06 is a GATE, not a habit — `no-restricted-globals` / `no-restricted-properties` make `localStorage` and `document.cookie` eslint errors across `src/**`, exempted only in the test files that must name them to assert they stayed empty; falsified with a planted `window.localStorage.setItem`
+- [Phase 08-01]: `scripts/ui-gates.sh` is the one hook in this repository that may DECLINE to run (no `frontend/node_modules` -> two lines to stderr and exit 0), because a fresh clone has none and a hook that failed there would break every Python commit on a machine that never touched the frontend; the hard gate is the CI `frontend` job (ADR-108)
+- [Phase 08-01]: the ADR-102 trap was driven red rather than assumed — with the `COPY frontend/...` line removed from the Dockerfile `test` stage, `make test` stayed green on the host and `make docker-test` reported 5 failed / 1135 passed; restored, both are 1140
+- [Phase 08-01]: `vitest run` exits 1 with no test files, so task 1 ships `src/App.test.tsx` rather than `--passWithNoTests` in the npm script — the flag would be a permanent hole that kept the gate green the day somebody deleted the suite
+- [Phase 08-01]: Testing Library's auto-cleanup only registers when it can see a GLOBAL `afterEach`; with `globals: false` it silently does not, and every render accumulates until a `getByRole` reports "found multiple". `src/setupTests.ts` wires `cleanup()` by hand and says why
+- [Phase 08-01]: STATE.md and ROADMAP.md edited by hand again, the ninth consecutive plan to record the same gsd-sdk handler regressions
 
 ## Deferred Items
 
@@ -915,6 +930,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T06:00:00.000Z
-Stopped at: Completed 07-04-PLAN.md (README.md and its gate: DOC-01, DOC-02)
-Resume file: None - next is 07-05-PLAN.md (the clean-clone rehearsal, the push and the delivery checkpoints)
+Last session: 2026-09-20T03:30:00.000Z
+Stopped at: Completed 08-01-PLAN.md (the frontend scaffold, the fetch boundary, the UI image and its proxy, the gates and ADR-105..108)
+Resume file: None - next is 08-02-PLAN.md (the four screens). 07-05 stays paused at its task 4 push checkpoint until Phase 8 closes.

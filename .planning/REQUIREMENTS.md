@@ -117,13 +117,13 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Web UI (UI) — beyond the brief, user decision 2026-09-19
 
-- [ ] **UI-01**: A React + Vite + TypeScript SPA lives in `frontend/` and lets a user register, log in and log out against the existing API [U]
+- [x] **UI-01**: A React + Vite + TypeScript SPA lives in `frontend/` and lets a user register, log in and log out against the existing API [U]
 - [ ] **UI-02**: User can create, rename and delete task lists and sees each list's completion percentage [U]
 - [ ] **UI-03**: User can create, edit and delete tasks, change a task's status, and filter by status and priority while the completion percentage keeps describing the whole list [U]
 - [ ] **UI-04**: User can assign and unassign a task from the user directory and see the tasks assigned to them [U]
 - [ ] **UI-05**: Every API refusal is rendered from its RFC 9457 body, and a 401 returns the user to the login screen [U]
-- [ ] **UI-06**: `docker compose up` serves the UI with no second command; the UI reaches the API same-origin through a reverse proxy, so the backend gains no CORS surface (fallback: settings-driven CORS, no wildcard, with an ADR) [U]
-- [ ] **UI-07**: The frontend is gated by TypeScript strict, eslint and vitest, each behind a `make` target and a CI Node job [U]
+- [x] **UI-06**: `docker compose up` serves the UI with no second command; the UI reaches the API same-origin through a reverse proxy, so the backend gains no CORS surface (fallback: settings-driven CORS, no wildcard, with an ADR) [U]
+- [x] **UI-07**: The frontend is gated by TypeScript strict, eslint and vitest, each behind a `make` target and a CI Node job [U]
 - [ ] **UI-08**: README, the clean-clone rehearsal, the documentation gate, DECISION_LOG and AI_WORKFLOW are extended and stay true, including the two reversed positions named by id [U]
 
 ## v2 Requirements
@@ -234,13 +234,13 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | AIW-03 | Phase 1 | Complete — 52 dated entries; the "What I Did Not Do" body written in 07-03 |
 | AIW-04 | Phase 1 | Complete |
 | AIW-05 | Phase 7 | Pending |
-| UI-01 | Phase 8 | Pending |
+| UI-01 | Phase 8 | Complete (08-01) — `frontend/src/auth/LoginScreen.tsx`; register, log in and log out, 20 vitest tests |
 | UI-02 | Phase 8 | Pending |
 | UI-03 | Phase 8 | Pending |
 | UI-04 | Phase 8 | Pending |
-| UI-05 | Phase 8 | Pending |
-| UI-06 | Phase 8 | Pending |
-| UI-07 | Phase 8 | Pending |
+| UI-05 | Phase 8 | Partial (08-01) — the mechanism exists (`problem.ts`, `ErrorBanner`, the global 401 handler) and is exercised on the auth screen; completed by 08-02's screens |
+| UI-06 | Phase 8 | Complete (08-01) — `frontend/nginx.conf` proxies `/api/` to `api:8000`; `docker compose up` serves the SPA on :8080; no CORS header anywhere, `src/taskmanager` unmodified (ADR-107) |
+| UI-07 | Phase 8 | Complete (08-01) — `make ui-lint` / `ui-typecheck` / `ui-test`, the CI `frontend` job, and `tests/architecture/test_frontend_gates.py` (ADR-108) |
 | UI-08 | Phase 8 | Pending |
 
 **Per-phase totals:** Phase 1 = 17, Phase 2 = 4, Phase 3 = 8, Phase 4 = 15, Phase 5 = 12,

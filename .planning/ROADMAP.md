@@ -386,7 +386,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
 | 7. Documentation & Delivery | 4/5 | In progress | - |
-| 8. Web UI | 0/3 | Planned | - |
+| 8. Web UI | 1/3 | In progress | - |
 
 ## Standing Rules
 
@@ -424,7 +424,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — The `frontend/` scaffold, the pinned toolchain, the one fetch boundary, the auth screen, the nginx reverse proxy and the `ui` compose service, gated in both places
+- [x] 08-01-PLAN.md — The `frontend/` scaffold, the pinned toolchain, the one fetch boundary, the auth screen, the nginx reverse proxy and the `ui` compose service, gated in both places
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
