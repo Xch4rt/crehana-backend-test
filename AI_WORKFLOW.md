@@ -22,11 +22,126 @@ commits, files and tests. If this file and the repository ever disagree, this fi
 ## How This Project Was Built
 
 The workflow narrative end to end: brief analysis, research, requirements, roadmap, and then
-per-phase plan → execute → verify against the automated gates. Phase 7 adds the Mermaid
-diagrams of the real workflow, drawn from what actually happened rather than from an idealized
-process.
+per-phase plan → execute → verify against the automated gates. The three diagrams below are of
+the real workflow, drawn from what actually happened rather than from an idealized process —
+including the steps that exist for some phases and not others, and the two phases that
+verification sent back.
 
-_To be completed in Phase 7._
+### From the brief to the delivery
+
+The brief went to four research agents in parallel, one per concern:
+`.planning/research/STACK.md`, `ARCHITECTURE.md`, `FEATURES.md` and `PITFALLS.md`. They
+disagreed — with each other, and later with the phase contexts — and every conflict was settled
+by the human on the record rather than by whichever document happened to be read last; ADR-053
+is the entry that generalizes it ("where the research and the phase context disagreed, the
+context won"). What came out is 69 numbered requirements in `REQUIREMENTS.md` and a seven-phase
+`ROADMAP.md`, and then the same loop, once per phase.
+
+```mermaid
+flowchart TD
+    BRIEF["The challenge brief (PDF)"] --> AGENTS["Four research agents, in parallel"]
+    AGENTS --> STACK["research/STACK.md"]
+    AGENTS --> ARCH["research/ARCHITECTURE.md"]
+    AGENTS --> FEAT["research/FEATURES.md"]
+    AGENTS --> PIT["research/PITFALLS.md"]
+    STACK --> CONF{"The four disagree"}
+    ARCH --> CONF
+    FEAT --> CONF
+    PIT --> CONF
+    CONF -->|"the human picks a side, in writing"| REQ["REQUIREMENTS.md, 69 ids"]
+    REQ --> ROAD["ROADMAP.md, seven phases"]
+    ROAD --> DISC["Discuss: NN-CONTEXT.md (Phases 2-6 only)"]
+    DISC --> RES["Research the phase: NN-RESEARCH.md"]
+    RES --> PLAN["Plan: NN-MM-PLAN.md"]
+    PLAN --> EXEC["Execute: one commit per task, gates green"]
+    EXEC --> CHECK{"Verify and review"}
+    CHECK -->|"gaps found: Phase 5 at 5/6, Phase 6 at 4/5"| GAP["One more plan: 05-17, 06-05"]
+    GAP --> EXEC
+    CHECK -->|"two criticals after Phase 6"| FIXES["fix(06): CR-01, CR-02"]
+    FIXES --> EXEC
+    CHECK -->|"passed"| NEXT{"More phases?"}
+    NEXT -->|"yes"| DISC
+    NEXT -->|"no"| SHIP["Delivery: clean-clone rehearsal, public repo, CI"]
+```
+
+The loop is deliberately drawn as uneven, because it was. A recorded discussion
+(`NN-CONTEXT.md` with an `NN-DISCUSSION-LOG.md`) exists for Phases 2 to 6 and for neither
+Phase 1 nor Phase 7; every phase got a research pass; a code review ran for Phases 1 to 6.
+Verification is the step that has teeth: it returned `gaps_found` twice — Phase 5 at 5/6
+(a forged token, the round trip below) and Phase 6 at 4/5 — and each time the phase was not
+closed but given one more plan. The Phase 6 code review, run separately from verification,
+found two criticals in the phase's own new gates. Across the six completed phases that is
+sixty executed plans (8, 7, 11, 12, 17, 5).
+
+### The gates, and the two places they are wired
+
+Every commit on the developer host passes five tools; CI and the Docker `test` stage run the
+same tools again, wired separately. The diagram shows where each one actually runs, not where
+it would be tidiest to say it runs.
+
+```mermaid
+flowchart LR
+    EDIT["Edit src/ or tests/"] --> PC["pre-commit, host only: isort, black, flake8 (bugbear, comprehensions, pep8-naming), mypy --strict, lint-imports"]
+    PC --> MT["make test: the whole suite, the 75% floor, 4 import-linter contracts, 9 architecture gates"]
+    MT --> DT["make docker-test: the same suite on CPython 3.13"]
+    DT --> CI["GitHub Actions: black, isort, flake8, mypy, lint-imports, pytest as six named steps"]
+    BC["make break-check: five deliberate defects planted in src/"] -.-> MT
+```
+
+Two annotations the diagram would be dishonest without. **pre-commit is host-only:** its
+whole-program entries are `.venv/bin/`-qualified, and a runner has no `.venv`, so CI and the
+Docker image may never call `pre-commit run` — they run the six tools as named steps instead.
+Neither file derives from the other, which is a real cost, recorded as ADR-015 rather than
+smoothed over. **pre-commit does not run the suite:** its hooks are the formatters, flake8,
+mypy and `lint-imports`. `make test` being green before every commit is a project rule enforced
+by hand, by the Docker `test` stage and by CI — not by a hook. And `make break-check`, the
+dashed edge, sits outside every gate path by D-09: it plants five defects in `src/` and asserts
+the suite goes red, which is not something a commit hook should ever be able to start.
+
+At the close of this plan the suite is 1,115 tests at 100.00% over 1,690 statements, against a
+threshold of 75% that has never been lowered.
+
+### One verification round trip, end to end
+
+This is the diagram that shows the process catching something, and it is the most serious thing
+the process caught. Phase 5 shipped with 1,019 tests passing at 100% coverage. The first
+verification pass ignored all of that and tried the one thing the tests could not: it took the
+placeholder `JWT_SECRET` published in `.env.example`, which cleared the then-current 32-character
+floor, signed a token for somebody else's account with it, and asked the running container who
+was calling.
+
+```mermaid
+sequenceDiagram
+    participant H as Human
+    participant AI as AI executor
+    participant V as Verifier
+    participant API as Running container
+    H->>AI: 05-CONTEXT.md, D-01 to D-27, sixteen plans
+    AI->>API: plans 05-01 to 05-16, all gates green, 1019 tests at 100%
+    AI->>V: phase complete, please verify
+    V->>API: forge a token with the .env.example placeholder, call GET /auth/me
+    API-->>V: 200 and another account's profile
+    V-->>H: 05-VERIFICATION.md, gaps_found, 5 of 6
+    H->>AI: plan 05-17, close the gap
+    AI->>API: 64b2e6d make env generates a secret, 4d94514 refuses any secret starting replace-me
+    AI->>H: ADR-084 and a dated incident entry, commit 3326475
+    H->>V: re-verify
+    V->>API: repeat the exact same forgery
+    API-->>V: 401 application/problem+json, authentication_failed
+    V-->>H: 05-VERIFICATION.md, passed, 6 of 6
+```
+
+Every step names an artifact that can be opened: `05-CONTEXT.md`, the sixteen `05-NN-PLAN.md`
+files, `05-VERIFICATION.md` in both of its states, `ADR-084` in `DECISION_LOG.md`, and the two
+commits. The caveat is stated in ADR-084 itself and is worth repeating here: the fix is a
+**prefix** rule that refuses the one value this repository publishes. It does not stop an
+operator who invents their own weak secret, and it was never claimed to.
+
+None of the three diagrams is rendered anywhere in this repository's toolchain. There is no
+local Mermaid renderer and adding a Node toolchain to a Python deliverable was judged the wrong
+trade, so the syntax is deliberately restricted to what GitHub renders reliably — three diagram
+types, every label quoted, no icons, no styling — and the rendering itself is checked by a human
+on GitHub after the push.
 
 ---
 
