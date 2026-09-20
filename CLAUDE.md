@@ -312,9 +312,10 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   a package, `errors/handlers.py`, which must name the class in order to *register a handler
   for it*; `test_the_exempt_module_still_needs_its_exemption` fails if that exemption outlives
   its reason. `REQUIRED_SCANNED_MODULES` names every module that must be in the scan —
-  `actor.py`, `dependencies.py`, `health.py` and every router and schema — so a renamed or
-  emptied package fails rather than passing silently, and a new module under
-  `presentation/api` adds its name there in the commit that creates it.
+  `actor.py`, `dependencies.py`, `health.py` and every router and schema, `schemas/problem.py`
+  included from Phase 7 — so a renamed or emptied package fails rather than passing silently, and
+  a new module under `presentation/api` adds its name there **in the commit that creates it**; a
+  name with no module behind it fails just as loudly as a module with no name.
 - Consequence this rule has already had, recorded so the next reader does not rediscover it:
   `OAuth2PasswordBearer(auto_error=True)` — FastAPI's default — is **not an option**, because
   the scheme raises `HTTPException` itself on a missing or non-bearer header. The bearer
@@ -330,6 +331,26 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 - Business failures raise a `DomainError` subclass (Phase 2) and are translated once, at a
   single exception-handling point, into an RFC 9457 `application/problem+json` response.
   No handler builds an error body by hand.
+
+### The published document
+
+- Every non-2xx response leg is declared with `problem_response(description)` from
+  `presentation/api/schemas/problem.py` — `content=` only, and **never** a `model=` key. On the
+  pinned FastAPI a `model` publishes `application/json`, a media type this API never emits for an
+  error, and two of the other three obvious spellings publish it *alongside* `problem+json`
+  (ADR-100). `GET /health` 503 is the one exemption: it answers a `HealthResponse` status document
+  saying which check failed (D-08).
+- The no-`model` form registers no component, so `ProblemAwareFastAPI` in `main.py` — a `FastAPI`
+  subclass, because `app.openapi = fn` is a `mypy --strict` `method-assign` — `setdefault`s the
+  `Problem` schema in once. Any new component follows the same route; nothing here is automatic.
+- Enforced by `tests/architecture/test_openapi_completeness.py`, seven tests over the real
+  `app.openapi()`. A bare leg fails naming the offending `method path code`, an undescribed tag
+  fails naming it, a dangling `$ref` fails, and an exemption that matches nothing fails rather than
+  passing silently. It pins floors, never the exact census, so a route added below the floor is a
+  failure worth looking at and a route added above it is not a number to edit (ADR-101).
+- A tag description in `OPENAPI_TAGS` is prose no gate reads, and is therefore held to the ADR
+  standard by hand: a description the response model contradicts is a defect, not a nicety. One
+  shipped that way in 07-01 and was corrected in 07-02 (ADR-100's consequences).
 
 ### Persistence and transactions
 

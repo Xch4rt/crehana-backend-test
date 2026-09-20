@@ -4347,3 +4347,186 @@ application layer never has to decide.
   logs and query strings on Python 3.11+.
 
 ---
+
+## ADR-099: follow-up to ADR-019 and ADR-072 — two sentences in this log are now false (2026-09-19)
+
+**Context**
+This log is append-only: an entry is never rewritten once accepted, and a later decision
+supersedes an earlier one by id. Two sentences written under that rule have since been overtaken
+by events, and Phase 7 is the phase that delivers this file to a reader who will take every
+sentence in it at face value.
+
+- **ADR-019** closes with "**The workflow has never run on a real runner** — no repository existed
+  when it was written". False since plan 01-08: GitHub Actions run `35301518310` concluded
+  `success` on the first attempt, with no fix-up commit spent out of the one that entry budgeted.
+- **ADR-072** cites "two pre-existing assertions in `tests/api/test_error_contract.py`". That
+  module was moved by plan 06-04 to `tests/unit/presentation/test_error_contract.py` when the
+  `tests/api/` directory was folded into the two-bucket vocabulary (ADR-090). The assertions and
+  the reasoning are intact; only the path is stale.
+
+**Options**
+
+- **Edit both sentences in place.** Rejected. It destroys the one property that makes a decision
+  log worth reading — that it records what was believed *at the time* — and it would show up as
+  deleted lines in the diff, which is exactly the evidence a reader uses to check that the
+  append-only claim is true rather than decorative.
+- **Leave them and note the drift in the README.** Rejected: it puts the correction somewhere the
+  reader of the wrong sentence will never be. Nobody reading ADR-019 is holding the README.
+- **One superseding entry per stale claim.** Rejected as ceremony: two entries for two one-line
+  factual corrections, neither of which reverses a decision.
+- **One entry naming both by id**, in the shape ADR-041 established.
+
+**Decision**
+This entry. ADR-019 and ADR-072 stay byte-identical and are read *with* it; the corrections are
+the two bullets above.
+
+**Consequences**
+
+- **The mechanism is stated once for the next phase that needs it.** A factual correction is a
+  new entry naming the old one by id. `git diff DECISION_LOG.md | grep -c '^-'` returning 1 — the
+  diff's own `--- a/` header and nothing else — is the mechanical proof that a change to this file
+  added lines and removed none, and it is the check every Phase 7 plan that touches this file runs.
+  The header region is the one exception already taken in practice: plan 06-04 amended it, insert
+  only, with the same diff property holding.
+- **ADR-019's underlying worry finally gets its real answer in plan 07-05.** Run `35301518310`
+  proved the *assembled YAML* runs; what it exercised was Phase 1's suite. The Phase 7 push is the
+  first time Phases 2-6 — the integration suite, the `postgres:18-alpine` service container, the
+  coverage gate at its current size — run on a runner rather than on this laptop. If the one
+  budgeted fix-up commit is spent, it is spent there.
+- **The correction is bounded, and its scope is named.** Only these two sentences were found stale
+  in a 4,227-line file. ADR-060's rule — a grep-checkable documentation claim is retired in the
+  commit that falsifies it — applies to claims in `README.md` and in docstrings, which are
+  editable; it cannot apply here, and this entry is the alternative that does.
+
+---
+
+## ADR-100: an error leg is declared with `content=` and no `model=`, and a `FastAPI` subclass pays for it (2026-09-19, extending ADR-005)
+
+**Context**
+ADR-005 decided that every refusal is an RFC 9457 `application/problem+json` document built by one
+handler. Five phases later the *document* still did not say so: nineteen operations enumerated
+seventy non-2xx legs, and sixty-nine of them published nothing a client could parse.
+`"409": {"description": "..."}` tells a reader that the route refuses; it does not tell them what
+arrives when it does. DOC-04 asks for the body, and there are four obvious ways to declare it —
+three of which publish a media type this API never emits.
+
+**Options**
+Each of the four was executed against the pinned FastAPI 0.141.1 and the resulting document read,
+rather than reasoned about (07-RESEARCH.md Gap 3):
+
+- **`{"model": ProblemResponse}`** — the documented, obvious form. Publishes the schema under
+  `application/json`. Rejected: that media type is a documented response this API cannot produce.
+- **`{"model": ProblemResponse, "content": {PROBLEM_JSON: {}}}`** — publishes **both** media
+  types, and gives the one actually served an empty schema object. The worst of the four: it is
+  wrong twice and looks the most like a fix.
+- **`{"model": ProblemResponse, "content": {PROBLEM_JSON: {...$ref...}}}`** — publishes both, each
+  with the schema. Rejected for the same reason as the first: `application/json` survives.
+- **`{"content": {PROBLEM_JSON: {"schema": {"$ref": ...}}}}`, no `model` key** — exactly one media
+  type, correctly. Its cost is that FastAPI registers a component only for a `model=`, so the
+  `$ref` would dangle.
+
+That cost then forced a second choice: **`app.openapi = custom_openapi`**, the form FastAPI's own
+documentation shows, versus **a `FastAPI` subclass**. The assignment is a `method-assign` under
+`mypy --strict`.
+
+**Decision**
+The no-`model` form, through one helper — `problem_response(description)` in
+`presentation/api/schemas/problem.py` — on all sixty-nine non-exempt legs, and
+`ProblemAwareFastAPI`, a `FastAPI` subclass whose `openapi()` `setdefault`s the `Problem` schema
+into `components.schemas`. A subclass rather than the assignment: buying a one-line convenience
+with a `type: ignore` in the composition root is not a trade this project makes.
+
+**Consequences**
+
+- **The component is registered outside FastAPI's own machinery.** A future leg that wants a
+  *different* model must not assume the registration is automatic — it is automatic only for the
+  `model=` spelling this project does not use, and `ProblemAwareFastAPI` knows about exactly one
+  schema. `setdefault` at all three levels keeps the override idempotent, which matters because
+  `super().openapi()` caches and returns the same object on every later call.
+- **`isinstance(app, FastAPI)` is still true** and `create_app`'s return annotation is unchanged,
+  so no existing test or type signature moved for this.
+- **Each leg gets a deep copy of the pointer, not a shared one.** `PROBLEM_REF` is nested, so a
+  shallow `dict()` would leave all sixty-nine legs sharing the inner `{"$ref": ...}` object;
+  `copy.deepcopy` is what actually removes that, and `test_two_legs_share_no_mutable_object`
+  mutates one leg and asserts the next is unaffected.
+- **The published model is bound to the builder by a test, not by an import.**
+  `errors/problem.py` builds the real body as a dict literal and `ProblemResponse` describes it —
+  two descriptions of one thing drift silently. `tests/unit/presentation/test_problem_schema.py`
+  calls `problem(...)` for all three `errors` shapes and compares the served member order against
+  the declared one, both read from running code (D-06).
+- **The six `openapi_tags` descriptions are part of the published document and are held to the
+  same standard.** One of them shipped false: the `users` entry said "no email address of another
+  account is published here", which `UserSummaryResponse` contradicts field by field and ADR-068
+  contradicts by name — `GET /api/v1/users` **is** an email directory readable by every
+  authenticated caller, and describing it as restricted is the one wording ADR-068 singled out as
+  actively misleading. Corrected in this plan's commit. A tag description is prose with no gate on
+  its content, which is precisely why it is named here.
+- **`/docs` shows a real 409 beside the schema.** `PROBLEM_EXAMPLE` is copied from what the
+  handlers emit, and carries no credential, identifier or internal path, because a real one does
+  not either.
+
+---
+
+## ADR-101: DOC-04 is a totality gate over `app.openapi()`, and `GET /health` 503 is its one exemption (2026-09-19, extending ADR-086)
+
+**Context**
+ADR-100 rewrote sixty-nine legs by hand. A hand-rewritten property survives exactly until the
+seventieth route, and the failure is silent: a new leg spelled `{"description": "..."}` publishes
+no body, and nothing in the suite objects. ADR-086 established the shape of the answer for
+endpoints — totality observed from the published document — and this is the same question one
+level down, at the leg.
+
+**Options**
+
+- **Trust the review.** Rejected by this project's own history: "every endpoint is covered" and
+  "every test asserts something" were house style for five phases and each turned out to be
+  partly untrue the first time it was checked mechanically (ADR-086, ADR-088).
+- **Pin the census** — assert 19 operations and 70 legs exactly. Rejected: the census moves with
+  every route anyone adds, so the equality becomes a test *of the census*, and it gets "fixed" by
+  editing the number rather than by looking at what changed.
+- **Walk `app.routes`.** Rejected, and not a preference: on the pinned stack `include_router`
+  leaves a single opaque object with no path and no methods, so the walk finds the documentation
+  endpoints and none of the real ones (ADR-057).
+- **A floor plus a per-leg property, read from `app.openapi()`.**
+
+**Decision**
+`tests/architecture/test_openapi_completeness.py`, seven tests over the real document: every
+non-exempt error leg publishes `application/problem+json` and nothing else; no error leg advertises
+`application/json`; the `$ref` resolves to a component whose `properties` are `ProblemResponse`'s
+fields; every operation carries a tag and a summary; the described tag set equals the used tag set
+in **both** directions; and a non-vacuity guard pinning floors of 19 operations and 69 non-exempt
+legs.
+
+`EXEMPT_LEGS` holds exactly one triple, `("get", "/health", "503")`. D-08 already decided that
+`/health` answers a status document saying *which* check failed, on `application/json`; a gate
+demanding `problem+json` there would be wrong rather than strict.
+
+**Consequences**
+
+- **The exemption has to keep earning itself.** `test_the_health_exemption_still_earns_itself`
+  fails if the leg is renamed, removed or turned into something else, and the non-vacuity guard
+  asserts `matched == EXEMPT_LEGS`, so an exemption that matches nothing is a failure rather than
+  a no-op. Without it the hole would silently widen to cover whatever took the leg's place. It is
+  the single documented hole in a totality rule in this repository, and it is documented here so
+  that it reads as a decision.
+- **The non-vacuity guard fails; it never skips.** 06-REVIEW's WR-06 recorded that a *skipped*
+  totality half is worse than a failing one — it reports green having checked nothing, and nobody
+  reads the skip reason.
+- **The `application/json` assertion is a separate test from the problem+json one**, deliberately.
+  Two of the three wrong spellings in ADR-100 publish both media types, so the per-leg "exactly
+  one media type" check catches them only incidentally; the direct assertion names the warning
+  sign in its own failure message.
+- **What the gate cannot see is stated rather than implied.** It reads the document, not the bytes
+  on the wire. A route could publish `problem+json` here and serve something else; the other half
+  of the pair is six integration modules asserting `PROBLEM_JSON` and the D-06 member list against
+  real responses. This gate is the claim, those are the observation.
+- **No new hook and no new CI step.** It rides inside `pytest`, which the hook set, the Docker
+  `test` stage and CI already run. CLAUDE.md's "a new gate goes in two places" rule applies to a
+  gate that introduces a *new command* — the same argument `test_coverage_configuration.py` and
+  `test_error_contract_totality.py` make.
+- **Every one of these was driven red before it was trusted** (the rule ADR-087 paid for): a bare
+  leg reported `Bare legs: ['get /api/v1/users 401']`, a `model=` key made two tests red at once, a
+  dropped tag reported `{'used but undescribed': ['users']}`, and an emptied `EXEMPT_LEGS` turned
+  `get /health 503` into an offender.
+
+---

@@ -129,8 +129,10 @@ OPENAPI_TAGS: Final[list[dict[str, str]]] = [
     {
         "name": "users",
         "description": (
-            "The directory a client picks an assignee out of. Summaries only - "
-            "no email address of another account is published here."
+            "The directory a client picks an assignee out of: id, full name "
+            "and email for every registered account, readable by any "
+            "authenticated caller (ADR-068). Nothing here is restricted, and "
+            "no client should treat it as if it were."
         ),
     },
     {
