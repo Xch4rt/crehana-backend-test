@@ -200,11 +200,11 @@ Every cell in the last column is a command or a test path — never prose.
 | 1.a.iv | Filter tasks, and report a completion percentage | `src/taskmanager/application/use_cases/tasks/list.py` (ADR-009, ADR-049, ADR-054) | `tests/integration/api/test_tasks.py`; quickstart step 6 |
 | 1.b.ii | JWT authentication: register, log in, protect every route | `src/taskmanager/presentation/api/routers/auth.py` | `tests/integration/api/test_auth.py` |
 | 1.b.iii | Assign a task to a user, and expose the assignee | `src/taskmanager/presentation/api/routers/assignments.py` | `tests/integration/api/test_assignment.py`; `tests/integration/api/test_permission_matrix.py` |
-| 1.b.iv | Send a simulated invitation email on assignment | `src/taskmanager/infrastructure/notifications/`, `application/use_cases/tasks/assign.py` | `tests/unit/infrastructure/test_notifier.py`; `tests/unit/application/test_assign_task.py`; quickstart step 7 |
+| 1.b.iv | Send a simulated invitation email on assignment | `src/taskmanager/infrastructure/notifications/`, `src/taskmanager/application/use_cases/tasks/assign.py` | `tests/unit/infrastructure/test_notifier.py`; `tests/unit/application/test_assign_task.py`; quickstart step 7 |
 | 2.a | Layered structure, use cases separated from the framework | `src/taskmanager/{domain,application,infrastructure,presentation}` | `make arch` (4 contracts); `tests/architecture/test_layer_boundaries.py` |
-| 2.b | Strong typing with Pydantic at every boundary | `src/taskmanager/presentation/api/schemas/`, `infrastructure/config/settings.py` | `make typecheck`; `tests/unit/presentation/test_schemas.py` |
-| 2.c | Custom exceptions and proper error handling | `src/taskmanager/domain/exceptions.py`, `presentation/api/errors/` | `tests/unit/presentation/test_error_contract.py`; `tests/architecture/test_error_contract_totality.py` |
-| 2.d | Business validations | `src/taskmanager/domain/validation.py`, `application/use_cases/access.py` | `tests/unit/domain/test_validation.py`; `tests/integration/api/test_permission_matrix.py` |
+| 2.b | Strong typing with Pydantic at every boundary | `src/taskmanager/presentation/api/schemas/`, `src/taskmanager/infrastructure/config/settings.py` | `make typecheck`; `tests/unit/presentation/test_schemas.py` |
+| 2.c | Custom exceptions and proper error handling | `src/taskmanager/domain/exceptions.py`, `src/taskmanager/presentation/api/errors/` | `tests/unit/presentation/test_error_contract.py`; `tests/architecture/test_error_contract_totality.py` |
+| 2.d | Business validations | `src/taskmanager/domain/validation.py`, `src/taskmanager/application/use_cases/access.py` | `tests/unit/domain/test_validation.py`; `tests/integration/api/test_permission_matrix.py` |
 | 2.e | Unit and integration tests | `tests/unit/`, `tests/integration/` | `make docker-test` |
 | 2.f | Code formatted with black and isort | `pyproject.toml` | `make lint` |
 | 2.g | Containerised with Docker | `Dockerfile`, `docker-compose.yml` | `make up`; `make docker-test` |
