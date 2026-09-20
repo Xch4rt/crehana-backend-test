@@ -158,7 +158,8 @@ What is already true of Phase 1:
 - The stack: Python 3.13, FastAPI, PostgreSQL, SQLAlchemy 2.0 async with psycopg 3, Alembic
   (`DECISION_LOG.md` ADR-001, ADR-002, ADR-006, ADR-007).
 - The package layout: `src/taskmanager/` with `domain`, `application`, `infrastructure` and
-  `presentation` as enforced layers (ADR-003, and `.importlinter` as the enforcement).
+  `presentation` as enforced layers (ADR-003, and `.importlinter` as the enforcement, commit
+  ab60d34).
 - The error contract: RFC 9457 `application/problem+json` from a single exception handler,
   specified before any router exists (ADR-005).
 - The authorization rule: 404 for resources the caller cannot see, 403 for resources they can
@@ -174,7 +175,8 @@ What is already true of Phase 1:
 - Scaffolding: the package skeleton, the pinned `requirements*.txt`, and the literal
   configuration files the brief names (`.flake8`, `pytest.ini`, `Dockerfile`).
 - Gate wiring: `pytest.ini` coverage settings, the `.importlinter` contracts and their pytest
-  wrapper, `.pre-commit-config.yaml`, the `Makefile`, and the GitHub Actions workflow.
+  wrapper, `.pre-commit-config.yaml`, the `Makefile`, and the GitHub Actions workflow — the host
+  hooks and the CI steps written separately on purpose (commits 4d8fbbe and 4a33cb3).
 
 What is already true of Phase 2:
 
@@ -192,8 +194,8 @@ What is already true of Phase 2:
   debug flag (D-08). The handler cannot even see the settings object, because `presentation`
   does not import `infrastructure` — a layering rule doing security work.
 - That application command and result DTOs are frozen dataclasses rather than Pydantic models
-  (`DECISION_LOG.md` ADR-020). This decision contradicted five existing artifacts; the
-  incident log below records how that was resolved.
+  (`DECISION_LOG.md` ADR-020, commit 8f9f98b). This decision contradicted five existing
+  artifacts; the incident log below records how that was resolved.
 - That a domain `ValidationError` maps to 422 and not 400 (ADR-021), so a rule the entity
   enforces and a rule the request schema enforces answer with the same status.
 - That `CompletionStats` ships in this phase even though the SQL aggregate behind it is Phase
@@ -211,7 +213,7 @@ What is already true of Phase 2:
   which is why exactly one test in the suite builds a tolerant HTTP client.
 - Writing the entities, the twelve-class error hierarchy, the eight ports, the four exception
   handlers, and the 132 tests that specify them (the suite went from 8 to 140).
-- The AST import scanner in `tests/architecture/test_domain_is_stdlib_only.py`.
+- The AST import scanner in `tests/architecture/test_domain_is_stdlib_only.py` (commit 2443c2c).
 
 What is already true of Phase 3:
 
@@ -219,12 +221,12 @@ What is already true of Phase 3:
 
 - That integration tests run against a real PostgreSQL with per-test isolation by transaction
   rollback, and that `make test` therefore *requires* a running database rather than skipping
-  the persistence half (`03-CONTEXT.md` D-01 and D-03; `DECISION_LOG.md` ADR-029). An auto-skip
-  would let a run report green having exercised none of this phase's work.
+  the persistence half (`03-CONTEXT.md` D-01 and D-03; `DECISION_LOG.md` ADR-029, commit
+  0ae9b53). An auto-skip would let a run report green having exercised none of this phase's work.
 - That the schema is produced by the real Alembic migration even in tests — no
   `Base.metadata.create_all()` anywhere, not as a shortcut (D-02, ADR-007).
 - The twelve integrity rules the database enforces and the fact that each one has an explicit
-  name, so repository error translation can key on it (D-12, and
+  name, so repository error translation can key on it (D-12, commit 393659b, and
   `src/taskmanager/infrastructure/db/constraints.py`).
 - That migrations run in the container entrypoint and never inside the application (D-06,
   ADR-036), which is why importing the app has no database side effect and replicas cannot race.
@@ -265,7 +267,7 @@ What is already true of Phase 4:
   the counters do not move when a filter is applied (D-09, ADR-049), and that "no N+1" would be
   *measured* by a statement recorder rather than claimed (D-17, ADR-054).
 - That Phase 2's deferred gate lands here as **two** gates, and that a new gate is proven by being
-  planted red before it is trusted (D-15, ADR-051).
+  planted red before it is trusted (D-15, ADR-051; commits 1b55626 and f96076e).
 
 **Delegated to AI**
 
@@ -281,7 +283,124 @@ What is already true of Phase 4:
   and `04-08-ast-gate-red.txt` in `.planning/phases/04-task-lists-tasks/evidence/`, plus the fake
   ordering falsification and the seed counterfactual.
 
-_Phase 7 completes this section with the per-claim commit/file/test references._
+What is already true of Phase 5:
+
+**Decided by the human**
+
+- The assignee's visibility matrix, decided before any of it was built: an assignee who does not
+  own the list sees **only** the tasks assigned to them, gets `GET` and the status endpoint on
+  those, and is refused every owner-only write (`05-CONTEXT.md` D-01/D-03; `DECISION_LOG.md`
+  ADR-083). It is proven as one table of seventy-six cells bound to the published document, not
+  as prose — commit b548622.
+- That assignment gets its own door rather than a field in the task PATCH: one URL, `PUT` and
+  `DELETE`, a task that cannot be created already assigned, a re-assignment of the current
+  assignee that is a 200 no-op **with no second email**, and self-assignment allowed and emailed
+  like any other (D-05 to D-08, ADR-069).
+- That the invitation is attempted **after** the commit and outside the transaction, and that a
+  notifier that fails never fails the assignment (D-16, ADR-070). The test that matters is the
+  one where it fails — commit f020c33.
+- That registration answers 201 with the profile and no token, `Location: /api/v1/auth/me`
+  (D-09/D-19, ADR-079), and that the password policy is length only, 8 to 128 characters, with no
+  composition rules (D-10).
+- That a wrong password and an unknown address must be indistinguishable — which cost the one
+  port extension this phase took, `PasswordHasher.dummy_verify` (D-12/D-21, ADR-064).
+- That the stack ships with **no seeded account** at all (D-14, ADR-075), and that
+  `GET /api/v1/users` is an email directory readable by every authenticated caller — recorded as
+  a conceded property, not overlooked (D-13, ADR-068).
+- That the HS256 key floor rises from 16 characters to 32 (D-26, ADR-061, commit dfbf265) — and
+  then, after verification forged a working token with the placeholder this repository publishes,
+  that any secret beginning `replace-me` is refused **at boot** and that `make env` generates a
+  real one (ADR-084, commits 64b2e6d and 4d94514).
+
+**Delegated to AI**
+
+- The two security adapters and everything above them: PyJWT with one decode failure deliberately
+  left outside the catch (ADR-062), Argon2 run off the event loop through `anyio.to_thread`
+  (ADR-063), the actor seam, and the auth, user and assignment routes that took the surface to
+  nineteen operations (commit b157b2e) — with the tests that specify them. The suite went from 599
+  to 1,019 at 100% coverage.
+- Discovering that FastAPI's default `OAuth2PasswordBearer(auto_error=True)` raises the very
+  `HTTPException` this project forbids below the router, and that `auto_error=False` plus an
+  `AuthenticationError` is what makes the Authorize button in `/docs` and that gate hold together
+  (ADR-074, commit 4d6e128).
+- The cold-start rehearsal on an empty volume, which is what turns "no seeded account" into a
+  checked claim rather than an intention (commit 36729f2).
+
+What is already true of Phase 6:
+
+**Decided by the human**
+
+- That totality is proven by **permanent pytest gates**, never by a one-time written audit
+  (`06-CONTEXT.md` D-01) — one gate per kind: every use case reachable from the fakes-based unit
+  suite (ADR-085, commit 590b5bf), every published operation *observed* being requested during the
+  run rather than declared in a registry (D-03, ADR-086, commit f921e4b), and every raisable error
+  leaf's RFC 9457 code asserted somewhere under `tests/` (ADR-087, commit ade4868).
+- The re-read rule: a mutating HTTP test proves its end state with a `GET`, on every leg (D-06,
+  ADR-088, commits 6bd1480 and 7610666), with each exemption named individually and a guard that
+  fails the build when an exemption stops being *necessary* (commit fd0dc9e).
+- That the deliberate-break check is a **script, not a gate** (D-08/D-09, ADR-091, commit
+  03fce00): five hand-picked defects planted in `src/`, run on demand, outside every commit hook
+  and every CI step — because the one tool allowed to write to `src/` must never be something a
+  hook can start.
+- That the coverage number is made honest by three-way agreement plus a configuration pin (D-11,
+  ADR-089, commit 03e8c3a), and that the threshold stays **75** while 100% is a norm rather than a
+  gate (D-12).
+- That every collected test carries exactly one of `unit` or `integration`, enforced by a
+  collection hook because `--strict-markers` refuses an unregistered marker and nothing in pytest
+  refuses a *missing* one (ADR-090, commit 52ed708).
+
+**Delegated to AI**
+
+- The gates themselves and the sweep that made the suite satisfy them. The suite went from 1,019
+  to 1,101 tests, at 100.00% over 1,659 statements.
+- Finding that `make docker-test` had been broken for two phases with nobody noticing, and that
+  the container's coverage was under-reporting at the same time (commit bf55419).
+- The code review of the phase's own new gates — which found **two criticals**, both of them a
+  tool reporting a stronger result than it had measured. The `exclude_also` entry `\.\.\.` was
+  removing three `execute` bodies and `DomainError.__reduce__` from the coverage denominator (an
+  `omit` by regex), while the new gate pinned that list *by value* and its docstring asserted that
+  none of the entries excluded executable behaviour (CR-01, fixed in commit 8a0439f, ADR-092). And
+  `break-check.sh` counted any non-zero pytest exit as RED, so a renamed test path or a stopped
+  database printed "All 5 breaks turned the suite red" beside `red: 0 test(s) failed` (CR-02,
+  fixed in commit 142d64c, ADR-093).
+- A third finding, closed by the phase's gap-closure plan after verification came back 4/5: the
+  assertion-quality gate could not read `client.request(...)`, so a seventy-six-cell table of
+  mutations sat outside the rule that gate exists to enforce (ADR-096, commit 9701c13). Seven
+  further warnings were left open on purpose; they are listed in "What I Did Not Do" below.
+
+What is already true of Phase 7:
+
+**Decided by the human**
+
+- That the requirement-to-evidence map is keyed on the `[PDF x.y]` citations already in
+  `REQUIREMENTS.md` plus an English restatement, rather than redistributing Crehana's brief in a
+  public repository (`07-RESEARCH.md` §Open Questions, Q1).
+- That `DECISION_LOG.md` gets a curated five-ambiguity block in its header instead of a generated
+  96-row table of contents, which would need a generator and a sync gate of its own (Q7; shipped
+  in commit 1682ede).
+- That the clean-clone rehearsal **extracts and executes the README's own fenced commands**
+  instead of pasting a transcript into a summary. A transcript proves one moment; extraction makes
+  the README the source and the run the proof.
+- That the rehearsal leaves the developer's compose stack down and prints the one command that
+  brings it back — predictable beats friendly (Q8).
+- That the dated Phase 7 incident entry is appended at the **end** of the phase rather than now.
+  That is this project's own standing rule, and it is the reason this file has never been a
+  reconstruction.
+- Phase 7 is also the second phase with no `NN-CONTEXT.md` and no discussion log: its eight open
+  questions were resolved at planning time and recorded in `07-RESEARCH.md`, with the five that
+  need a human eye (the push, the badge, the Mermaid rendering, the repository's visibility, the
+  delivery email) deferred to 07-05 as checkpoints rather than answered by a planner.
+
+**Delegated to AI**
+
+- Publishing the error body: one `Problem` component `$ref`'d from 69 refusal legs, six described
+  tags, and a totality gate that makes a bare error leg a red test (ADR-100, ADR-101; commits
+  4963218 and e008afe). Three of the four obvious ways to declare an error leg publish
+  `application/json`, a media type this API never emits — that was measured, not argued.
+- The two missing ambiguity ADRs (the status matrix and the priority vocabulary) and the
+  correction of two sentences in the log that had gone stale — made by **id**, never by edit, so
+  the log stays append-only (ADR-097, ADR-098, ADR-099; commits e53033e and d45c0d2).
+- The three diagrams above, these three phase blocks, and the section below.
 
 ---
 
