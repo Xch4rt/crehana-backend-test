@@ -155,6 +155,69 @@ button.link {
   height: 100%;
 }
 
+.completion-text {
+  margin: 0.3rem 0 0;
+}
+
+/* --- header, navigation, cards -------------------------------------------- */
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.nav {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.nav button[aria-current="page"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button.title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.inline-form {
+  border-top: 1px dashed var(--line);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.empty {
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 1rem;
+  text-align: center;
+}
+
 /* --- tables --------------------------------------------------------------- */
 
 table {
