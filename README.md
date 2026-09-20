@@ -272,7 +272,7 @@ been softened, and that this README still agrees with the API.
 
 ## Decisions and AI workflow
 
-[**`DECISION_LOG.md`**](DECISION_LOG.md) — 103 ADRs, each with context, the options that were
+[**`DECISION_LOG.md`**](DECISION_LOG.md) — 104 ADRs, each with context, the options that were
 really on the table, the decision and its consequences. It is append-only: a later reversal is a
 new entry naming the old one by id, never an edit. Its first screen is the shortcut — the brief's
 five genuine ambiguities and where each is resolved (the completion percentage's scope, ADR-009;
@@ -298,7 +298,8 @@ assignment (API-03); refresh tokens and revocation (AUTH-07); password reset and
 appears only in the code is indistinguishable from an oversight:
 
 - Registration's 409 on a duplicate email **is** an account-enumeration oracle (ADR-066). The brief
-  requires that 409 literally, so the requirement was chosen over the property. What bounds it: the
+  does not ask for that 409 — this project's own requirement AUTH-01 does — and the requirement was
+  kept over the property (ADR-104). What bounds it: the
   error body carries no address in any spelling, and the login door stays indistinguishable.
 - There is **no rate limiting, lockout or CAPTCHA on login** (ADR-067). Argon2's cost is an
   incidental throttle, not a control — and it is a denial-of-service surface in the other

@@ -4736,3 +4736,80 @@ and runs it. `--extract-only` is the dry run: the same extraction function, no D
   weakening `begins != 1` to `begins < 1`, and disabling the dirty-tree check.
 
 ---
+
+## ADR-104: follow-up to ADR-010, ADR-018, ADR-066 and ADR-097 — four sentences credit the brief with words it does not contain (2026-09-20)
+
+**Context**
+The challenge brief is a PDF that is not redistributed in this repository, so every entry in this
+log that says "the brief requires" was written from `.planning/REQUIREMENTS.md`, where each
+requirement carries a `[PDF x.y]` citation — or, for the ones this project added itself, `[R]` or
+`[NL]`. Before delivery the PDF was read again, line by line, against every sentence in
+`README.md`, `AI_WORKFLOW.md` and this file that attributes something to it. Most hold: "a real
+database", the two filters, the completion percentage, status change as a use case of its own,
+`pytest.ini`, `.flake8`, the layered structure and "strong typing with Pydantic" are all the
+brief's words. Four are not.
+
+- **ADR-010** says "the challenge brief names the linter explicitly: flake8" and "the brief
+  mandates it". The brief says three things: its requirements list reads "flake8 or pylint";
+  section 2.f reads "Linters (flake8, ruff)"; and sections 4.a and 4.c ask for flake8 to be
+  configured and for a literal `.flake8` file. So ruff is *named by the brief as acceptable*, and
+  the entry never says so. What is mandated is narrower than the entry claims: a configured flake8
+  and its file.
+- **ADR-018** opens with "the brief requires one documented command that runs the test suite in
+  Docker with no Python on the host". The brief asks the README for "instructions to run the
+  tests" (6.e) and nothing more. The one-command, no-host-Python property is requirement DOCK-04,
+  which `.planning/REQUIREMENTS.md` tags `[R]` — this project's own, from research.
+- **ADR-066** rejects answering 201 to a duplicate registration because "it contradicts the brief's
+  literal wording". The brief's whole text on the subject is "login and authentication (bonus):
+  optional JWT implementation to protect endpoints" (1.b.ii). The 409 on a duplicate email is
+  requirement AUTH-01 — this project's elaboration of that line, not the brief's wording.
+- **ADR-097** says "the brief names the allowed status values and the moves between them as one of
+  the five ambiguities the candidate must resolve *and record*", and that "the brief tells its
+  reader to look in this file". The brief names no ambiguities and no status values. It asks for a
+  `DECISION_LOG.md` "explaining technical decisions" (2.h) and says it evaluates "technical
+  thinking and the capacity to justify". The five ambiguities are five places where the brief is
+  silent, identified by this project (`.planning/PROJECT.md`). The same applies to the word
+  "named" in this file's header, "the brief's five named ambiguities": they are the brief's
+  ambiguities, and this project's naming.
+
+**Options**
+
+- **Edit the four sentences in place.** Rejected, for the reason ADR-099 gives: the log is
+  append-only, and deleted lines in its diff are the evidence against that claim.
+- **Leave them.** Rejected. Each one makes a decision sound more forced than it was, and an
+  evaluator holds the PDF. A document whose differentiator is that its claims are checkable cannot
+  carry four that fail the first check anyone would make.
+- **One entry naming all four by id**, in the shape ADR-041 and ADR-099 established.
+
+**Decision**
+This entry. ADR-010, ADR-018, ADR-066 and ADR-097 stay byte-identical and are read *with* it.
+**No decision is reversed**, and each is restated here on the ground it actually stands on:
+
+- flake8 stays (ADR-010) because sections 4.a and 4.c ask for it and its file literally, and
+  satisfying 2.f with ruff would still leave 4.c's `.flake8` owed. It is a choice among tools the
+  brief allows, not the only one it allows.
+- The Dockerfile `test` stage stays (ADR-018) because a reviewer with five minutes should not need
+  a host Python — this project's own bar, and worth its cost without the brief's name on it.
+- The 409 stays (ADR-066) because AUTH-01 was accepted with it and an honest conflict is the more
+  useful answer to a client; the enumeration oracle it opens is this project's concession, not one
+  the brief forced. `README.md` said "the brief requires that 409 literally" and is corrected in
+  the same commit as this entry — it is editable, so ADR-060's rule applies to it.
+- The transition matrix stays (ADR-097), recorded because the brief is silent on it and asks for
+  decisions to be justified, not because it listed the question.
+
+**Consequences**
+
+- **The mechanism that produced the error is named.** A requirement tagged `[PDF 1.b.ii]` carries
+  the brief's authority for its *topic*, and a sentence written from the requirement inherited
+  that authority for its *details*. `[PDF x.y]` means "traces to", never "quotes".
+- **The sweep's scope is stated.** Every line matching "brief requires / mandates / names / asks /
+  lists / literal" in the three delivered documents was read against the PDF; these four, plus the
+  header's "named", are what failed. Sentences that attribute something to the brief without one
+  of those verbs were not swept.
+- **`CLAUDE.md` carries the same over-reading in two generated passages** ("the brief mandates
+  flake8 as the linter", "`docker compose up` is already required by the brief" — the brief calls
+  the compose file optional). Those blocks are regenerated by tooling and are working
+  instructions, not a delivered argument; they are left, and read with this entry.
+- `git diff DECISION_LOG.md | grep -c '^-'` is 1 for this change, as ADR-099 requires.
+
+---
