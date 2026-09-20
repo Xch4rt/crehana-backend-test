@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 6 complete (5/5 plans, verification passed 5/5 after gap closure 06-05) — ready to plan Phase 7
-last_updated: 2026-09-20T01:10:00.000Z
-last_activity: 2026-09-19 -- Phase 06 complete: 5/5 plans, code review criticals CR-01/CR-02 fixed, re-verification passed 5/5; 1101 passed, 100% over 1659 statements
+status: ready_to_execute
+stopped_at: Phase 7 planned (5 plans, 5 sequential waves; 07-05 is human-gated) — ready to execute Phase 7
+last_updated: 2026-09-20T03:00:00.000Z
+last_activity: 2026-09-20 -- Phase 07 planned (07-01..07-05, plan check passed, 8/8 requirements covered); suite baseline 1101 passed, 100% over 1659 statements
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 60
+  total_plans: 65
   completed_plans: 60
-  percent: 100
+  percent: 92
 ---
 
 # Project State
@@ -28,13 +28,12 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Phase: 7
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-09-19 -- Phase 06 complete (5/5 plans) after gap closure 06-05 and a passing re-verification (5/5); code review criticals CR-01 (unanchored coverage exclusion) and CR-02 (break-check verdict) fixed, seven review warnings recorded as follow-ups in ADR-096
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
-`total_plans` counts planned plans only - phase 7 is not yet planned, so 60/60 means
-"every plan written so far has been executed", not a finished milestone.
+`total_plans` now includes Phase 7's five plans: 60 of 65 executed.
 
 ## Performance Metrics
 

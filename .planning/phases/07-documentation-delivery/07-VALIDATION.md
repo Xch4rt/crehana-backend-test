@@ -2,7 +2,7 @@
 phase: 7
 slug: documentation-delivery
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-20
 ---
@@ -84,4 +84,4 @@ created: 2026-09-20
 - [ ] Feedback latency < 30s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-20 (plan check passed; every Wave 0 item is created by the task that first verifies with it)

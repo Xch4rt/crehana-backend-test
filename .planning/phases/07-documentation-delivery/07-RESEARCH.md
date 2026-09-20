@@ -860,7 +860,13 @@ preserves that — removing the `422` key would not.
 | A6 | Committing a transcription of the brief is acceptable to the user (copyright/confidentiality) | Open Questions Q1 | Legal/etiquette issue. **Must be asked, not assumed** |
 | A7 | The five rows this session created in the dev database are acceptable collateral | Runtime State Inventory | None material; it is a local throwaway volume |
 
-## Open Questions / human-gated steps
+## Open Questions / human-gated steps (RESOLVED)
+
+> Resolved at planning time, 2026-09-20, with no CONTEXT.md: Q1 -> option (c), the brief is not
+> redistributed and the map is keyed on the `[PDF x.y]` references in REQUIREMENTS.md; Q7 -> the
+> curated five-ambiguity block; Q8 -> the rehearsal leaves the dev stack down and prints the restore
+> command; Q2-Q6 -> human checkpoints in 07-05, with no `git push` before approval. The user may
+> override Q1 before 07-04 executes.
 
 The planner should turn each of these into a `checkpoint:human-verify` task rather than deciding it.
 
