@@ -431,8 +431,8 @@ PREAMBLE
 	'
 } >"$RUNNABLE"
 
-printf '    %s command line(s), %s of them generated around `make up`\n' \
-	"$(extract_commands README.md | wc -l | tr -d ' ')" 3
+printf '    %s command line(s) extracted; `make up` becomes 3 generated lines\n' \
+	"$(extract_commands README.md | wc -l | tr -d ' ')"
 REHEARSAL_POLL_ATTEMPTS=$POLL_ATTEMPTS
 REHEARSAL_POLL_SECONDS=$POLL_SECONDS
 export REHEARSAL_POLL_ATTEMPTS REHEARSAL_POLL_SECONDS
