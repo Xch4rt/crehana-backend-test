@@ -3,9 +3,9 @@
 # No top-level `version:` key. It has been obsolete since Compose v2 and only
 # earns a deprecation warning on every single invocation.
 #
-# Three services, two of which are long-running (D-14): `db` and `api` are what
-# `docker compose up` starts, and `test` is built from the Dockerfile's test
-# stage to be *invoked* rather than started.
+# Four services, three of which are long-running: `db`, `api` and `ui` are what
+# `docker compose up` starts (D-14, extended by Phase 8's D-08), and `test` is
+# built from the Dockerfile's test stage to be *invoked* rather than started.
 #
 # Configuration enters through `env_file: .env`, so the evaluator's setup is
 # `make env` once (D-15, amended by ADR-084). No secret has a default anywhere
@@ -89,6 +89,39 @@ services:
     # which is why no docker-compose.override.yml ships with this repository.
     # Those two flag names are described rather than spelled here on purpose, so
     # that grepping this file for either of them stays a meaningful gate.
+
+  ui:
+    build:
+      # ./frontend and not `.`, because the UI image has no business receiving
+      # src/, tests/ or migrations/. That directory carries its own
+      # .dockerignore, so the build context is package.json, the lockfile, the
+      # three configuration files, index.html and src/ - and nothing else.
+      context: ./frontend
+      target: runtime
+    depends_on:
+      api:
+        # service_healthy, not service_started, and this one is load-bearing
+        # rather than tidy: nginx resolves the literal upstream name `api` ONCE
+        # at start-up and REFUSES TO START if it does not resolve. A UI that
+        # raced the API would be a container in a crash loop rather than a page
+        # that retries.
+        condition: service_healthy
+    ports:
+      # The same number on both sides. 8080 is an unprivileged port, which is
+      # what lets the image run as `nginx` with no added capability, and keeping
+      # the host number identical means the port in the README is the port in
+      # frontend/nginx.conf.
+      - "8080:8080"
+    # No `env_file` and no `environment`, and that absence is the design rather
+    # than an omission: the UI ships ONE relative base path, `/api/v1`, and
+    # reaches the API through this container's own reverse proxy (ADR-107). It
+    # has no configuration, no secret, and the browser never learns the API's
+    # address - which is also why no CORS header exists anywhere in this project
+    # and why src/taskmanager is untouched by the existence of a web client.
+    #
+    # No `healthcheck:` block either, for the same reason `api` has none:
+    # Compose inherits the image's HEALTHCHECK unless the service overrides it,
+    # and frontend/Dockerfile already declares one.
 
   test:
     build:

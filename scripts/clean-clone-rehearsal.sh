@@ -27,9 +27,10 @@
 # because the README itself says it runs in the FOREGROUND and tells the reader
 # to leave it there and open a second terminal. There is no second terminal here,
 # so the line becomes a background invocation with its output tee'd to a log,
-# followed by a bounded poll for `api` reporting healthy - which is the
-# mechanical form of the sentence the README already contains. Every other line
-# runs as written, and a non-zero exit fails the rehearsal.
+# followed by a bounded poll for `api` reporting healthy and the same pair for
+# `ui` - which is the mechanical form of the sentence the README already
+# contains. Every other line runs as written, and a non-zero exit fails the
+# rehearsal.
 #
 # What it deliberately does to the developer's machine, stated up front because
 # it is a side effect and not a surprise:
@@ -418,6 +419,52 @@ rehearsal_assert_the_api_is_ours() {
 	set -x
 }
 
+rehearsal_wait_for_a_healthy_ui() {
+	attempt=1
+	while [ "$attempt" -le "$REHEARSAL_POLL_ATTEMPTS" ]; do
+		if [ "$(docker compose ps --format '{{.Health}}' ui 2>/dev/null)" = healthy ]; then
+			return 0
+		fi
+		attempt=$((attempt + 1))
+		sleep "$REHEARSAL_POLL_SECONDS"
+	done
+	echo "ui never reported healthy; the tail of \`make up\`:" >&2
+	tail -40 "$REHEARSAL_UP_LOG" >&2
+	return 1
+}
+
+rehearsal_assert_the_ui_is_ours() {
+	# The same argument as the api assertion above, for the port that is far
+	# MORE likely to be contended: 8080 is the default of every local web
+	# server, proxy and admin console a developer has ever started. A foreign
+	# server answering there would let every UI claim in the README pass
+	# without this rehearsal's own container ever being reached.
+	#
+	# No `set +x` dance here. Unlike the api assertion this function reads no
+	# secret, so there is nothing tracing could publish.
+	ours=$(docker compose ps -q ui)
+	if [ -z "$ours" ]; then
+		echo "no ui container in project $COMPOSE_PROJECT_NAME" >&2
+		return 1
+	fi
+	publishing=$(docker ps --filter publish=8080 --no-trunc --format '{{.ID}}')
+	if [ "$publishing" != "$ours" ]; then
+		echo "the container answering on :8080 is not this rehearsal's ui." >&2
+		echo "  this rehearsal's ui: $ours" >&2
+		echo "  publishing :8080:    ${publishing:-<nothing>}" >&2
+		return 1
+	fi
+	answer=$(curl -sf http://localhost:8080/)
+	case "$answer" in
+	*'id="root"'*) ;;
+	*)
+		echo "http://localhost:8080/ did not serve the SPA document" >&2
+		return 1
+		;;
+	esac
+	echo "the healthy ui on :8080 is this rehearsal's container ($ours), and it serves the SPA"
+}
+
 set -x
 PREAMBLE
 	extract_commands README.md | awk '
@@ -425,13 +472,15 @@ PREAMBLE
 			print "make up > \"$REHEARSAL_UP_LOG\" 2>&1 &"
 			print "rehearsal_wait_for_a_healthy_api"
 			print "rehearsal_assert_the_api_is_ours"
+			print "rehearsal_wait_for_a_healthy_ui"
+			print "rehearsal_assert_the_ui_is_ours"
 			next
 		}
 		{ print }
 	'
 } >"$RUNNABLE"
 
-printf '    %s command line(s) extracted; `make up` becomes 3 generated lines\n' \
+printf '    %s command line(s) extracted; `make up` becomes 5 generated lines\n' \
 	"$(extract_commands README.md | wc -l | tr -d ' ')"
 REHEARSAL_POLL_ATTEMPTS=$POLL_ATTEMPTS
 REHEARSAL_POLL_SECONDS=$POLL_SECONDS
