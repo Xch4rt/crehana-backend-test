@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-02-PLAN.md — the decision log closes DOC-03 (roadmap SC-2)
-last_updated: 2026-09-20T04:15:00.000Z
-last_activity: 2026-09-19 -- 07-02 complete: ADR-097..ADR-101 appended, all five brief ambiguities now resolve to a numbered ADR, ADR-019/072 corrected by id, start-here block in the header; 1115 passed, 100% coverage
+stopped_at: Completed 07-03-PLAN.md — AI_WORKFLOW.md is finished (roadmap SC-5, AIW-01, AIW-02)
+last_updated: 2026-09-20T05:05:00.000Z
+last_activity: 2026-09-19 -- 07-03 complete: AI_WORKFLOW.md carries three Mermaid diagrams, a human/AI split naming Phases 1 to 7 with 35 resolving commit hashes, and the What I Did Not Do body; the 51 incident entries are byte-identical; 1115 passed, 100% coverage
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 65
-  completed_plans: 62
-  percent: 95
+  completed_plans: 63
+  percent: 97
 ---
 
 # Project State
@@ -27,19 +27,19 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 7
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Executing Phase 07
-Last activity: 2026-09-19 -- 07-02 complete: `DECISION_LOG.md` now answers all five of the brief's named ambiguities with a numbered ADR (statuses/transitions → ADR-097, priorities → ADR-098), corrects ADR-019's runner claim and ADR-072's moved test path by id rather than by edit, records 07-01's two decisions as ADR-100/101, and opens with a start-here block; the log grew by 332 lines and lost none
+Last activity: 2026-09-19 -- 07-03 complete: `AI_WORKFLOW.md` is finished — three Mermaid diagrams of the workflow as it really ran (the uneven per-phase loop, the gate set with its two honest annotations, the Phase 5 forged-token round trip), Phase 5/6/7 human-AI blocks so every phase from 1 to 7 now has one, 35 short commit hashes every one of which resolves, and a What I Did Not Do body that publishes the seven gate weaknesses the Phase 6 review left open; AIW-01 and AIW-02 ticked, 65/69
 
-Progress: [█████████░] 95%
+Progress: [█████████░] 97%
 
-`total_plans` now includes Phase 7's five plans: 62 of 65 executed.
+`total_plans` now includes Phase 7's five plans: 63 of 65 executed.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 62
+- Total plans completed: 63
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -54,7 +54,7 @@ Progress: [█████████░] 95%
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
-| 07 | 2 | - | - |
+| 07 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -124,6 +124,7 @@ Progress: [█████████░] 95%
 | Phase 06 P05 | 25min | 3 tasks | 7 files |
 | Phase 07 P01 | 35min | 3 tasks | 9 files |
 | Phase 07 P02 | 30min | 3 tasks | 4 files |
+| Phase 07 P03 | 40min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -878,6 +879,12 @@ None yet.
 - [Phase 07-02]: the `users` OpenAPI tag description shipped false in 07-01 ("no email address of another account is published here", which `UserSummaryResponse` and ADR-068 both contradict) and was corrected — tag prose is read by no gate, so CLAUDE.md now holds it to the ADR standard by hand
 - [Phase 07-02]: no 96-row table of contents and no generator for the log — a curated 28-line start-here block instead, per 07-RESEARCH Gap 2; the next free ADR number is 102
 - [Phase 07-02]: STATE.md and ROADMAP.md edited by hand again, the sixth consecutive plan to record the same gsd-sdk handler regressions
+- [Phase 07-03]: the pipeline diagram is drawn UNEVEN because the process was uneven — no discussion log for Phases 1 and 7, verification returning gaps_found for Phases 5 and 6, a code review that found two criticals after Phase 6; an idealised loop is the one thing this document exists not to draw
+- [Phase 07-03]: the gate diagram states that pre-commit runs NO tests, which CLAUDE.md's prose implies it does; `.pre-commit-config.yaml` was read — its hooks are the hygiene set, isort, black, flake8, mypy and lint-imports, and `make test` green before a commit is a rule enforced by hand, by the Docker test stage and by CI
+- [Phase 07-03]: nine architecture gates, not 07-RESEARCH's eight — 07-01 added `test_openapi_completeness.py` after the research was written; counted from the directory rather than copied from the document
+- [Phase 07-03]: the suite figure is anchored to the plan that measured it ("at the close of this plan, 1,115 tests at 100.00% over 1,690 statements") because 07-04 adds tests; the commit TOTAL is deliberately absent, since it goes stale on its own commit
+- [Phase 07-03]: 35 commit hashes rather than the plan's seven, each resolved with `git cat-file -e`; two claims were softened after checking them (every list route's ordering, and "--no-verify never used") — an unverifiable sentence in this file costs more than a missing one
+- [Phase 07-03]: STATE.md and ROADMAP.md edited by hand again, the seventh consecutive plan to record the same gsd-sdk handler regressions
 
 ## Deferred Items
 
@@ -889,6 +896,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T04:15:00.000Z
-Stopped at: Completed 07-02-PLAN.md (the decision log closes DOC-03)
-Resume file: None - next is 07-03-PLAN.md (AI_WORKFLOW.md)
+Last session: 2026-09-20T05:05:00.000Z
+Stopped at: Completed 07-03-PLAN.md (AI_WORKFLOW.md finished: AIW-01, AIW-02)
+Resume file: None - next is 07-04-PLAN.md (README.md, the documentation-claims gate, the Dockerfile COPY)

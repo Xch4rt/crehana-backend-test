@@ -361,7 +361,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-03-PLAN.md — `AI_WORKFLOW.md`: three Mermaid diagrams, the Phase 5/6/7 human-AI blocks with commit references, and the "What I Did Not Do" body
+- [x] 07-03-PLAN.md — `AI_WORKFLOW.md`: three Mermaid diagrams, the Phase 5/6/7 human-AI blocks with commit references, and the "What I Did Not Do" body
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -384,7 +384,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
-| 7. Documentation & Delivery | 2/5 | In progress | - |
+| 7. Documentation & Delivery | 3/5 | In progress | - |
 
 ## Standing Rules
 

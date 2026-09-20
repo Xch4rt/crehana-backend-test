@@ -108,8 +108,8 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### AI Workflow Transparency (AIW)
 
-- [ ] **AIW-01**: `AI_WORKFLOW.md` shows, with Mermaid diagrams, the real workflow: brief analysis -> research -> requirements -> roadmap -> per-phase plan/execute/verify -> quality gates [NL]
-- [ ] **AIW-02**: It states what the human decided versus what was delegated to AI, with every claim traceable to a commit, file or test [NL]
+- [x] **AIW-01**: `AI_WORKFLOW.md` shows, with Mermaid diagrams, the real workflow: brief analysis -> research -> requirements -> roadmap -> per-phase plan/execute/verify -> quality gates [NL]
+- [x] **AIW-02**: It states what the human decided versus what was delegated to AI, with every claim traceable to a commit, file or test [NL]
 - [x] **AIW-03**: It keeps an honest incident log of AI mistakes and how each was caught, written incrementally during the work, plus a "what I did not do" section [NL]
 - [x] **AIW-04**: `CLAUDE.md` holds the architecture and quality rules imposed on the AI; `.planning/` artifacts are committed and consistent with what shipped [NL]
 - [ ] **AIW-05**: The project is delivered as a public GitHub repository with atomic, phase-scoped commits and a green CI badge [NL]
@@ -217,8 +217,8 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | DOC-02 | Phase 7 | Pending |
 | DOC-03 | Phase 7 | Complete (07-02) |
 | DOC-04 | Phase 7 | Complete (07-01) |
-| AIW-01 | Phase 7 | Pending |
-| AIW-02 | Phase 7 | Pending |
+| AIW-01 | Phase 7 | Complete (07-03) |
+| AIW-02 | Phase 7 | Complete (07-03) |
 | AIW-03 | Phase 1 | Complete |
 | AIW-04 | Phase 1 | Complete |
 | AIW-05 | Phase 7 | Pending |
@@ -347,5 +347,7 @@ proving the runtime adapter imports no mail library at all.
 
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-19 after Phase 5 (plan 05-16): AUTH-01..06, ASGN-01..03 and NOTF-01..03
-ticked against the re-verification table above; 56/69 complete*
+*Last updated: 2026-09-19 after plan 07-03: AIW-01 and AIW-02 ticked — `AI_WORKFLOW.md` carries
+three Mermaid diagrams of the real workflow, a human/AI split naming every phase from 1 to 7, and
+a commit hash beside the claims hardest to check; 65/69 complete, the four open being DOC-01,
+DOC-02 (07-04), DOCK-05 and AIW-05 (07-05)*
