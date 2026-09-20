@@ -5,6 +5,7 @@ import type { TaskListResponse } from "./api/types";
 import LoginScreen from "./auth/LoginScreen";
 import { clearToken, getToken, setToken } from "./auth/session";
 import ListsScreen from "./lists/ListsScreen";
+import TasksScreen from "./tasks/TasksScreen";
 
 // The shell: who holds the token, and which screen is on screen.
 //
@@ -87,7 +88,12 @@ export default function App() {
             }}
           />
         ) : view.name === "tasks" ? (
-          <p>{view.list.name}</p>
+          <TasksScreen
+            list={view.list}
+            onBack={() => {
+              setView({ name: "lists" });
+            }}
+          />
         ) : (
           <p>Assigned to me</p>
         )}

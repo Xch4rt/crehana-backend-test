@@ -218,6 +218,63 @@ button.title {
   text-align: center;
 }
 
+/* --- filters, badges, task rows ------------------------------------------- */
+
+.filters {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.filters .field {
+  margin-bottom: 0;
+  min-width: 11rem;
+}
+
+.inline-field {
+  max-width: 14rem;
+  margin: 0.5rem 0 0;
+}
+
+.inline-field > label {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0 0;
+}
+
+.badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.55rem;
+  text-transform: uppercase;
+}
+
+.badge.priority-high {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badge.priority-medium {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge.status-completed {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
 /* --- tables --------------------------------------------------------------- */
 
 table {

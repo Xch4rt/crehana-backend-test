@@ -1,0 +1,392 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type {
+  TaskCollectionResponse,
+  TaskListResponse,
+  TaskResponse,
+} from "../api/types";
+import { clearToken, setToken } from "../auth/session";
+import {
+  jsonBodyOf,
+  jsonResponse,
+  lastRequest,
+  noContent,
+  onlyRequest,
+  problemResponse,
+  requestsMatching,
+} from "../testing/http";
+import TasksScreen from "./TasksScreen";
+
+// UI-03. The second describe block is the one the phase exists for: a filtered
+// response narrows the rows and does NOT move the completion bar, because the
+// bar renders the response's own whole-list counters (ADR-009). It is the
+// README quickstart's step 6 in component form.
+
+const LIST: TaskListResponse = {
+  id: "list-1",
+  owner_id: "owner-1",
+  name: "Groceries",
+  description: null,
+  created_at: "2026-09-19T10:00:00Z",
+  updated_at: "2026-09-19T10:00:00Z",
+  total_tasks: 2,
+  completed_tasks: 1,
+  completion_percentage: 50,
+};
+
+function aTask(overrides: Partial<TaskResponse> = {}): TaskResponse {
+  return {
+    id: "task-1",
+    task_list_id: "list-1",
+    title: "Buy milk",
+    description: "Semi-skimmed",
+    status: "pending",
+    priority: "medium",
+    created_at: "2026-09-19T10:00:00Z",
+    updated_at: "2026-09-19T10:00:00Z",
+    due_date: null,
+    completed_at: null,
+    assignee_id: null,
+    ...overrides,
+  };
+}
+
+function aCollection(
+  overrides: Partial<TaskCollectionResponse> = {},
+): TaskCollectionResponse {
+  return {
+    items: [aTask()],
+    total_tasks: 2,
+    completed_tasks: 1,
+    completion_percentage: 50,
+    ...overrides,
+  };
+}
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  setToken("a-signed-token");
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  clearToken();
+  sessionStorage.clear();
+});
+
+function tasksRequests(): string[] {
+  return requestsMatching(fetchMock, "GET", "/tasks").map((one) => one.url);
+}
+
+describe("reading a list", () => {
+  it("asks for the whole list on mount and renders one row per task", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        200,
+        aCollection({
+          items: [aTask(), aTask({ id: "task-2", title: "Buy bread" })],
+          total_tasks: 2,
+          completed_tasks: 0,
+          completion_percentage: 0,
+        }),
+      ),
+    );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+
+    expect(await screen.findByText("Buy milk")).toBeInTheDocument();
+    expect(screen.getByText("Buy bread")).toBeInTheDocument();
+    expect(tasksRequests()).toEqual(["/api/v1/task-lists/list-1/tasks"]);
+  });
+
+  it("names the list it is showing and can go back", async () => {
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+    fetchMock.mockResolvedValue(jsonResponse(200, aCollection()));
+
+    render(<TasksScreen list={LIST} onBack={onBack} />);
+    await screen.findByText("Buy milk");
+
+    await user.click(screen.getByRole("button", { name: "Back to lists" }));
+
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+});
+
+describe("filtering", () => {
+  it("narrows the rows while the bar keeps describing the whole list (ADR-009)", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          200,
+          aCollection({
+            items: [
+              aTask({ priority: "high" }),
+              aTask({ id: "task-2", title: "Buy bread", status: "completed" }),
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        // The filtered answer: ONE item, and the three counters unchanged
+        // because the API computes them over the whole list.
+        jsonResponse(
+          200,
+          aCollection({ items: [aTask({ priority: "high" })] }),
+        ),
+      );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await screen.findByText("Buy bread");
+
+    await user.selectOptions(screen.getByLabelText("Priority"), "high");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Buy bread")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Buy milk")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    // One row on screen, and the bar still says half the LIST is done.
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+
+    expect(lastRequest(fetchMock).url).toBe(
+      "/api/v1/task-lists/list-1/tasks?priority=high",
+    );
+  });
+
+  it("sends the status filter and drops the parameter entirely when it is cleared", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue(jsonResponse(200, aCollection()));
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await screen.findByText("Buy milk");
+
+    await user.selectOptions(screen.getByLabelText("Status"), "in_progress");
+    await waitFor(() => {
+      expect(lastRequest(fetchMock).url).toBe(
+        "/api/v1/task-lists/list-1/tasks?status=in_progress",
+      );
+    });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "");
+    await waitFor(() => {
+      expect(lastRequest(fetchMock).url).toBe(
+        "/api/v1/task-lists/list-1/tasks",
+      );
+    });
+    // Not `?status=` - an empty string is a value, and the API would refuse it
+    // as an invalid enum member rather than read it as "no filter".
+    expect(lastRequest(fetchMock).url).not.toContain("status=");
+  });
+});
+
+describe("creating a task", () => {
+  it("posts the title, description and priority, defaulting the priority to the API's own default", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, aCollection({ items: [] })))
+      .mockResolvedValueOnce(jsonResponse(201, aTask({ title: "Buy eggs" })))
+      .mockResolvedValueOnce(
+        jsonResponse(200, aCollection({ items: [aTask({ title: "Buy eggs" })] })),
+      );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await screen.findByText("No tasks match this view.");
+
+    await user.type(screen.getByLabelText("Title"), "Buy eggs");
+    await user.type(screen.getByLabelText("Description"), "A dozen");
+    await user.click(screen.getByRole("button", { name: "Add task" }));
+
+    expect(await screen.findByText("Buy eggs")).toBeInTheDocument();
+
+    const posted = onlyRequest(
+      fetchMock,
+      "POST",
+      "/api/v1/task-lists/list-1/tasks",
+    );
+    expect(jsonBodyOf(posted)).toEqual({
+      title: "Buy eggs",
+      description: "A dozen",
+      priority: "medium",
+    });
+  });
+});
+
+describe("editing a task", () => {
+  it("patches the changed fields and never sends status through the general endpoint", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, aCollection()))
+      .mockResolvedValueOnce(
+        jsonResponse(200, aTask({ title: "Buy oat milk", priority: "high" })),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          200,
+          aCollection({
+            items: [aTask({ title: "Buy oat milk", priority: "high" })],
+          }),
+        ),
+      );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Edit Buy milk" }));
+
+    const title = screen.getByLabelText("New title");
+    await user.clear(title);
+    await user.type(title, "Buy oat milk");
+    await user.selectOptions(screen.getByLabelText("New priority"), "high");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Buy oat milk")).toBeInTheDocument();
+
+    const patched = onlyRequest(
+      fetchMock,
+      "PATCH",
+      "/api/v1/task-lists/list-1/tasks/task-1",
+    );
+    const body = jsonBodyOf(patched);
+    expect(body).toEqual({ title: "Buy oat milk", priority: "high" });
+    expect(Object.keys(Object(body))).not.toContain("status");
+  });
+
+  it("makes no request when nothing was changed, because an empty patch body is a 422", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue(jsonResponse(200, aCollection()));
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.click(await screen.findByRole("button", { name: "Edit Buy milk" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(requestsMatching(fetchMock, "PATCH", "/tasks/task-1")).toEqual([]);
+  });
+});
+
+describe("changing a status", () => {
+  it("offers a completed task only the reopening move", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        200,
+        aCollection({
+          items: [aTask({ status: "completed", completed_at: "2026-09-19T11:00:00Z" })],
+        }),
+      ),
+    );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+
+    const control = await screen.findByLabelText("Status of Buy milk");
+    expect(
+      within(control).getByRole("option", { name: "In progress" }),
+    ).toBeInTheDocument();
+    expect(
+      within(control).queryByRole("option", { name: "Pending" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the dedicated status endpoint and re-reads the counters it changed", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, aCollection()))
+      .mockResolvedValueOnce(jsonResponse(200, aTask({ status: "completed" })))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          200,
+          aCollection({
+            items: [aTask({ status: "completed" })],
+            total_tasks: 2,
+            completed_tasks: 2,
+            completion_percentage: 100,
+          }),
+        ),
+      );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.selectOptions(
+      await screen.findByLabelText("Status of Buy milk"),
+      "completed",
+    );
+
+    expect(await screen.findByText("100%")).toBeInTheDocument();
+
+    const patched = onlyRequest(
+      fetchMock,
+      "PATCH",
+      "/api/v1/task-lists/list-1/tasks/task-1/status",
+    );
+    expect(jsonBodyOf(patched)).toEqual({ status: "completed" });
+  });
+
+  it("renders the API's own sentence when it refuses the move anyway", async () => {
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, aCollection()))
+      .mockResolvedValueOnce(
+        problemResponse(409, {
+          type: "urn:taskmanager:problem:invalid_status_transition",
+          title: "Conflict",
+          status: 409,
+          detail: "A task cannot move from 'completed' to 'pending'.",
+          instance: "/api/v1/task-lists/list-1/tasks/task-1/status",
+          code: "invalid_status_transition",
+          errors: { from: "completed", to: "pending" },
+        }),
+      );
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.selectOptions(
+      await screen.findByLabelText("Status of Buy milk"),
+      "completed",
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "A task cannot move from 'completed' to 'pending'.",
+    );
+    expect(alert).toHaveTextContent("invalid_status_transition");
+  });
+});
+
+describe("deleting a task", () => {
+  it("asks first, deletes that id and re-reads the list", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          200,
+          aCollection({
+            items: [aTask(), aTask({ id: "task-2", title: "Buy bread" })],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(jsonResponse(200, aCollection({ items: [aTask()] })));
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Buy bread" }),
+    );
+
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("Buy bread");
+    await waitFor(() => {
+      expect(screen.queryByText("Buy bread")).not.toBeInTheDocument();
+    });
+
+    const deleted = onlyRequest(
+      fetchMock,
+      "DELETE",
+      "/api/v1/task-lists/list-1/tasks/task-2",
+    );
+    expect(deleted.url).toBe("/api/v1/task-lists/list-1/tasks/task-2");
+  });
+});
