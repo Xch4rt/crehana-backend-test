@@ -347,7 +347,29 @@ Plans:
   5. `AI_WORKFLOW.md` is finalized with Mermaid diagrams of the real workflow, an explicit human-decided vs AI-delegated split where every claim points at a commit, file or test, the incident log accumulated since Phase 1 with at least three real mistakes, and a "what I did not do" section.
   6. The project is public on GitHub with atomic, phase-scoped commits and a green CI badge in the README.
 
-**Plans**: TBD
+**Plans**: 5 plans (5 waves)
+
+Plans:
+
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — The published error body: one `Problem` component, 69 legs on `application/problem+json`, the described tag table and the completeness gate
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — The two missing ambiguity ADRs, the superseding entry for two stale claims, 07-01's ADRs and the curated five-ambiguity block
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-03-PLAN.md — `AI_WORKFLOW.md`: three Mermaid diagrams, the Phase 5/6/7 human-AI blocks with commit references, and the "What I Did Not Do" body
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-04-PLAN.md — `README.md` in ten sections, the documentation-honesty gate and the Dockerfile `COPY` that gate needs in the container
+
+**Wave 5** *(blocking delivery, blocked on Wave 4 completion)*
+
+- [ ] 07-05-PLAN.md — `make rehearse` executing the README's own commands from a fresh clone, the push, the observed-green CI run and the delivery checkpoints
 
 ## Progress
 
@@ -362,7 +384,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
-| 7. Documentation & Delivery | 0/TBD | Not started | - |
+| 7. Documentation & Delivery | 0/5 | Not started | - |
 
 ## Standing Rules
 
