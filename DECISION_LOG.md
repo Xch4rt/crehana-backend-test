@@ -14,6 +14,33 @@ If a later phase reverses a decision, it gets a new ADR that supersedes the old 
 Only decisions that were actually made are recorded here — no reconstructed rationale, and no
 alternative softened into a strawman to make the chosen option look better.
 
+## Start here
+
+The entries below are in chronological order and are never rewritten, so this file reads as a
+history rather than as a summary. These two tables are the shortcut: the brief's five named
+ambiguities and where each is resolved, then the decisions a reviewer is most likely to want an
+argument for.
+
+**The brief's five ambiguities**
+
+| Ambiguity | Resolved in |
+|-----------|-------------|
+| What the completion percentage is over — the whole list or the filtered view | **ADR-009**, refined by ADR-049 and ADR-054 |
+| The allowed status values and the moves between them | **ADR-097** |
+| The priority values, and what an absent priority means | **ADR-098** |
+| Who may be assigned to a task | **ADR-069**, with ADR-068 |
+| What triggers the fake invitation email | **ADR-070** |
+
+**The five decisions most likely to be questioned**
+
+| Decision | Entry |
+|----------|-------|
+| PostgreSQL rather than SQLite, for a four-hour deliverable | ADR-001 |
+| 404 for a resource the caller cannot see, 403 for one they can but may not touch | ADR-008 |
+| The completion percentage counts the whole list, never the filtered subset | ADR-009 |
+| PyJWT and `pwdlib[argon2]`, never python-jose or passlib | ADR-062, ADR-063 |
+| flake8 rather than ruff — the brief mandates the linter | ADR-010 |
+
 ---
 
 ## ADR-001: PostgreSQL, not SQLite
