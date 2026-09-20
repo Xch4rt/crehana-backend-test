@@ -127,7 +127,7 @@ follow-ups (see 06-REVIEW.md).
 
 ### Out of Scope
 
-- Frontend / UI — the challenge is backend only
+- ~~Frontend / UI — the challenge is backend only~~ — reversed by user decision 2026-09-19: Phase 8 adds a small web UI inside the deliverable (UI-01..UI-08); the brief still asks for none
 - Real email delivery (SMTP, SendGrid, etc.) — the brief explicitly asks for a simulation
 - Refresh tokens, password reset, email verification, OAuth — beyond the "optional JWT" bonus;
   would be documented as future work

@@ -7,7 +7,7 @@ stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishi
 last_updated: 2026-09-20T01:45:00.000Z
 last_activity: 2026-09-19 -- 07-05 tasks 1-3 done: make rehearse clones the committed tree, builds --no-cache and executes README.md's own fenced blocks in the clone (green twice, 161s then 115s), ADR-103 and the CLAUDE.md rule, the dated Phase 7 incident entry, DOCK-05 ticked; stopped at the task 4 push checkpoint Pre-push audit against the real PDF (da125c9): every brief use case exercised live (30/30), all gates green; ADR-104 corrects four sentences that credited the brief with words it does not contain (ADR-010/018/066/097) and README's 409 sentence; 104 ADRs. Still stopped at the task 4 push checkpoint.
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 6
   total_plans: 65
   completed_plans: 64
@@ -848,6 +848,10 @@ Recent decisions affecting current work:
 - [Phase 06-04]: DECISION_LOG.md gains ADR-085..091 and CLAUDE.md a new Test quality section; the append-only property is mechanical, `git diff DECISION_LOG.md | grep -c '^-'` prints 1, the diff header alone
 - [Phase 06-04]: TEST-01..05 ticked here and only here, each against a named passing test written into REQUIREMENTS.md's traceability notes rather than against a plan header
 - [Phase 06-04]: STATE.md and ROADMAP.md edited by hand again, the fifth consecutive plan to record the same gsd-sdk handler regressions
+
+### Roadmap Evolution
+
+- Phase 8 added (2026-09-19, user decision): Web UI — a React + Vite SPA inside the deliverable, reversing the "Frontend / UI" out-of-scope row. It executes while 07-05 is paused at its task 4 push checkpoint; 07-05 tasks 4-7 resume after it, so the UI is part of the delivered commit.
 
 ### Pending Todos
 

@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Auth, Assignment & Notifications** - JWT login, ownership rules, task assignment and the simulated invitation email (completed 2026-09-19)
 - [x] **Phase 6: Test Hardening & Coverage** - Tests that actually prove behaviour, with the ≥75% gate genuinely met (completed 2026-09-19)
 - [ ] **Phase 7: Documentation & Delivery** - README, DECISION_LOG, AI_WORKFLOW, clean-clone rehearsal and a public repo
+- [ ] **Phase 8: Web UI** - A small React + Vite SPA in the deliverable, gated like the backend; runs before 07-05's delivery tasks resume
 
 ## Phase Details
 
@@ -385,6 +386,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
 | 7. Documentation & Delivery | 4/5 | In progress | - |
+| 8. Web UI | 0/0 | Not planned | - |
 
 ## Standing Rules
 
@@ -400,3 +402,23 @@ These apply to every phase and are not repeated in each phase's criteria:
 - Research flags: Phase 3 (async session lifecycle, transactional fixtures, Alembic `env.py`)
   and Phase 5 (JWT/hashing libraries, the 403-vs-404 matrix) warrant
   `/gsd:plan-phase --research-phase`.
+
+### Phase 8: Web UI
+
+**Goal**: An evaluator who runs `docker compose up` can also open a browser and drive every brief use case — lists, tasks, status, filters with the completion percentage, login, assignment — through a small web UI, without the UI weakening a single claim the repository makes about itself.
+**Depends on**: Phase 7 plans 07-01..07-04 and 07-05 tasks 1-3. **Executes before 07-05 resumes**: 07-05 is paused at its task 4 push checkpoint, and its delivery tasks 4-7 (push, CI run, badge/diagram check, email) run after this phase, so the UI is part of what is delivered.
+**Origin**: User decision on 2026-09-19, reversing the "Frontend / UI" Out of Scope row. The brief asks for no UI; this phase is beyond the brief and the documents must say so.
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08
+**Success Criteria** (what must be TRUE):
+
+  1. `docker compose up` still starts everything with one command, and the UI is reachable in a browser on a documented port. The UI reaches the API **same-origin through the UI container's reverse proxy** (and the Vite dev proxy in development), so the backend gains no CORS surface; if planning finds that unworkable, settings-driven CORS with no wildcard and an ADR is the fallback.
+  2. Through the UI a user can register, log in and log out; create, rename and delete task lists; create, edit and delete tasks; change a task's status; filter by status and by priority while the completion percentage keeps describing the whole list; assign and unassign a task from the user directory; and see the tasks assigned to them.
+  3. Every refusal the API answers is shown from its RFC 9457 body (`title`/`detail`, keyed on `code`), and a 401 returns the user to the login screen. The UI builds no error text of its own for an API failure.
+  4. The frontend has the backend's kind of gates: TypeScript strict, eslint and vitest component/unit tests, each behind a `make` target, each run by CI in a Node job — and added in both places the two-places rule names if it introduces a new command. `src/taskmanager` is not modified unless criterion 1's fallback is taken.
+  5. `README.md`, `make rehearse` and `tests/architecture/test_documentation_claims.py` stay true and green: the README says what the UI is, how to open it and that it is beyond the brief; the rehearsal proves the UI answers in the fresh clone; pinned counts are updated in the commit that changes them.
+  6. `DECISION_LOG.md` records the stack choice (React + Vite, not Next.js), the same-origin proxy (or CORS), and the reversal of two earlier positions by id — "Frontend / UI" out of scope, and `AI_WORKFLOW.md`'s rejection of a Node toolchain in a Python deliverable. `AI_WORKFLOW.md` gains the Phase 8 human/AI split and a dated incident entry.
+
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 8 to break down)

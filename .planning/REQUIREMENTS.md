@@ -6,6 +6,7 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 **[NL]** = our "next level" layer, **[R]** = derived from research to make a PDF item correct.
+**[U]** = added by user decision after v1 was defined, beyond the brief.
 
 ## v1 Requirements
 
@@ -114,6 +115,17 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **AIW-04**: `CLAUDE.md` holds the architecture and quality rules imposed on the AI; `.planning/` artifacts are committed and consistent with what shipped [NL]
 - [ ] **AIW-05**: The project is delivered as a public GitHub repository with atomic, phase-scoped commits and a green CI badge [NL]
 
+### Web UI (UI) — beyond the brief, user decision 2026-09-19
+
+- [ ] **UI-01**: A React + Vite + TypeScript SPA lives in `frontend/` and lets a user register, log in and log out against the existing API [U]
+- [ ] **UI-02**: User can create, rename and delete task lists and sees each list's completion percentage [U]
+- [ ] **UI-03**: User can create, edit and delete tasks, change a task's status, and filter by status and priority while the completion percentage keeps describing the whole list [U]
+- [ ] **UI-04**: User can assign and unassign a task from the user directory and see the tasks assigned to them [U]
+- [ ] **UI-05**: Every API refusal is rendered from its RFC 9457 body, and a 401 returns the user to the login screen [U]
+- [ ] **UI-06**: `docker compose up` serves the UI with no second command; the UI reaches the API same-origin through a reverse proxy, so the backend gains no CORS surface (fallback: settings-driven CORS, no wildcard, with an ADR) [U]
+- [ ] **UI-07**: The frontend is gated by TypeScript strict, eslint and vitest, each behind a `make` target and a CI Node job [U]
+- [ ] **UI-08**: README, the clean-clone rehearsal, the documentation gate, DECISION_LOG and AI_WORKFLOW are extended and stay true, including the two reversed positions named by id [U]
+
 ## v2 Requirements
 
 Acknowledged, documented as "pending" in the README, not built.
@@ -133,7 +145,7 @@ Acknowledged, documented as "pending" in the README, not built.
 
 | Feature | Reason |
 |---------|--------|
-| Frontend / UI | Backend-only challenge |
+| ~~Frontend / UI~~ | ~~Backend-only challenge~~ — reversed by user decision 2026-09-19; see UI-01..UI-08 (Phase 8). The brief still asks for none |
 | Real email delivery (SMTP/provider) | Brief explicitly asks for a simulation |
 | PUT alongside PATCH | Doubles the test surface for no points; documented in DECISION_LOG |
 | Status writable through generic PATCH | Would bypass the state machine; the dedicated endpoint is the only door |
@@ -222,6 +234,14 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | AIW-03 | Phase 1 | Complete — 52 dated entries; the "What I Did Not Do" body written in 07-03 |
 | AIW-04 | Phase 1 | Complete |
 | AIW-05 | Phase 7 | Pending |
+| UI-01 | Phase 8 | Pending |
+| UI-02 | Phase 8 | Pending |
+| UI-03 | Phase 8 | Pending |
+| UI-04 | Phase 8 | Pending |
+| UI-05 | Phase 8 | Pending |
+| UI-06 | Phase 8 | Pending |
+| UI-07 | Phase 8 | Pending |
+| UI-08 | Phase 8 | Pending |
 
 **Per-phase totals:** Phase 1 = 17, Phase 2 = 4, Phase 3 = 8, Phase 4 = 15, Phase 5 = 12,
 Phase 6 = 5, Phase 7 = 8.
@@ -262,8 +282,8 @@ Phase 6 = 5, Phase 7 = 8.
   defined; Phases 4-5 add use cases conforming to it, enforced automatically by ARC-03.
 
 **Coverage:**
-- v1 requirements: 69 total
-- Mapped to phases: 69
+- v1 requirements: 69 total, plus 8 [U] requirements added for Phase 8 (77)
+- Mapped to phases: 77
 - Unmapped: 0 ✓
 - Duplicates: 0 ✓
 
