@@ -399,7 +399,12 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 ### Quality gates
 
 - `make lint`, `make typecheck`, `make arch` and `make test` must all be green before any
-  commit. pre-commit enforces the same set locally on every `git commit`.
+  commit. pre-commit covers three of those four on every `git commit` — its hooks are the
+  hygiene set, isort, black, flake8, mypy and `lint-imports`, and it runs **no pytest at all**.
+  So `make test` before a commit is a rule kept by hand; what enforces it mechanically is the
+  Docker `test` stage and CI, both of which run the suite as a named step. The earlier wording
+  here said pre-commit enforced "the same set", which reads as if a red test could not be
+  committed locally, and it can.
 - From Phase 3 onward `make test` runs the whole suite and **requires a reachable PostgreSQL**
   (`make up`, or `make docker-test` for the zero-host-setup path). This is decision D-03, not a
   broken setup: an auto-skip would let a run report green having exercised none of the
@@ -453,6 +458,28 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
   `test` stage have no `.venv`, so they run the same tools **directly** as named steps.
   A new gate must therefore be added in **both** `.pre-commit-config.yaml` and
   `.github/workflows/ci.yml` — neither derives from the other.
+- **Any test under `tests/` that reads a repository-root file needs its `COPY` line in the
+  Dockerfile `test` stage, in the same commit, and that commit's verification command is
+  `make docker-test` rather than `make test`.** The host has the whole tree and the stage has
+  only what is copied into it, so the failure mode is a gate that is green on the developer host
+  and red — historically, a *collection error* — in the container and in CI. That is not
+  hypothetical: `test_env_bootstrap.py` and `test_break_check.py` sat in exactly that state until
+  plan 06-04 ran the container suite, and ADR-102 records it happening a second time. The stage
+  now carries `pytest.ini`, `.flake8`, `.importlinter`, `.env.example`, `alembic.ini`,
+  `migrations/`, `scripts/`, `tests/`, and the four root documents `README.md`,
+  `DECISION_LOG.md`, `AI_WORKFLOW.md` and `Makefile`. Nothing else. Read the files inside the
+  tests rather than at import time, so a missing one is a named assertion failure instead of a
+  collection error naming a path.
+- The README is a gated document, not a prose file.
+  `tests/architecture/test_documentation_claims.py` compares its endpoint table with
+  `app.openapi()` by set equality **in both directions**, resolves every `ADR-NNN` it and `AI_WORKFLOW.md` cite against `DECISION_LOG.md`'s
+  headings, checks every `make <target>` it writes in a code span or a fenced block against the
+  `Makefile`'s `.PHONY` line, re-derives the two counts it quotes (the ADRs, the import-linter
+  contracts) from the files, and asserts the `<!-- rehearsal:begin -->` / `<!-- rehearsal:end -->`
+  pair is **exactly** one. A route added without a README row, a renamed target and a typo'd ADR
+  id are all red tests rather than review comments (ADR-102). What the gate cannot see — whether a
+  command *works*, and whether the paths the README cites exist — belongs to the clean-clone
+  rehearsal, which runs the README's own commands in a fresh clone.
 
 ### Test quality
 

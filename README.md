@@ -266,7 +266,7 @@ been softened, and that this README still agrees with the API.
 
 ## Decisions and AI workflow
 
-[**`DECISION_LOG.md`**](DECISION_LOG.md) — 101 ADRs, each with context, the options that were
+[**`DECISION_LOG.md`**](DECISION_LOG.md) — 102 ADRs, each with context, the options that were
 really on the table, the decision and its consequences. It is append-only: a later reversal is a
 new entry naming the old one by id, never an edit. Its first screen is the shortcut — the brief's
 five genuine ambiguities and where each is resolved (the completion percentage's scope, ADR-009;

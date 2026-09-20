@@ -4557,3 +4557,89 @@ demanding `problem+json` there would be wrong rather than strict.
   `get /health 503` into an offender.
 
 ---
+
+## ADR-102: the README is kept true by a gate, and a gate that reads a root file owes a `COPY` line (2026-09-19, extending ADR-086)
+
+**Context**
+Phase 7 answers six success criteria, and five of them are answered by *prose*: a README that says
+how to run the project, a table of the endpoints, a map from the brief's sections to the evidence,
+a decision log with ids, an AI-workflow document. Prose about code drifts the moment the code
+moves, and it drifts silently — nobody re-reads a table they did not touch. The README is also the
+worst place for that to happen, because it is the first file an evaluator opens and the one that
+sets how much they believe everything else.
+
+This repository has met this exact class of problem six times already — ADR-057, ADR-083, ADR-085,
+ADR-086, ADR-087, ADR-090 — and the answer was the same every time: observe the artifact, never
+restate it, and add a non-vacuity guard so an emptied observation cannot pass.
+
+**Options**
+
+- **Review discipline.** Read the README before each release and check it against the code.
+  Rejected on this project's own evidence: "every endpoint is covered" and "every test asserts
+  something" were house style for five phases, and each was partly untrue the first time anything
+  checked mechanically (ADR-086, ADR-088). A README is a larger surface than either.
+- **Generate the endpoint table from the application** at build time, or in a pre-commit hook.
+  Rejected, and this is the interesting rejection: a generated table agrees with `app.openapi()`
+  by construction, so the one failure worth catching — a human wrote a row that is not true —
+  becomes impossible to express. It would also make the README a build artifact, which is the
+  wrong thing for the document a person is supposed to have written.
+- **A documentation toolchain** (MkDocs, Sphinx, a link checker, a Markdown linter). Rejected:
+  a Node or a second Python toolchain in a deliverable an evaluator has five minutes for, to
+  check four claims that fit in one test module.
+- **Set equality against `app.openapi()`, plus id resolution, inside pytest.**
+
+**Decision**
+`tests/architecture/test_documentation_claims.py`, thirteen tests reading four repository-root
+documents. The endpoint table parsed out of the README and compared with the published operations
+by set equality **in both directions**, as two separate tests so the two failures name themselves.
+Every `ADR-NNN` cited in `README.md` or `AI_WORKFLOW.md` resolved against the log's headings. The
+brief's five ambiguities pinned as `AMBIGUITY_ADRS`, a hand-written table, because a derived map
+would agree with whatever the log happens to contain. Every `make <target>` written in a code span
+or a fenced block checked against the `Makefile`'s `.PHONY` line. The two counts the README quotes
+— the ADRs and the import-linter contracts — re-derived from the files on every run. The rehearsal
+markers asserted as **exactly one** well-formed pair. And a non-vacuity test that fails, never
+skips, if any parser found nothing.
+
+The `Dockerfile` `test` stage gains one line: `COPY README.md DECISION_LOG.md AI_WORKFLOW.md
+Makefile ./`.
+
+**Consequences**
+
+- **A gate that reads a repository-root file owes its `COPY` line in the same commit, and its
+  verification command is `make docker-test` rather than `make test`.** This is the real cost of
+  the decision and it is now twice-learned: `test_env_bootstrap.py` and `test_break_check.py` were
+  collection errors in this stage until plan 06-04 ran the container suite. It was proved rather
+  than assumed here — with the line removed, `make docker-test` reported 13 failed / 1115 passed;
+  with it, 1128 passed. The `runtime` stage is untouched, so the delivered image still carries no
+  documentation, no `Makefile` and no test suite.
+- **The failures are readable in the container too.** The documents are read inside the tests
+  rather than at import time, so a missing file is thirteen named assertion failures — one of
+  which says outright that the `test` stage is not copying them — instead of one collection error
+  naming a path.
+- **The marker guard asserts *exactly* one pair.** 06-REVIEW's WR-05 recorded a guard in this
+  repository that documented "exactly one" while enforcing "at least one"; a second `begin` marker
+  would move the region silently, and plan 07-05's rehearsal would then execute a set of commands
+  nobody reviewed. The same hole is not dug twice.
+- **The scan is restricted to code spans and fenced blocks**, and the cost is named rather than
+  hidden: `make rehearse` written in a sentence would escape the target check. The alternative is
+  a scan that fires on "make sure" and "make an account", which is how a gate gets disabled.
+- **The rehearsal script owns what this cannot see.** The gate reads documents; it cannot tell
+  whether a command *works*, and it deliberately does not check that the paths the README cites
+  exist, because that needs `docker-compose.yml`, `docker/`, `.github/` and `.planning/` — none of
+  which belong in the test image. Plan 07-05's `scripts/clean-clone-rehearsal.sh` extracts the
+  shell lines between the very markers checked here and runs them in a fresh clone.
+- **The commit hashes in `AI_WORKFLOW.md` are deliberately not re-resolved here.** The `test` stage
+  installs `git` but receives no `.git` directory, so the check would have to skip in the
+  container — the WR-06 shape. They were verified with `git cat-file -e` when they were written
+  (plan 07-03).
+- **No new hook and no new CI step.** It rides inside `pytest`, which the hook set, the Docker
+  `test` stage and CI already run; the two-places rule applies to a gate that introduces a *new
+  command*.
+- **Every check was driven red before it was trusted.** A deleted table row reported
+  `[('DELETE', '/api/v1/task-lists/{list_id}')]`, an invented row reported
+  `[('GET', '/api/v1/teams')]`, `make docker-tests` reported itself against the `.PHONY` list, a
+  second `begin` marker reported `(2, 1) == (1, 1)`, an `ADR-999` citation reported
+  `{'README.md': ['ADR-999']}`, and an emptied `README.md` **failed** the non-vacuity test rather
+  than skipping it.
+
+---
