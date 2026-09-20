@@ -113,7 +113,7 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 - [x] **AIW-02**: It states what the human decided versus what was delegated to AI, with every claim traceable to a commit, file or test [NL]
 - [x] **AIW-03**: It keeps an honest incident log of AI mistakes and how each was caught, written incrementally during the work, plus a "what I did not do" section [NL]
 - [x] **AIW-04**: `CLAUDE.md` holds the architecture and quality rules imposed on the AI; `.planning/` artifacts are committed and consistent with what shipped [NL]
-- [ ] **AIW-05**: The project is delivered as a public GitHub repository with atomic, phase-scoped commits and a green CI badge [NL]
+- [x] **AIW-05**: The project is delivered as a public GitHub repository with atomic, phase-scoped commits and a green CI badge [NL]
 
 ### Web UI (UI) — beyond the brief, user decision 2026-09-19
 
@@ -233,7 +233,7 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | AIW-02 | Phase 7 | Complete (07-03) — the phase-coverage check in `test_documentation_claims.py` |
 | AIW-03 | Phase 1 | Complete — 52 dated entries; the "What I Did Not Do" body written in 07-03 |
 | AIW-04 | Phase 1 | Complete |
-| AIW-05 | Phase 7 | Pending |
+| AIW-05 | Phase 7 | Complete (07-05) — 335 commits pushed fast-forward to public `Xch4rt/crehana-backend-test`, `f879894..30435c9`; CI run 35490072118 on `30435c9` concluded `success` on both jobs at the first attempt |
 | UI-01 | Phase 8 | Complete (08-01) — `frontend/src/auth/LoginScreen.tsx`; register, log in and log out, 20 vitest tests |
 | UI-02 | Phase 8 | Complete (08-02) — `frontend/src/lists/ListsScreen.tsx` with `CompletionBar`; create, rename, delete behind a named confirmation |
 | UI-03 | Phase 8 | Complete (08-02) — `frontend/src/tasks/TasksScreen.tsx`; the dedicated `/status` endpoint, `transitions.ts` offering only legal moves, and a filtered view whose bar still reads the whole list (ADR-009) |
@@ -367,7 +367,7 @@ proving the runtime adapter imports no mail library at all.
 
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-19 after plan 07-05 task 3: DOCK-05 ticked — `make rehearse` clones the
-committed tree, builds with `--no-cache` and executes the README's own fenced blocks in the clone,
-green twice (ADR-103). 68/69 complete; the one open is AIW-05, which needs the push and an observed
-green CI run*
+*Last updated: 2026-09-20 after plan 07-05 task 5: AIW-05 ticked — the 335 unpushed commits went to
+the already-public repository as a fast-forward (`f879894..30435c9`) and CI run 35490072118 on that
+commit concluded `success` on both jobs at the first attempt, printing `1140 passed` and 100% over
+1844 statements. 69/69 complete*

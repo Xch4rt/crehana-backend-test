@@ -2229,7 +2229,17 @@ and the CI leg had never been read off a run, because Phases 2 to 6 were never p
 predicted 1796 statements. That prediction was already stale when it was written; the host now
 reports 1690 and the container 1844.
 
-<!-- CI-COVERAGE-PLACEHOLDER: plan 07-05 task 5 replaces this line with the total CI printed. -->
+*The number, read rather than predicted.* The push of 2026-09-20 published 335 commits and ran
+**CI run 35490072118** on `30435c9` — the first time Phases 2 to 8 executed on a runner. Both jobs
+concluded `success` on the first attempt (`quality-gates` 1m55s, `frontend` 22s), and the gate step
+printed `1140 passed`, `TOTAL 1844 0 154 0 100%` and `Required test coverage of 75% reached. Total
+coverage: 100.00%`. So D-11's three-way agreement closes at **100% in all three places, over 1844
+statements on CI, 1844 in the container and 1690 on the host** — and the disagreement in the
+denominator is not between CI and the container at all: those two are identical to the statement,
+and both run CPython 3.13. The host's 1690 is the outlier, and what makes it one is its interpreter
+(3.14), not its environment. That is the useful half of the finding, and it was invisible while the
+CI leg was a prediction: 06-04's 1796 matched none of the three, and reusing it would have recorded
+a number no run has ever printed.
 
 *Found in this phase.* **07-01: three of the four obvious ways to declare an error response in
 FastAPI publish a media type this API never serves.** `responses={409: {"model": ProblemResponse}}`
