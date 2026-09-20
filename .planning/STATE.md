@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail (still paused; Phase 8 is executing ahead of it by design)
-last_updated: 2026-09-20T05:10:00.000Z
-last_activity: 2026-09-19 -- 08-02 executed: the four screens are real. The list index shows every list's completion bar and creates, renames and deletes; one list shows its tasks with the dedicated `/status` endpoint, a control that offers only the moves ADR-097 allows, status and priority filters, and assignment from `GET /api/v1/users` read once per screen; and `assigned-to-me` lists the caller's tasks across lists with no invented counter. The phase's load-bearing property holds in three places: a filtered view renders ONE row while the bar still reads 50% (1 / 2) from the response's whole-list counters (ADR-009) -- in a vitest test, through `curl` on :8080, and in headless Chromium. 66 frontend tests across 10 files (was 20/4); backend untouched at 1140 passed, 100%, host and container; `git diff --stat 1dd5af7 -- src/taskmanager` still empty. Three falsifications were driven red and reverted: a recomputed bar, `completed -> pending` added to the move table, and unassign assuming a 204. The full browser walkthrough (register, create, rename, tasks, complete, filter, assign, edit, delete, assigned-to-me, forged-401 back to login) was driven over CDP with Node's built-in WebSocket -- no new dependency. db, api and ui left healthy on :8080. 07-05 remains paused at its task 4 push checkpoint.
+stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail. Phase 8 is COMPLETE and nothing of it is outstanding; 07-05 resumes here, at task 4, with tasks 4-7 to run
+last_updated: 2026-09-20T05:55:00.000Z
+last_activity: 2026-09-19 -- 08-03 executed: Phase 8 is closed and every document says what is now true. README.md has a UI section that OPENS by saying the brief asks for no UI, names http://localhost:8080, cites ADR-105/106/107, and hands `make rehearse` two commands inside the markers -- curl and POSIX tools only, because the region may name no host-path make target. The requirement-to-evidence map gained NO row: the rehearsal's key check is over [PDF x.y] keys and the UI requirements are [U]. AI_WORKFLOW.md's sentence calling a Node toolchain in a Python deliverable the wrong trade is amended IN PLACE and names who reversed it; the Phase 8 human/AI block states in its first line that the AI recommended keeping the UI OUT of the deliverable and the human decided otherwise; one dated incident entry covers the pre-push PDF audit (ADR-104, commit da125c9), the reversal, and the TypeScript pin that `latest` would have silently disabled every type-aware lint rule with. PHASES in test_documentation_claims.py covers eight phases, bumped in the SAME commit as the block that satisfies it. CLAUDE.md gained a Frontend section, every rule naming its gate. `make rehearse` exited 0 TWICE, 124s and on the phase's final commit, with both UI curl lines executing against the clone's own ui container. Backend 1140 passed / 100% over 1690 (container 1844), frontend 66 across 10 files. Tree clean, nothing pushed, src/taskmanager byte-identical to 1dd5af7. 07-05 resumes at its task 4 push checkpoint.
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 68
-  completed_plans: 66
-  percent: 97
+  completed_plans: 67
+  percent: 99
 ---
 
 # Project State
@@ -22,32 +22,63 @@ See: .planning/PROJECT.md (updated 2026-09-17)
 
 **Core value:** Every requirement in the challenge PDF is met to the letter and is provable in
 under five minutes by an evaluator: `docker compose up`, run the tests, read the docs.
-**Current focus:** Phase 7 — documentation & delivery
+**Current focus:** Phase 7 — documentation & delivery, resuming at 07-05 task 4
 
 ## Current Position
 
-Phase: 8
-Plan: 2 of 3
-Status: Executing Phase 08 (07-05 paused at its task 4 push checkpoint)
-Last activity: 2026-09-19 -- 08-02: the list index and the completion bar, one list with its tasks, legal status moves and filters, and assignment plus assigned-to-me. Three commits, every backend and frontend gate green on each; 66 vitest tests, `make docker-test` 1140 passed at 100%. Proven three ways: the suite, `curl` through the :8080 proxy, and a scripted headless-Chromium walkthrough.
+Phase: 8 — COMPLETE
+Plan: 3 of 3 executed
+Status: Phase 8 closed; next action is 07-05 task 4, a blocking human checkpoint
+Last activity: 2026-09-19 -- 08-03: the README's UI section and its two rehearsal commands, the amended Node-toolchain sentence, the Phase 8 human/AI block and incident entry, the frontend Project Rules, the requirement ticks and this file. `make rehearse` exited 0 twice, the second time against the phase's final commit.
 
-Progress: [█████████░] 97%
+Progress: [██████████] 99%
 
-`total_plans` now includes Phase 8's three plans: 66 of 68 executed.
+`total_plans` includes Phase 8's three plans: 67 of 68 executed. The one outstanding plan is
+07-05, which is paused rather than unstarted.
 
-**In progress: 08-01 and 08-02 are done; only 08-03 remains.** Phase 8 runs BEFORE 07-05 resumes, by user
-decision, so that the UI is part of the delivered commit.
+**`completed_phases: 7` does NOT mean phases 1-7.** Phase 8 finished **out of order**, by user
+decision, so that the UI is part of the commit that gets pushed. The seven complete phases are
+**1, 2, 3, 4, 5, 6 and 8**. **Phase 7 is still open**, paused at 07-05 task 4 with tasks 4-7
+outstanding: approve the push, push and watch CI, check the badge and the three Mermaid diagrams
+on the rendered page, send the delivery email.
+
+**Phase 8 is done and owes 07-05 nothing.** The UI is served by `docker compose up` on
+`http://localhost:8080`; it reaches the API same-origin through the `ui` container's `/api/`
+proxy, so `src/taskmanager` is byte-identical to where Phase 7 left it
+(`git diff 1dd5af7 -- src/taskmanager` is empty across all three plans). Every gate is green on
+every commit of the phase: backend `make lint` / `make typecheck` / `make arch` / `make test`
+(**1140 passed, 100.00% over 1690 statements**; the container reports 1844 statements, also 100%)
+and frontend `make ui-lint` / `make ui-typecheck` / `make ui-test` (**66 passed across 10 files**).
+
+**`make rehearse` is green on the phase's final commit.** It was run twice. The first run cloned
+`041ab61` — the commit carrying every source and document change of this plan — and exited **0 in
+124 s** (build `--no-cache` 26 s, README commands 91 s), with both new UI lines executing against
+the clone's own `ui` container: the SPA answered on `:8080` and a bearer-authenticated, query-
+stringed call through its `/api/` proxy returned `"completion_percentage":50.0` for a view holding
+one item. The second run cloned the phase's **final** commit, which differs from `041ab61` only by
+this file and `08-03-SUMMARY.md` — `.planning/` prose that the rehearsal reads only for its
+`[PDF x.y]` keys. A file cannot contain the sha of the commit that contains it; the final run's
+sha is in the execution report, and `make rehearse` reproduces it on demand.
 
 **Still paused: 07-05.** Tasks 1-3 are committed; task 4 is a blocking human checkpoint — approve
 publishing the whole unpushed history and the `.planning/` trail to a repository that is already
 public. Tasks 5-7 (the push, the observed-green CI run, the delivery hand-over) are not started.
-Nothing in Phase 8 pushes.
+Nothing in Phase 8 pushed.
+
+**Two numbers 07-05 is stale about, to be re-measured rather than copied.** Its task 4 text says
+"289+ commits". Phase 8 added fourteen commits of its own, so that figure is wrong by more than the
+"+" covers. Measured at `041ab61`, the commit before this one: `git rev-list --count origin/main..HEAD`
+is **328** and `git ls-files .planning | wc -l` is **245** — `origin/main` is still at the 43-commit
+Phase 1 push, so all 328 are unpublished. This commit makes them **329** and **246**. 07-05-PLAN.md
+is deliberately **not edited** by this phase — it is byte-identical to how Phase 8 found it — so the
+executor resuming task 4 must run both commands and state what they print, rather than copying the
+number written there.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 66
+- Total plans completed: 67
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -63,7 +94,7 @@ Nothing in Phase 8 pushes.
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
 | 07 | 4 | - | - |
-| 08 | 2 | - | - |
+| 08 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -136,6 +167,8 @@ Nothing in Phase 8 pushes.
 | Phase 07 P03 | 40min | 3 tasks | 5 files |
 | Phase 07 P04 | 45min | 3 tasks | 6 files |
 | Phase 08 P01 | 35min | 4 tasks | 36 files |
+| Phase 08 P02 | 25min | 3 tasks | 16 files |
+| Phase 08 P03 | 40min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -919,6 +952,19 @@ None yet.
 - [Phase 08-01]: `vitest run` exits 1 with no test files, so task 1 ships `src/App.test.tsx` rather than `--passWithNoTests` in the npm script — the flag would be a permanent hole that kept the gate green the day somebody deleted the suite
 - [Phase 08-01]: Testing Library's auto-cleanup only registers when it can see a GLOBAL `afterEach`; with `globals: false` it silently does not, and every render accumulates until a `getByRole` reports "found multiple". `src/setupTests.ts` wires `cleanup()` by hand and says why
 - [Phase 08-01]: STATE.md and ROADMAP.md edited by hand again, the ninth consecutive plan to record the same gsd-sdk handler regressions
+- [Phase 08-02]: `CompletionBar` takes the three numbers as PROPS and derives none of them (ADR-009) — the test that keeps it that way passes deliberately INCONSISTENT numbers, so a later "tidy-up" that recomputes the percentage fails it; the recomputing version was planted and observed failing exactly that test and no neighbour
+- [Phase 08-02]: `transitions.ts` ORDERS the table `api/types.ts` already transcribed instead of transcribing it a second time — a second copy would be a second thing to keep true; the honest limit is stated in the file and the server stays the authority via the tested 409
+- [Phase 08-02]: `unassignTask` uses the **200 body** the API answers rather than assuming the 204 the two DELETEs answer; asserting the assumption was the third falsification and it went red
+- [Phase 08-02]: two mount requests with no order between them make `mockResolvedValueOnce` a queue that hands the wrong body to the wrong effect — `frontend/src/testing/http.ts` answers by method + URL fragment and builds a fresh `Response` per call, because a `Response` body can only be read once
+- [Phase 08-02]: the browser walkthrough's first forced-401 attempt proved NOTHING (clearing `sessionStorage` in a live tab leaves the in-memory token intact, D-06); writing an unusable token and RELOADING is what puts a bad credential in the client's hand
+- [Phase 08-03]: the README's UI section opens by saying the brief asks for no UI, and the requirement-to-evidence map gains no row — the rehearsal's key check is over `[PDF x.y]` keys and the UI requirements are `[U]`, so the rule and the mechanism are the same thing
+- [Phase 08-03]: a path written in backticks in the README must EXIST in a fresh clone (rehearsal step 5), so `frontend/node_modules` can only ever be prose; `frontend/`, `frontend/nginx.conf` and `frontend/src/api/types.ts` are tracked and safe
+- [Phase 08-03]: no `make ui-*` target may appear inside the rehearsal markers — the region is run on a bare machine with no `.venv` and no Node, so the UI check is `curl -sf` plus `grep -q`: `-f` makes an HTTP error a non-zero exit and `grep -q` makes a 200 with the wrong body a failure
+- [Phase 08-03]: the `PHASES` bump landed in the SAME commit as the `AI_WORKFLOW.md` block that satisfies it, after being driven red once uncommitted — the plan's first draft split them across two tasks, which the plan checker caught as a deliberately red commit (commit 1dd5af7 carries the revision)
+- [Phase 08-03]: `AI_WORKFLOW.md`'s narrative is editable and its Incident Log is not — the Node-toolchain paragraph was amended in place naming ADR-105 and who reversed it (6 removed lines, all in that one hunk), while the log gained lines only
+- [Phase 08-03]: `AI_WORKFLOW.md` had never mentioned ADR-104, so the pre-push PDF audit that found four sentences crediting the brief with words it does not contain is recorded in the Phase 8 incident entry rather than by editing the closed Phase 7 one
+- [Phase 08-03]: the pre-commit hook for the frontend may DECLINE to run, so the hard gate is the CI `frontend` job — written into CLAUDE.md's new Frontend section as a rule with its gate named, not as a note
+- [Phase 08-03]: STATE.md, ROADMAP.md and REQUIREMENTS.md edited by hand again, the **tenth** consecutive plan to record the same gsd-sdk handler regression
 
 ## Deferred Items
 
@@ -930,6 +976,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T03:30:00.000Z
-Stopped at: Completed 08-01-PLAN.md (the frontend scaffold, the fetch boundary, the UI image and its proxy, the gates and ADR-105..108)
-Resume file: None - next is 08-02-PLAN.md (the four screens). 07-05 stays paused at its task 4 push checkpoint until Phase 8 closes.
+Last session: 2026-09-20T05:55:00.000Z
+Stopped at: Completed 08-03-PLAN.md (Phase 8 documents and the rehearsal). Phase 8 is complete: 3 of 3 plans executed, `make rehearse` green on the final commit, tree clean, nothing pushed.
+Resume file: .planning/phases/07-documentation-delivery/07-05-PLAN.md at **task 4** - the blocking human checkpoint approving the push, followed by tasks 5-7 (push + CI, badge and diagram check, delivery email). Task 4's "289+ commits" is stale: measure `git rev-list --count origin/main..HEAD` (326 now) and `git ls-files .planning | wc -l` (245 now) instead of copying it, and do not edit that plan file.
