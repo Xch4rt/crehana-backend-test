@@ -421,6 +421,53 @@ describe("editing a task", () => {
     expect(Object.keys(Object(body))).not.toContain("status");
   });
 
+  it("sends null, not an empty string, when the description is cleared", async () => {
+    const user = userEvent.setup();
+    serve([
+      {
+        path: "/task-lists/list-1/tasks",
+        times: 1,
+        respond: () => jsonResponse(200, aCollection()),
+      },
+      {
+        method: "PATCH",
+        path: "/tasks/task-1",
+        respond: () => jsonResponse(200, aTask({ description: null })),
+      },
+      {
+        path: "/task-lists/list-1/tasks",
+        respond: () =>
+          jsonResponse(
+            200,
+            aCollection({ items: [aTask({ description: null })] }),
+          ),
+      },
+    ]);
+
+    render(<TasksScreen list={LIST} onBack={vi.fn()} />);
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Buy milk" }),
+    );
+    await user.clear(screen.getByLabelText("New description"));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Semi-skimmed")).not.toBeInTheDocument();
+    });
+
+    const patched = onlyRequest(
+      fetchMock,
+      "PATCH",
+      "/api/v1/task-lists/list-1/tasks/task-1",
+    );
+    // `null` is the API's "clear this field" (the patch model reads the key out
+    // of `model_fields_set`, so an explicit null is not the same as omitting
+    // it). `""` is a value the UI never has to make the server interpret, and
+    // `TaskResponse.description` is `string | null` - so `""` is a third
+    // spelling of a two-valued field.
+    expect(jsonBodyOf(patched)).toEqual({ description: null });
+  });
+
   it("makes no request when nothing was changed, because an empty patch body is a 422", async () => {
     const user = userEvent.setup();
     serve([

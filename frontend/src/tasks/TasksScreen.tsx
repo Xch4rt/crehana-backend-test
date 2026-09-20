@@ -258,7 +258,14 @@ export default function TasksScreen({
       changes.title = editTitle;
     }
     if (editDescription !== (task.description ?? "")) {
-      changes.description = editDescription;
+      // `null`, never `""`, and for the same reason the create path writes
+      // `...(description === "" ? {} : { description })`: "no description" has
+      // exactly one representation in this contract, the one the API sends
+      // back. The two are not distinguishable to the server - the domain's
+      // `optional_text` folds an empty string to null - so this changes no
+      // stored value. What it changes is that the request now says what the
+      // form meant, instead of relying on a fold the UI cannot see.
+      changes.description = editDescription === "" ? null : editDescription;
     }
     if (editPriority !== task.priority) {
       changes.priority = editPriority;
