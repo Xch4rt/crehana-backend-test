@@ -38,6 +38,7 @@ credentials it authenticated with (T-3-25).
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any, Final
 
 from fastapi import FastAPI
 
@@ -54,6 +55,10 @@ from taskmanager.presentation.api.routers.auth import register_auth_routes
 from taskmanager.presentation.api.routers.task_lists import register_task_list_routes
 from taskmanager.presentation.api.routers.tasks import register_task_routes
 from taskmanager.presentation.api.routers.users import register_user_routes
+from taskmanager.presentation.api.schemas.problem import (
+    PROBLEM_SCHEMA_NAME,
+    ProblemResponse,
+)
 
 # The first thing an evaluator reads, because `docker compose up` hands them
 # `/docs` before it hands them the README - which repeats this in Phase 7. It
@@ -74,6 +79,101 @@ A REST API for task lists and the tasks inside them.
 
 Errors are RFC 9457 `application/problem+json` documents, from every route.
 """
+
+# The order `/docs` groups the nineteen operations in, and one sentence each.
+# Without this the document's top-level `tags` array is absent, Swagger falls
+# back to bare tag names in route-registration order, and a reader gets six
+# unexplained headings. The order below is the registration order in
+# `create_app`, which is itself the order an evaluator has to read the API in:
+# check it is up, make an account, then the resources, then the people, then
+# who holds what.
+#
+# Both directions are gated. `tests/architecture/test_openapi_completeness.py`
+# asserts set equality between the names here and the tags the operations
+# actually use, so a described tag nobody uses and a used tag nobody described
+# both fail - the second being the one that matters, because it is what a new
+# router silently introduces.
+OPENAPI_TAGS: Final[list[dict[str, str]]] = [
+    {
+        "name": "health",
+        "description": (
+            "Liveness and readiness. The only route outside `/api/v1`, and the "
+            "only one whose failure body is not `problem+json` - a 503 here is "
+            "a status document saying which check failed."
+        ),
+    },
+    {
+        "name": "auth",
+        "description": (
+            "Registration, login and the caller's own profile. Start here: "
+            "there is no seeded account, and every other tag needs the token "
+            "`POST /auth/login` returns."
+        ),
+    },
+    {
+        "name": "task lists",
+        "description": (
+            "The lists a caller owns, each carrying its completion counters "
+            "over the whole list. Only the owner sees a list at all, so a "
+            "refusal here is a 404 rather than a 403."
+        ),
+    },
+    {
+        "name": "tasks",
+        "description": (
+            "The tasks inside a list: creation, filtering by status, priority "
+            "and assignee, editing, deletion, and the dedicated endpoint that "
+            "moves a task's status."
+        ),
+    },
+    {
+        "name": "users",
+        "description": (
+            "The directory a client picks an assignee out of. Summaries only - "
+            "no email address of another account is published here."
+        ),
+    },
+    {
+        "name": "assignments",
+        "description": (
+            "Handing a task over, taking it back, and the caller's own inbox "
+            "of tasks assigned to them across every list."
+        ),
+    },
+]
+
+
+class ProblemAwareFastAPI(FastAPI):
+    """The application, plus the one component sixty-nine `$ref`s point at.
+
+    Every error leg is declared without a `model=` key, because on the pinned
+    stack a `model` publishes `application/json` - a media type this API never
+    emits for an error (07-RESEARCH.md Gap 3, and the long form in
+    `presentation/api/schemas/problem.py`). The cost of the correct spelling is
+    that FastAPI registers a component only for a `model=`, so the `$ref` would
+    resolve to nothing. This puts it back, once.
+
+    A subclass rather than the documented `app.openapi = custom_openapi`
+    assignment: `mypy --strict` rejects that as `method-assign`, and buying a
+    one-line convenience with a `type: ignore` in the composition root is not a
+    trade this project makes. `isinstance(app, FastAPI)` is still true, which is
+    what every existing test asserts.
+    """
+
+    def openapi(self) -> dict[str, Any]:
+        """Build the document, then register `Problem` if it is not there.
+
+        `setdefault` at all three levels, and that is not defensiveness: a
+        plain application has no `components` key until some route declares a
+        model. It is also what makes the call idempotent - `super().openapi()`
+        caches into `self.openapi_schema` and returns the *same* object on
+        every later call, so a second call must not append a second copy.
+        """
+        schema = super().openapi()
+        schema.setdefault("components", {}).setdefault("schemas", {}).setdefault(
+            PROBLEM_SCHEMA_NAME, ProblemResponse.model_json_schema()
+        )
+        return schema
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -113,11 +213,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         await resources.engine.dispose()
 
-    app = FastAPI(
+    app = ProblemAwareFastAPI(
         title=resolved.app_name,
         version=__version__,
         description=DESCRIPTION,
         openapi_url="/openapi.json",
+        openapi_tags=OPENAPI_TAGS,
         lifespan=lifespan,
     )
     app.state.database = resources
