@@ -114,6 +114,25 @@ RUN pip install -r requirements-dev.txt && pip install --no-deps -e .
 # is excluded from the build context. It is copied because a unit test asserts that
 # it documents every declared settings field and nothing else.
 COPY pytest.ini .flake8 .importlinter .env.example ./
+
+# The four repository-root documents `tests/architecture/test_documentation_
+# claims.py` reads: it compares README.md's endpoint table against the published
+# OpenAPI document, resolves every ADR id cited in README.md and AI_WORKFLOW.md
+# against DECISION_LOG.md's headings, and checks every `make` target the README
+# names against this Makefile's .PHONY line.
+#
+# The rule this line exists to record (ADR-102): a test that reads a file from
+# the repository root is green on the developer host and a collection error
+# *here*, because the host has the whole tree and this stage has only what is
+# copied into it. That is not hypothetical - it is what happened to
+# test_env_bootstrap.py and test_break_check.py in plan 06-04, one stage down,
+# and it is why the COPY line and the gate belong in the same commit and the
+# commit's verification is `make docker-test` rather than `make test`.
+#
+# The runtime stage receives none of this: the delivered image still carries no
+# documentation, no Makefile and no test suite.
+COPY README.md DECISION_LOG.md AI_WORKFLOW.md Makefile ./
+
 COPY tests ./tests
 
 # The migration files, because the `migrated_database` fixture builds its Alembic
