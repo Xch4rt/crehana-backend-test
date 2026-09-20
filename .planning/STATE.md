@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-03-PLAN.md — AI_WORKFLOW.md is finished (roadmap SC-5, AIW-01, AIW-02)
-last_updated: 2026-09-20T05:05:00.000Z
-last_activity: 2026-09-19 -- 07-03 complete: AI_WORKFLOW.md carries three Mermaid diagrams, a human/AI split naming Phases 1 to 7 with 35 resolving commit hashes, and the What I Did Not Do body; the 51 incident entries are byte-identical; 1115 passed, 100% coverage
+stopped_at: Completed 07-04-PLAN.md — README.md exists and is gated (roadmap SC-1, DOC-01, DOC-02)
+last_updated: 2026-09-20T06:00:00.000Z
+last_activity: 2026-09-20 -- 07-04 complete: README.md in ten sections with every command executed against a stack rebuilt from an empty volume, the thirteen-test documentation-honesty gate, the Dockerfile COPY that gate needs, and ADR-102; 1128 passed, 100% coverage on the host and in the container
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 65
-  completed_plans: 63
-  percent: 97
+  completed_plans: 64
+  percent: 98
 ---
 
 # Project State
@@ -27,19 +27,19 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 ## Current Position
 
 Phase: 7
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Executing Phase 07
-Last activity: 2026-09-19 -- 07-03 complete: `AI_WORKFLOW.md` is finished — three Mermaid diagrams of the workflow as it really ran (the uneven per-phase loop, the gate set with its two honest annotations, the Phase 5 forged-token round trip), Phase 5/6/7 human-AI blocks so every phase from 1 to 7 now has one, 35 short commit hashes every one of which resolves, and a What I Did Not Do body that publishes the seven gate weaknesses the Phase 6 review left open; AIW-01 and AIW-02 ticked, 65/69
+Last activity: 2026-09-20 -- 07-04 complete: `README.md` is the file it needed to be — ten sections, the CI badge, a 2-minute quickstart whose every command was extracted from the file and executed against a stack rebuilt from an empty volume (ending on a one-item filtered listing reporting `total_tasks: 2` and `completion_percentage: 50.0`), the 19-operation endpoint table, a requirement-to-evidence map over all 23 `[PDF x.y]` keys, and an honest pending list; kept true by `tests/architecture/test_documentation_claims.py` (13 tests, all driven red first) and by the Dockerfile `COPY` line ADR-102 records; DOC-01 and DOC-02 ticked, 67/69
 
-Progress: [█████████░] 97%
+Progress: [█████████░] 98%
 
-`total_plans` now includes Phase 7's five plans: 63 of 65 executed.
+`total_plans` now includes Phase 7's five plans: 64 of 65 executed.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 63
+- Total plans completed: 64
 - Average duration: —
 - Total execution time: 0.0 hours
 
@@ -54,7 +54,7 @@ Progress: [█████████░] 97%
 | 05 | 17 | - | - |
 | 5 | 17 | - | - |
 | 06 | 5 | - | - |
-| 07 | 3 | - | - |
+| 07 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -125,6 +125,7 @@ Progress: [█████████░] 97%
 | Phase 07 P01 | 35min | 3 tasks | 9 files |
 | Phase 07 P02 | 30min | 3 tasks | 4 files |
 | Phase 07 P03 | 40min | 3 tasks | 5 files |
+| Phase 07 P04 | 45min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -885,6 +886,15 @@ None yet.
 - [Phase 07-03]: the suite figure is anchored to the plan that measured it ("at the close of this plan, 1,115 tests at 100.00% over 1,690 statements") because 07-04 adds tests; the commit TOTAL is deliberately absent, since it goes stale on its own commit
 - [Phase 07-03]: 35 commit hashes rather than the plan's seven, each resolved with `git cat-file -e`; two claims were softened after checking them (every list route's ordering, and "--no-verify never used") — an unverifiable sentence in this file costs more than a missing one
 - [Phase 07-03]: STATE.md and ROADMAP.md edited by hand again, the seventh consecutive plan to record the same gsd-sdk handler regressions
+- [Phase 07-04]: the README's endpoint table is written BY HAND and gated by set equality against `app.openapi()`, never generated — a generated table agrees with the code by construction, so the one failure worth catching (a human wrote a row that is not true) becomes impossible to express (ADR-102)
+- [Phase 07-04]: every command in the README was extracted FROM the file and executed against a stack rebuilt with `docker compose down -v`, and the quickstart uses only curl, grep and cut so the stated prerequisites (Docker and make, plus curl for the walkthrough) stay true
+- [Phase 07-04]: the `make <target>` scan is restricted to code spans and fenced blocks, with the cost named in the docstring and in ADR-102 — `make rehearse` written in prose would escape; the alternative fires on "make sure" and is how a gate gets disabled
+- [Phase 07-04]: the Dockerfile COPY line was proved load-bearing rather than assumed — removed, `make docker-test` reported 13 failed / 1115 passed; restored, 1128 passed. The documents are read INSIDE the tests, so a missing one is thirteen named failures instead of one collection error
+- [Phase 07-04]: the rehearsal marker guard asserts EXACTLY one pair, closing the WR-05 shape rather than repeating it; all six falsifications (deleted row, invented route, renamed target, second begin marker, ADR-999, emptied README) were observed red and reverted by undoing exactly that edit
+- [Phase 07-04]: the two counts the README quotes (102 ADRs, 4 contracts) are re-derived from the files on every run, so a count in prose can no longer go stale — it went red on this plan's own third commit and was fixed in it
+- [Phase 07-04]: AI_WORKFLOW.md's commit hashes are deliberately NOT re-resolved by the gate: the test stage installs git but receives no .git, so the check would skip in the container — the WR-06 shape
+- [Phase 07-04]: CLAUDE.md's "pre-commit enforces the same set" sentence corrected in place — the hook set runs no pytest, which 07-03 found and this plan owns the file to fix
+- [Phase 07-04]: STATE.md and ROADMAP.md edited by hand again, the eighth consecutive plan to record the same gsd-sdk handler regressions
 
 ## Deferred Items
 
@@ -896,6 +906,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T05:05:00.000Z
-Stopped at: Completed 07-03-PLAN.md (AI_WORKFLOW.md finished: AIW-01, AIW-02)
-Resume file: None - next is 07-04-PLAN.md (README.md, the documentation-claims gate, the Dockerfile COPY)
+Last session: 2026-09-20T06:00:00.000Z
+Stopped at: Completed 07-04-PLAN.md (README.md and its gate: DOC-01, DOC-02)
+Resume file: None - next is 07-05-PLAN.md (the clean-clone rehearsal, the push and the delivery checkpoints)

@@ -365,7 +365,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 07-04-PLAN.md — `README.md` in ten sections, the documentation-honesty gate and the Dockerfile `COPY` that gate needs in the container
+- [x] 07-04-PLAN.md — `README.md` in ten sections, the documentation-honesty gate and the Dockerfile `COPY` that gate needs in the container
 
 **Wave 5** *(blocking delivery, blocked on Wave 4 completion)*
 
@@ -384,7 +384,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
-| 7. Documentation & Delivery | 3/5 | In progress | - |
+| 7. Documentation & Delivery | 4/5 | In progress | - |
 
 ## Standing Rules
 

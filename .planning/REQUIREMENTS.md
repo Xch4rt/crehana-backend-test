@@ -101,8 +101,8 @@ Each requirement cites its origin: **[PDF x.y]** = literal challenge brief item,
 
 ### Documentation (DOC)
 
-- [ ] **DOC-01**: `README.md` includes project description, local environment setup, running in Docker, and running the tests [PDF 6]
-- [ ] **DOC-02**: README also includes an endpoint overview, a 2-minute quickstart walkthrough, a requirement-to-evidence map for the PDF, and a "pending / what I'd do next" section [PDF intro, NL]
+- [x] **DOC-01**: `README.md` includes project description, local environment setup, running in Docker, and running the tests [PDF 6]
+- [x] **DOC-02**: README also includes an endpoint overview, a 2-minute quickstart walkthrough, a requirement-to-evidence map for the PDF, and a "pending / what I'd do next" section [PDF intro, NL]
 - [x] **DOC-03**: `DECISION_LOG.md` records each technical decision as context / options / decision / consequences, including every brief ambiguity resolved [PDF 2.h]
 - [x] **DOC-04**: OpenAPI docs are complete: tags, summaries, response models and documented error responses for every route [NL]
 
@@ -213,8 +213,8 @@ Which phases cover which requirements. Filled in during roadmap creation.
 | DOCK-03 | Phase 3 | Complete |
 | DOCK-04 | Phase 1 | Complete |
 | DOCK-05 | Phase 7 | Pending |
-| DOC-01 | Phase 7 | Pending |
-| DOC-02 | Phase 7 | Pending |
+| DOC-01 | Phase 7 | Complete (07-04) |
+| DOC-02 | Phase 7 | Complete (07-04) |
 | DOC-03 | Phase 7 | Complete (07-02) |
 | DOC-04 | Phase 7 | Complete (07-01) |
 | AIW-01 | Phase 7 | Complete (07-03) |
@@ -347,7 +347,8 @@ proving the runtime adapter imports no mail library at all.
 
 ---
 *Requirements defined: 2026-09-17*
-*Last updated: 2026-09-19 after plan 07-03: AIW-01 and AIW-02 ticked — `AI_WORKFLOW.md` carries
-three Mermaid diagrams of the real workflow, a human/AI split naming every phase from 1 to 7, and
-a commit hash beside the claims hardest to check; 65/69 complete, the four open being DOC-01,
-DOC-02 (07-04), DOCK-05 and AIW-05 (07-05)*
+*Last updated: 2026-09-20 after plan 07-04: DOC-01 and DOC-02 ticked — `README.md` exists in ten
+sections, every command in it executed against a stack rebuilt from an empty volume, and its
+endpoint table, `make` targets, ADR citations, quoted counts and rehearsal markers are held true by
+`tests/architecture/test_documentation_claims.py`; 67/69 complete, the two open being DOCK-05 and
+AIW-05 (07-05)*
