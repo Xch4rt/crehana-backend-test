@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: 07-05-PLAN.md task 4 — blocking human checkpoint: approve publishing the unpushed history and the .planning trail. Phase 8 is COMPLETE and nothing of it is outstanding; 07-05 resumes here, at task 4, with tasks 4-7 to run
-last_updated: 2026-09-20T05:55:00.000Z
-last_activity: 2026-09-19 -- 08-03 executed: Phase 8 is closed and every document says what is now true. README.md has a UI section that OPENS by saying the brief asks for no UI, names http://localhost:8080, cites ADR-105/106/107, and hands `make rehearse` two commands inside the markers -- curl and POSIX tools only, because the region may name no host-path make target. The requirement-to-evidence map gained NO row: the rehearsal's key check is over [PDF x.y] keys and the UI requirements are [U]. AI_WORKFLOW.md's sentence calling a Node toolchain in a Python deliverable the wrong trade is amended IN PLACE and names who reversed it; the Phase 8 human/AI block states in its first line that the AI recommended keeping the UI OUT of the deliverable and the human decided otherwise; one dated incident entry covers the pre-push PDF audit (ADR-104, commit da125c9), the reversal, and the TypeScript pin that `latest` would have silently disabled every type-aware lint rule with. PHASES in test_documentation_claims.py covers eight phases, bumped in the SAME commit as the block that satisfies it. CLAUDE.md gained a Frontend section, every rule naming its gate. `make rehearse` exited 0 TWICE, 124s and on the phase's final commit, with both UI curl lines executing against the clone's own ui container. Backend 1140 passed / 100% over 1690 (container 1844), frontend 66 across 10 files. Tree clean, nothing pushed, src/taskmanager byte-identical to 1dd5af7. 07-05 resumes at its task 4 push checkpoint. Then: the three code-review WARNINGs in 08-REVIEW.md were fixed, one commit each and all seven gates green on every one -- WR-01 d48e20b (a monotonic request token plus a mount ref on TasksScreen, so an older filtered read can no longer overwrite a newer answer's rows or its whole-list counters, driven red first), WR-02 20b6b44 (clearing a description sends null, not ""; the backend's fold of "" to None was confirmed in source and live first, so the review's predicted stray empty paragraph was never real), WR-03 0f3e364 (nosniff, X-Frame-Options DENY and CSP frame-ancestors 'none', written three times because nginx replaces rather than extends add_header across levels, proven with curl on all four served shapes including the proxied 401), and a817ec3 appends the Resolution section to 08-REVIEW.md; IN-03 was checked and declined because the pinned nginx:1.30-alpine already maps js to application/javascript and serves it gzipped, IN-01/IN-02 stay open; the README's rehearsal region gained one header-proof line and `make rehearse` was re-run on a clean clone of 0f3e364, exit 0 in 152s, with `make docker-test` green before the README commit; backend 1140 passed / 100%, frontend 66 -> 68 across 10 files; db, api and ui are up and healthy on the rebuilt ui image; `git rev-list --count origin/main..HEAD` is now 335 and nothing is pushed.
+status: milestone_complete
+stopped_at: Delivered. 07-05 complete (7/7 tasks) — pushed f879894..7b7d970, both CI jobs green, rendered pages verified and the delivery email sent by the developer. All 8 phases complete.
+last_updated: 2026-09-20T07:30:00.000Z
+last_activity: 2026-09-20 -- DELIVERED. Push approved and made (335 commits, fast-forward, then 7b7d970 with the CI coverage leg and AIW-05); runs 35490072118 and 35490320069 green on the first attempt, 1140 passed at 100.00% over 1844 statements on the runner; developer verified badge, three Mermaid diagrams and the .planning trail on GitHub; developer sent the delivery email. 07-05-SUMMARY.md written; Phase 7 and the milestone closed by hand.
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 68
-  completed_plans: 67
-  percent: 99
+  completed_plans: 68
+  percent: 100
 ---
 
 # Project State
@@ -26,12 +26,12 @@ under five minutes by an evaluator: `docker compose up`, run the tests, read the
 
 ## Current Position
 
-Phase: 8 — COMPLETE
-Plan: 3 of 3 executed
-Status: Phase 8 closed; next action is 07-05 task 4, a blocking human checkpoint
-Last activity: 2026-09-19 -- 08-03: the README's UI section and its two rehearsal commands, the amended Node-toolchain sentence, the Phase 8 human/AI block and incident entry, the frontend Project Rules, the requirement ticks and this file. `make rehearse` exited 0 twice, the second time against the phase's final commit.
+Phase: 7 and 8 — COMPLETE (all 8 phases complete; Phase 8 ran out of order, inside 07-05's push checkpoint)
+Plan: 68 of 68 executed
+Status: Delivered — public repository, CI green on 7b7d970, delivery email sent by the developer
+Last activity: 2026-09-20 -- 07-05 tasks 4-7: push approved and made, both CI jobs green on the first attempt, rendered pages verified by the developer, email sent.
 
-Progress: [██████████] 99%
+Progress: [██████████] 100%
 
 `total_plans` includes Phase 8's three plans: 67 of 68 executed. The one outstanding plan is
 07-05, which is paused rather than unstarted.

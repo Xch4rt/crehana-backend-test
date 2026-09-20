@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Task Lists & Tasks** - The full brief 1.a vertical slice: CRUD, status changes, filters, completion percentage
 - [x] **Phase 5: Auth, Assignment & Notifications** - JWT login, ownership rules, task assignment and the simulated invitation email (completed 2026-09-19)
 - [x] **Phase 6: Test Hardening & Coverage** - Tests that actually prove behaviour, with the ≥75% gate genuinely met (completed 2026-09-19)
-- [ ] **Phase 7: Documentation & Delivery** - README, DECISION_LOG, AI_WORKFLOW, clean-clone rehearsal and a public repo
+- [x] **Phase 7: Documentation & Delivery** - README, DECISION_LOG, AI_WORKFLOW, clean-clone rehearsal and a public repo (completed 2026-09-20)
 - [x] **Phase 8: Web UI** - A small React + Vite SPA in the deliverable, gated like the backend; ran before 07-05's delivery tasks resume (completed 2026-09-19)
 
 ## Phase Details
@@ -370,7 +370,7 @@ Plans:
 
 **Wave 5** *(blocking delivery, blocked on Wave 4 completion)*
 
-- [ ] 07-05-PLAN.md — `make rehearse` executing the README's own commands from a fresh clone, the push, the observed-green CI run and the delivery checkpoints
+- [x] 07-05-PLAN.md — `make rehearse` executing the README's own commands from a fresh clone, the push, the observed-green CI run and the delivery checkpoints
 
 ## Progress
 
@@ -388,7 +388,7 @@ executed in the gap. The complete phases are 1-6 and 8; Phase 7 resumes at 07-05
 | 4. Task Lists & Tasks | 12/12 | Complete | 2026-09-19 |
 | 5. Auth, Assignment & Notifications | 17/17 | Complete    | 2026-09-19 |
 | 6. Test Hardening & Coverage | 5/5 | Complete | 2026-09-19 |
-| 7. Documentation & Delivery | 4/5 | In progress | - |
+| 7. Documentation & Delivery | 5/5 | Complete | 2026-09-20 |
 | 8. Web UI | 3/3 | Complete | 2026-09-19 |
 
 ## Standing Rules
