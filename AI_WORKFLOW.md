@@ -2145,4 +2145,94 @@ grepping for them, not the ones that came to mind while writing the rule.
 The scope that was deliberately left out, and the shortcuts that were considered and rejected —
 stated plainly rather than left for the reader to discover as omissions.
 
-_To be completed in Phase 7._
+**Scope deliberately out of v1.** Each of these has a requirement id, which is how you can tell
+it was decided rather than forgotten.
+
+- **API-01** — pagination and sorting on list endpoints. Every list route returns everything it
+  has, in a fixed total order (ADR-043).
+- **API-02** — multi-value filters (`?status=pending&status=in_progress`). The filters are
+  single-valued and conjunctive.
+- **API-03** — an explicit invitation endpoint independent of assignment. The "invitation" here
+  is the simulated message that assignment sends; it grants nothing and there is no membership
+  model behind it.
+- **AUTH-07** — refresh tokens and token revocation. There is one access token with a fixed
+  lifetime and no way to revoke it before it expires.
+- **AUTH-08** — password reset and email verification.
+- **Integer priorities**, and a `cancelled` status. Priorities are the three-member enum
+  `low | medium | high` (ADR-098); integers would re-open the completion-percentage definition and
+  are a documented source of client bugs.
+
+**Security properties conceded on purpose, not overlooked.** Three of them, each with its own
+ADR, because a concession that only appears in the code is indistinguishable from an oversight.
+
+- **Registration's 409 on a duplicate email is an account-enumeration oracle** (ADR-066).
+  AUTH-01 requires the 409 literally, and a 409 reachable by an unauthenticated caller that
+  distinguishes a registered address from an unregistered one *is* that oracle by construction —
+  so the requirement was chosen over the property, deliberately. What bounds it: the error carries
+  no address in any spelling (asserted by a test that registers `Ana@X.com` then `ana@x.com`), and
+  the login door stays indistinguishable. The production answer is the consumer-product shape —
+  answer 201 and send "somebody tried to register your address" to the owner — which contradicts
+  the brief's wording and needs real email delivery, and this project has neither.
+- **There is no rate limiting, lockout or CAPTCHA on login** (ADR-067). Argon2's ~25 ms floor is
+  an incidental throttle, not a control: it costs one attacker on one connection something and a
+  distributed one nothing. It is also a denial-of-service surface in the other direction — an
+  unauthenticated caller can make the server do Argon2 work; the 128-character password cap bounds
+  the *size* of that work, nothing bounds the *rate*. The production answer is a per-address or
+  per-IP counter, or a middleware, plus a 429 taught to the single RFC 9457 handler.
+- **`GET /api/v1/users` is an email directory readable by every authenticated caller**
+  (ADR-068). ASGN-03 asks literally for a way to discover an assignee id, and a `UUID` is not
+  something a human can guess. The production answer is to scope the directory to a team,
+  organisation or tenancy — a concept this brief does not have, and inventing one would be a
+  schema and a set of rules nobody asked for. The route's own `response_description` says it is
+  unrestricted, so a client reads the trade-off where it matters rather than only here.
+
+**Gates that are knowingly weaker than they look.** The Phase 6 code review was asked to find
+where this project's own gates can still pass for the wrong reason, and it found two criticals and
+eleven warnings. Both criticals and four of the warnings were fixed; the remaining seven warnings
+are open, and are recorded as open in
+`.planning/phases/06-test-hardening-coverage/06-REVIEW.md`, with WR-03 additionally named in
+ADR-096. This group is the point of the section: a project that publishes its own gate weaknesses
+is making a different claim than one that does not.
+
+- **WR-03** — both halves of the assertion-quality gate are satisfiable by shapes that assert
+  nothing; a re-read whose result is discarded still counts. Closing it is a gate redesign, and no
+  test in the suite uses the shape today.
+- **WR-05** — the marker guard enforces "at least one" while its documentation says "exactly one",
+  and it has no test of its own.
+- **WR-06** — the total half of endpoint totality is *skipped*, not failed, by innocuous
+  invocation drift, and nothing pins which invocations count.
+- **WR-07** — the error-contract gate resolves `raise`s by spelled name only, so the "tenth leaf"
+  it exists to catch can arrive unseen.
+- **WR-08** — the use-case totality gate matches any attribute call by name, and accepts a
+  construction that sits in code which never runs.
+- **WR-10** — the derived transition test takes its oracle from the code under test, so it cannot
+  see an over-permissive transition table.
+- **WR-11** — two of the D-06 assertions added in Phase 6 cannot fail.
+
+**Shortcuts considered and rejected.**
+
+- **`# pragma: no cover` and a coverage `omit` entry.** Forbidden by `CLAUDE.md`, and the 75%
+  threshold has never been lowered. This is not a stated intention: the Phase 6 review found an
+  `exclude_also` regex that was an `omit` in disguise, and the fix was to delete it and let the
+  denominator grow (ADR-092), not to keep it.
+- **`Base.metadata.create_all()` instead of Alembic.** The schema is produced by the real
+  migration everywhere, including in tests (`03-CONTEXT.md` D-02, ADR-007).
+- **SQLModel.** It fuses the ORM row and the API schema into one class, collapsing exactly the
+  boundary the brief asks the candidate to demonstrate.
+- **ruff instead of flake8.** ruff is what this project would use absent the constraint; the brief
+  mandates flake8, so flake8 it is.
+- **A `docker-compose.override.yml` for a fast host edit-run loop.** None is shipped —
+  `docker compose up` runs the production-like image, and the fast loop is `make run` against the
+  compose database (`03-CONTEXT.md` D-16).
+- **testcontainers instead of the compose database.** It would add a Docker-socket prerequisite to
+  running `pytest` on the host, for a stack the evaluator is already told to start.
+- **`--no-verify` to commit through a red gate.** Forbidden by `CLAUDE.md`, and the cost was paid
+  rather than dodged: the `mypy (strict)` hook rejects a test module importing a name no module
+  exports yet, so the canonical `test(...)` commit carrying a failing test cannot exist in this
+  repository at all. Each test-first task observed its RED run, captured it to an
+  `evidence/NN-NN-tdd-red.txt` file, and shipped as one green commit — and the compromise is
+  written down in the log above (the entries dated 2026-09-18 and 2026-09-19) rather than hidden.
+
+One closing property, stated as a property rather than a promise: the only signing key this
+repository has ever published is the placeholder in `.env.example`, and the application refuses to
+boot with it (ADR-084).
